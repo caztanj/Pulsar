@@ -24,6 +24,30 @@ init :: (server: *Http_Server, port: u16, tls := false, certificate_file := "", 
         if error return true;
     }
 
+    server.wakeup_socket = Socket.socket(Socket.AF_INET, .SOCK_DGRAM, 0);
+    if server.wakeup_socket != Socket.INVALID_SOCKET {
+        addr: Socket.sockaddr_in;
+        addr.sin_family = Socket.AF_INET;
+        addr.sin_port = 0;
+        addr.sin_addr.S_un.S_addr = Socket.inet_addr("127.0.0.1");
+
+        if Socket.bind(server.wakeup_socket, cast(*Socket.sockaddr)*addr, size_of(type_of(addr))) == 0 {
+            addr_size: s32 = size_of(type_of(addr));
+
+            Socket.getsockname(server.wakeup_socket, cast(*Socket.sockaddr)*addr, *addr_size);
+
+            server.wakeup_port = Socket.ntohs(addr.sin_port);
+
+            Socket.set_blocking(server.wakeup_socket, false);
+
+            wsapollfd_wakeup := Socket.WSAPOLLFD.{ fd = server.wakeup_socket, events = Socket.POLLIN };
+
+            array_add(*server.wsapollfds, wsapollfd_wakeup);
+        } else {
+            Socket.close_and_reset(*server.wakeup_socket);
+        }
+    }
+
     server.tls = tls;
     return false;
 }
@@ -49,6 +73,15 @@ http_server_poll :: (server: *Http_Server, peek := false) -> error: bool, [] Htt
     ERROR_EVENTS :: Socket.POLLPRI | Socket.POLLHUP | Socket.POLLERR | Socket.POLLNVAL;
 
     for < server.wsapollfds {
+        if it.fd == server.wakeup_socket {
+            if it.revents & Socket.POLLIN {
+                buffer: [64] u8;
+                Socket.recvfrom(server.wakeup_socket, buffer.data, 64, 0, null, null);
+            }
+
+            continue;
+        }
+
         if it.fd == server.listening_socket {
             if it.revents & Socket.POLLIN accept_clients(server);
             if it.revents & ERROR_EVENTS return true, .[];
@@ -101,6 +134,9 @@ Http_Server :: struct {
 
     tls:     bool;
     ssl_ctx: *LibreSSL.SSL_CTX;
+
+    wakeup_socket: Socket.Socket;
+    wakeup_port:   u16;
 }
 
 #scope_module

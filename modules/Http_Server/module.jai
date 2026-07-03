@@ -222,6 +222,23 @@ html_escape :: (s: string) -> string {
     return builder_to_string(*b);
 }
 
+wakeup_event_loop :: (server: *Http_Server) {
+    if server.wakeup_socket != Socket.INVALID_SOCKET {
+        addr: Socket.sockaddr_in;
+        addr.sin_family = Socket.AF_INET;
+        addr.sin_port = Socket.htons(server.wakeup_port);
+
+        #if OS == .WINDOWS {
+            addr.sin_addr.S_un.S_addr = Socket.htonl(0x7F000001);
+        } else {
+            addr.sin_addr.s_addr = Socket.htonl(0x7F000001);
+        }
+
+        dummy: u8 = 1;
+        Socket.sendto(server.wakeup_socket, cast(*u8)*dummy, 1, 0, cast(*Socket.sockaddr)*addr, size_of(type_of(addr)));
+    }
+}
+
 send_response :: (server: *Http_Server, response: Http_Response) {
     push_allocator(context.default_allocator);
 

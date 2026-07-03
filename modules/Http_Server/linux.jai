@@ -35,6 +35,32 @@ init :: (server: *Http_Server, port: u16, tls := false, certificate_file := "", 
         if error return true;
     }
 
+    server.wakeup_socket = Socket.socket(Socket.AF_INET, .SOCK_DGRAM, 0);
+    if server.wakeup_socket != Socket.INVALID_SOCKET {
+        addr: Socket.sockaddr_in;
+        addr.sin_family = Socket.AF_INET;
+        addr.sin_port = 0;
+        addr.sin_addr.s_addr = Socket.INADDR_ANY;
+
+        if Socket.bind(server.wakeup_socket, cast(*Socket.sockaddr)*addr, size_of(type_of(addr))) == 0 {
+            addr_size: s32 = size_of(type_of(addr));
+
+            Socket.getsockname(server.wakeup_socket, cast(*Socket.sockaddr)*addr, *addr_size);
+
+            server.wakeup_port = Socket.ntohs(addr.sin_port);
+
+            Socket.set_blocking(server.wakeup_socket, false);
+
+            wakeup_event: Linux.epoll_event;
+            wakeup_event.events = Linux.EPOLLET | Linux.EPOLLIN;
+            wakeup_event.data.fd = server.wakeup_socket;
+
+            Linux.epoll_ctl(server.epoll_queue, .ADD, server.wakeup_socket, *wakeup_event);
+        } else {
+            Socket.close_and_reset(*server.wakeup_socket);
+        }
+    }
+
     server.tls = tls;
 
     return false;
@@ -61,6 +87,12 @@ http_server_poll :: (server: *Http_Server, peek := false) -> error: bool, [] Htt
 
     for i: 0..number_of_events - 1 {
         event := epoll_events[i];
+
+        if event.data.fd == server.wakeup_socket {
+            buffer: [64] u8;
+            Socket.recvfrom(server.wakeup_socket, buffer.data, 64, 0, null, null);
+            continue;
+        }
 
         error_events :: Linux.EPOLLPRI | Linux.EPOLLERR | Linux.EPOLLHUP;
 
@@ -115,6 +147,9 @@ Http_Server :: struct {
 
     tls:     bool;
     ssl_ctx: *LibreSSL.SSL_CTX;
+
+    wakeup_socket: Socket.Socket;
+    wakeup_port:   u16;
 }
 
 #scope_module

@@ -49,6 +49,8 @@ http_server_constructor_js :: (vm: *Vm, this: Value, arguments: [] Value, is_new
     wrapper.initialized = true;
     wrapper.vm          = vm;
 
+    init(*wrapper.response_mutex);
+
     vm.active_background_tasks += 1;
 
     thread_init(*wrapper.thread, http_server_thread_proc);
@@ -65,11 +67,13 @@ http_server_on_js :: (vm: *Vm, this: Value, arguments: [] Value, is_new: bool) -
     if this.type != .OBJECT || this.object.primitive_value.type != .OBJECT return .{};
 
     wrapper := cast(*Http_Server_Wrapper) this.object.primitive_value.object;
+
     if !wrapper || !wrapper.initialized return .{};
 
     if arguments.count < 2 return .{};
+
     event_name := arguments[0];
-    callback := arguments[1];
+    callback   := arguments[1];
 
     if event_name.type == .STRING && event_name.s == "request" {
         wrapper.request_callback = callback;
@@ -88,10 +92,14 @@ http_server_send_response_js :: (vm: *Vm, this: Value, arguments: [] Value, is_n
     js_request  := arguments[0];
     js_response := arguments[1];
 
-    success, response := js_to_response(vm, js_request, js_response);
+    success, safe_resp := js_to_response(vm, js_request, js_response);
     if !success return .{};
 
-    send_response(*wrapper.server, response);
+    lock(*wrapper.response_mutex);
+    array_add(*wrapper.response_queue, safe_resp);
+    unlock(*wrapper.response_mutex);
+
+    wakeup_event_loop(*wrapper.server);
 
     return .{ type = .BOOLEAN, boolean = true };
 }
@@ -102,8 +110,11 @@ http_server_shutdown_js :: (vm: *Vm, this: Value, arguments: [] Value, is_new: b
     if !wrapper || !wrapper.initialized return .{};
 
     wrapper.shutdown_requested = true;
+    wakeup_event_loop(*wrapper.server);
 
     shutdown(*wrapper.server);
+
+    destroy(*wrapper.response_mutex);
 
     wrapper.initialized = false;
     wrapper.vm.active_background_tasks -= 1;
@@ -118,6 +129,11 @@ http_server_thread_proc :: (thread: *Thread) -> s64 {
     vm      := wrapper.vm;
 
     while !wrapper.shutdown_requested {
+        has_responses := false;
+        lock(*wrapper.response_mutex);
+        has_responses = wrapper.response_queue.count > 0;
+        unlock(*wrapper.response_mutex);
+
         error, events := http_server_poll(*wrapper.server, false);
         if error break;
         if wrapper.shutdown_requested break;
@@ -163,6 +179,40 @@ http_server_thread_proc :: (thread: *Thread) -> s64 {
                 signal(*vm.event_loop_semaphore);
             }
         }
+
+        lock(*wrapper.response_mutex);
+
+        queued_responses: [..] Safe_Response;
+        queued_responses.allocator = temp;
+
+        for wrapper.response_queue array_add(*queued_responses, it);
+
+        wrapper.response_queue.count = 0;
+
+        unlock(*wrapper.response_mutex);
+
+        for queued_responses {
+            response: Http_Response;
+
+            response.client_id = it.client_id;
+            response.status    = cast(type_of(response.status)) it.status;
+            response.body      = it.body;
+
+            for it.headers set_header(*response.headers, it.key, it.value);
+
+            send_response(*wrapper.server, response);
+
+            free(it.body);
+
+            for it.headers {
+                free(it.key);
+                free(it.value);
+            }
+
+            array_free(it.headers);
+        }
+
+        reset_temporary_storage();
     }
 
     return 0;
@@ -213,22 +263,21 @@ run_http_event_handler :: (vm: *Vm, data: *void) {
     free(safe_event);
 }
 
-js_to_response :: (vm: *Vm, js_request: Value, js_response: Value) -> (bool, Http_Response) {
+js_to_response :: (vm: *Vm, js_request: Value, js_response: Value) -> (bool, Safe_Response) {
     if js_request.type != .OBJECT || js_response.type != .OBJECT return false, .{};
 
     found, client_id_value := lookup_property(vm, js_request.object, "_client_id");
     if !found || client_id_value.type != .NUMBER return false, .{};
 
-    response := Http_Response.{
-        client_id = cast(Socket) client_id_value.number,
-    };
+    response: Safe_Response;
+    response.client_id = cast(Socket) client_id_value.number;
 
     status_found, status_value := lookup_property(vm, js_response.object, "status");
-    if status_found && status_value.type == .NUMBER response.status = cast(type_of(response.status)) status_value.number;
-    else                                          response.status = .OK;
+    if status_found && status_value.type == .NUMBER response.status = cast(u16) status_value.number;
+    else                                          response.status = 200;
 
     body_found, body_value := lookup_property(vm, js_response.object, "body");
-    if body_found && body_value.type == .STRING response.body = body_value.s;
+    if body_found && body_value.type == .STRING response.body = copy_string(body_value.s);
 
     headers_found, headers_value := lookup_property(vm, js_response.object, "headers");
     if headers_found && headers_value.type == .OBJECT {
@@ -239,11 +288,29 @@ js_to_response :: (vm: *Vm, js_request: Value, js_response: Value) -> (bool, Htt
                 if offset_pointer && offset_pointer.* < headers_object.fields.count {
                     value := headers_object.fields[offset_pointer.*];
                     if value.type == .STRING {
-                        set_header(*response.headers, it, value.s);
+                        header: Safe_Http_Header;
+                        header.key = copy_string(it);
+                        header.value = copy_string(value.s);
+                        array_add(*response.headers, header);
                     }
                 }
             }
         }
+    }
+
+    has_content_length := false;
+    for response.headers {
+        if it.key == "Content-Length" || it.key == "content-length" {
+            has_content_length = true;
+            break;
+        }
+    }
+
+    if !has_content_length {
+        header: Safe_Http_Header;
+        header.key = copy_string("Content-Length");
+        header.value = copy_string(tprint("%", response.body.count));
+        array_add(*response.headers, header);
     }
 
     return true, response;
@@ -258,6 +325,16 @@ Http_Server_Wrapper :: struct {
     vm:                 *Vm;
 
     request_callback: Value;
+
+    response_mutex: Mutex;
+    response_queue: [..] Safe_Response;
+}
+
+Safe_Response :: struct {
+    client_id: Socket;
+    status: u16;
+    body: string;
+    headers: [..] Safe_Http_Header;
 }
 
 Safe_Http_Header :: struct {
