@@ -225,15 +225,15 @@ run_http_event_handler :: (vm: *Vm, data: *void) {
     if safe_event.type == "request" && wrapper && wrapper.request_callback.type != .UNDEFINED {
         js_request := allocate_object(vm);
 
-        set_object_property(vm, js_request, "uri",    .{ type = .STRING, s = copy_temporary_string(safe_event.request_uri) });
-        set_object_property(vm, js_request, "method", .{ type = .STRING, s = copy_temporary_string(safe_event.request_method) });
-        set_object_property(vm, js_request, "body",   .{ type = .STRING, s = copy_temporary_string(safe_event.request_body) });
+        set_object_property(vm, js_request, "uri",        .{ type = .STRING, s = copy_string(safe_event.request_uri) });
+        set_object_property(vm, js_request, "method",     .{ type = .STRING, s = copy_string(safe_event.request_method) });
+        set_object_property(vm, js_request, "body",       .{ type = .STRING, s = copy_string(safe_event.request_body) });
         set_object_property(vm, js_request, "_client_id", .{ type = .NUMBER, number = cast(float64) safe_event.client_id });
 
         js_headers := allocate_object(vm);
 
         for header: safe_event.request_headers {
-            set_object_property(vm, js_headers, header.key, .{ type = .STRING, s = copy_temporary_string(header.value) });
+            set_object_property(vm, js_headers, header.key, .{ type = .STRING, s = copy_string(header.value) });
             free(header.value);
         }
 
@@ -242,7 +242,7 @@ run_http_event_handler :: (vm: *Vm, data: *void) {
         js_response := allocate_object(vm);
 
         set_object_property(vm, js_response, "status", .{ type = .NUMBER, number = 200 });
-        set_object_property(vm, js_response, "body", .{ type = .STRING, s = copy_temporary_string("") });
+        set_object_property(vm, js_response, "body",   .{ type = .STRING, s = copy_string("") });
 
         js_result_headers := allocate_object(vm);
 

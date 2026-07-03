@@ -11,7 +11,7 @@ main :: () {
 
     file_path := free_args[0];
 
-    code:, success = read_entire_file(file_path,, temp);
+    code:, success = read_entire_file(file_path);
     if !success {
         log_error("Could not read file: %", file_path);
         exit(EXIT_CODE_FILE_NOT_FOUND);

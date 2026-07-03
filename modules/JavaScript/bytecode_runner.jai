@@ -2223,6 +2223,8 @@ run_event_loop :: (vm: *Vm) {
         } else if vm.active_background_tasks > 0 {
             wait_for(*vm.event_loop_semaphore, -1);
         }
+
+        reset_temporary_storage();
     }
 }
 
