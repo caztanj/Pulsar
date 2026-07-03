@@ -115,6 +115,7 @@ Permission :: enum_flags {
 #import "Random";
 #import "Socket";
 #import "String";
+#import "Thread";
 
 #import,dir "../Http_Server";
 #import,dir "../Http_Client";

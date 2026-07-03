@@ -5,7 +5,7 @@ init_vm_http :: (vm: *Vm) {
         http_server_prototype           := allocate_object(vm);
         http_server_prototype.prototype  = vm.object_prototype;
 
-        add_instance_method(vm, http_server_prototype, "poll",         http_server_poll_js);
+        add_instance_method(vm, http_server_prototype, "on",           http_server_on_js);
         add_instance_method(vm, http_server_prototype, "sendResponse", http_server_send_response_js);
         add_instance_method(vm, http_server_prototype, "shutdown",     http_server_shutdown_js);
 
@@ -26,8 +26,7 @@ init_vm_http :: (vm: *Vm) {
 
 http_server_constructor_js :: (vm: *Vm, this: Value, arguments: [] Value, is_new: bool) -> Value {
     if !(vm.permissions & .NETWORK) {
-        throw_exception(vm, "Permission denied: net");
-
+        throw_exception(vm, "Permission denied: network");
         return .{};
     }
 
@@ -44,11 +43,17 @@ http_server_constructor_js :: (vm: *Vm, this: Value, arguments: [] Value, is_new
 
     if error {
         throw_exception(vm, "Could not initialize HTTP server");
-
         return .{};
     }
 
     wrapper.initialized = true;
+    wrapper.vm          = vm;
+
+    vm.active_background_tasks += 1;
+
+    thread_init(*wrapper.thread, http_server_thread_proc);
+    wrapper.thread.data = wrapper;
+    thread_start(*wrapper.thread);
 
     this.object.primitive_value.type   = .OBJECT;
     this.object.primitive_value.object = cast(*Gc_Object) wrapper;
@@ -56,60 +61,26 @@ http_server_constructor_js :: (vm: *Vm, this: Value, arguments: [] Value, is_new
     return this;
 }
 
-http_server_poll_js :: (vm: *Vm, this: Value, arguments: [] Value, is_new: bool) -> Value {
+http_server_on_js :: (vm: *Vm, this: Value, arguments: [] Value, is_new: bool) -> Value {
     if this.type != .OBJECT || this.object.primitive_value.type != .OBJECT return .{};
 
     wrapper := cast(*Http_Server_Wrapper) this.object.primitive_value.object;
-
     if !wrapper || !wrapper.initialized return .{};
 
-    peek := false;
+    if arguments.count < 2 return .{};
+    event_name := arguments[0];
+    callback := arguments[1];
 
-    if arguments.count > 0 && arguments[0].type == .BOOLEAN {
-        peek = arguments[0].boolean;
+    if event_name.type == .STRING && event_name.s == "request" {
+        wrapper.request_callback = callback;
     }
 
-    error, events := http_server_poll(*wrapper.server, peek);
-
-    if error {
-        throw_exception(vm, "Error polling HTTP server");
-        return .{};
-    }
-
-    js_events           := allocate_object(vm);
-    js_events.kind       = .ARRAY;
-    js_events.prototype  = vm.array_prototype;
-
-    for events {
-        js_event := allocate_object(vm);
-
-        type: string;
-        if it.type == {
-            case .Http_Request;       type = "Http_Request";
-            case .Web_Socket_Message; type = "Web_Socket_Message";
-            case .Client_Closed;      type = "Client_Closed";
-        }
-
-        set_object_property(vm, js_event, "type", .{ type = .STRING, s = type });
-
-        if it.type == .Http_Request {
-            js_request := request_to_js(vm, it.http_request);
-            set_object_property(vm, js_event, "request", js_request);
-        } else if it.type == .Client_Closed {
-            set_object_property(vm, js_event, "client_id", .{ type = .NUMBER, number = cast(float64) it.client_closed });
-        }
-
-        array_add(*js_events.elements, .{ type = .OBJECT, object = js_event });
-    }
-
-    return .{ type = .ARRAY, object = js_events };
+    return this;
 }
 
 http_server_send_response_js :: (vm: *Vm, this: Value, arguments: [] Value, is_new: bool) -> Value {
     if this.type != .OBJECT || this.object.primitive_value.type != .OBJECT return .{};
-
     wrapper := cast(*Http_Server_Wrapper) this.object.primitive_value.object;
-
     if !wrapper || !wrapper.initialized return .{};
 
     if arguments.count < 2 return .{};
@@ -127,38 +98,119 @@ http_server_send_response_js :: (vm: *Vm, this: Value, arguments: [] Value, is_n
 
 http_server_shutdown_js :: (vm: *Vm, this: Value, arguments: [] Value, is_new: bool) -> Value {
     if this.type != .OBJECT || this.object.primitive_value.type != .OBJECT return .{};
-
     wrapper := cast(*Http_Server_Wrapper) this.object.primitive_value.object;
-
     if !wrapper || !wrapper.initialized return .{};
+
+    wrapper.shutdown_requested = true;
 
     shutdown(*wrapper.server);
 
     wrapper.initialized = false;
-
-    free(wrapper);
+    wrapper.vm.active_background_tasks -= 1;
 
     this.object.primitive_value.object = null;
 
     return .{ type = .BOOLEAN, boolean = true };
 }
 
-request_to_js :: (vm: *Vm, request: Http_Request) -> Value {
-    js_request := allocate_object(vm);
+http_server_thread_proc :: (thread: *Thread) -> s64 {
+    wrapper := cast(*Http_Server_Wrapper) thread.data;
+    vm      := wrapper.vm;
 
-    set_object_property(vm, js_request, "uri",    .{ type = .STRING, s = copy_temporary_string(request.uri) });
-    set_object_property(vm, js_request, "method", .{ type = .STRING, s = tprint("%", request.method) });
-    set_object_property(vm, js_request, "body",   .{ type = .STRING, s = copy_temporary_string(request.body) });
+    while !wrapper.shutdown_requested {
+        error, events := http_server_poll(*wrapper.server, false);
+        if error break;
+        if wrapper.shutdown_requested break;
 
-    set_object_property(vm, js_request, "_client_id", .{ type = .NUMBER, number = cast(float64) request.client_id });
+        if events.count > 0 {
+            for event: events {
+                safe_event := New(Safe_Http_Event);
 
-    js_headers := allocate_object(vm);
+                safe_event.server_wrapper = cast(*void) wrapper;
+                safe_event.client_id      = event.client_closed;
 
-    for header: request.headers set_object_property(vm, js_headers, header.key, .{ type = .STRING, s = copy_temporary_string(header.value) });
+                if event.type == {
+                    case .Http_Request;
+                        safe_event.type           = "request";
+                        safe_event.client_id      = event.http_request.client_id;
+                        safe_event.request_method = copy_string(tprint("%", event.http_request.method));
+                        safe_event.request_uri    = copy_string(event.http_request.uri);
+                        safe_event.request_body   = copy_string(event.http_request.body);
 
-    set_object_property(vm, js_request, "headers", .{ type = .OBJECT, object = js_headers });
+                        for header: event.http_request.headers {
+                            safe_header: Safe_Http_Header;
+                            safe_header.key = copy_string(header.key);
+                            safe_header.value = copy_string(header.value);
 
-    return .{ type = .OBJECT, object = js_request };
+                            array_add(*safe_event.request_headers, safe_header);
+                        }
+
+                    case .Web_Socket_Message;
+                        safe_event.type = "websocket";
+
+                    case .Client_Closed;
+                        safe_event.type = "closed";
+                }
+
+                external_event: External_Event;
+                external_event.data = safe_event;
+                external_event.handler = run_http_event_handler;
+
+                lock(*vm.external_events_mutex);
+                array_add(*vm.external_events, external_event);
+                unlock(*vm.external_events_mutex);
+
+                signal(*vm.event_loop_semaphore);
+            }
+        }
+    }
+
+    return 0;
+}
+
+run_http_event_handler :: (vm: *Vm, data: *void) {
+    safe_event := cast(*Safe_Http_Event) data;
+    wrapper    := cast(*Http_Server_Wrapper) safe_event.server_wrapper;
+
+    if safe_event.type == "request" && wrapper && wrapper.request_callback.type != .UNDEFINED {
+        js_request := allocate_object(vm);
+
+        set_object_property(vm, js_request, "uri",    .{ type = .STRING, s = copy_temporary_string(safe_event.request_uri) });
+        set_object_property(vm, js_request, "method", .{ type = .STRING, s = copy_temporary_string(safe_event.request_method) });
+        set_object_property(vm, js_request, "body",   .{ type = .STRING, s = copy_temporary_string(safe_event.request_body) });
+        set_object_property(vm, js_request, "_client_id", .{ type = .NUMBER, number = cast(float64) safe_event.client_id });
+
+        js_headers := allocate_object(vm);
+
+        for header: safe_event.request_headers {
+            set_object_property(vm, js_headers, header.key, .{ type = .STRING, s = copy_temporary_string(header.value) });
+            free(header.value);
+        }
+
+        set_object_property(vm, js_request, "headers", .{ type = .OBJECT, object = js_headers });
+
+        js_response := allocate_object(vm);
+
+        set_object_property(vm, js_response, "status", .{ type = .NUMBER, number = 200 });
+        set_object_property(vm, js_response, "body", .{ type = .STRING, s = copy_temporary_string("") });
+
+        js_result_headers := allocate_object(vm);
+
+        set_object_property(vm, js_response, "headers", .{ type = .OBJECT, object = js_result_headers });
+
+        arguments: [2] Value = .[ .{ type = .OBJECT, object = js_request }, .{ type = .OBJECT, object = js_response } ];
+        call_value(vm, .{}, wrapper.request_callback, arguments);
+    }
+
+    if safe_event.type == "request" {
+        free(safe_event.request_uri);
+        free(safe_event.request_method);
+        free(safe_event.request_body);
+
+        array_free(safe_event.request_headers);
+    }
+
+    free(safe_event);
 }
 
 js_to_response :: (vm: *Vm, js_request: Value, js_response: Value) -> (bool, Http_Response) {
@@ -200,4 +252,25 @@ js_to_response :: (vm: *Vm, js_request: Value, js_response: Value) -> (bool, Htt
 Http_Server_Wrapper :: struct {
     server:      Http_Server;
     initialized: bool;
+
+    thread:             Thread;
+    shutdown_requested: bool;
+    vm:                 *Vm;
+
+    request_callback: Value;
+}
+
+Safe_Http_Header :: struct {
+    key:   string;
+    value: string;
+}
+
+Safe_Http_Event :: struct {
+    type:            string;
+    server_wrapper:  *void;
+    client_id:       Socket;
+    request_method:  string;
+    request_uri:     string;
+    request_body:    string;
+    request_headers: [..] Safe_Http_Header;
 }

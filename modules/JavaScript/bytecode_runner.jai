@@ -620,6 +620,9 @@ execute_main :: (vm: *Vm, program: *Bytecode_Program) -> Value {
         if old_globals.data free(old_globals.data);
     }
 
+    init(*vm.external_events_mutex);
+    init(*vm.event_loop_semaphore);
+
     if vm.has_exception return result;
 
     run_event_loop(vm);
@@ -2162,14 +2165,32 @@ run_microtasks :: (vm: *Vm) {
 }
 
 run_event_loop :: (vm: *Vm) {
-    while vm.timer_queue.count > 0 || vm.microtask_queue.count > 0 {
+    while vm.timer_queue.count > 0 || vm.microtask_queue.count > 0 || vm.active_background_tasks > 0 {
         if vm.microtask_queue.count > 0 {
             run_microtasks(vm);
             continue;
         }
 
-        now := seconds_since_init();
+        lock(*vm.external_events_mutex);
 
+        events_to_process: [..] External_Event;
+        events_to_process.allocator = temp;
+
+        for vm.external_events array_add(*events_to_process, it);
+
+        vm.external_events.count = 0;
+
+        unlock(*vm.external_events_mutex);
+
+        did_external := events_to_process.count > 0;
+
+        for event: events_to_process {
+            event.handler(vm, event.data);
+        }
+
+        if did_external continue;
+
+        now              := seconds_since_init();
         next_timer_index := -1;
         next_timer_time  := 100000000.0;
 
@@ -2182,19 +2203,25 @@ run_event_loop :: (vm: *Vm) {
 
         if next_timer_index != -1 {
             if next_timer_time > now {
-                sleep_milliseconds(cast(s32) ((next_timer_time - now) * 1000));
+                sleep_time := cast(s32) ((next_timer_time - now) * 1000);
+                wait_for(*vm.event_loop_semaphore, sleep_time);
                 now = seconds_since_init();
             }
 
-            timer := vm.timer_queue[next_timer_index];
-            if !timer.is_interval {
-                array_free(timer.arguments);
-                array_unordered_remove_by_index(*vm.timer_queue, next_timer_index);
-            } else {
-                vm.timer_queue[next_timer_index].trigger_time = now + timer.interval_ms / 1000.0;
-            }
+            if next_timer_time <= now {
+                timer := vm.timer_queue[next_timer_index];
 
-            call_value(vm, .{}, timer.callback, timer.arguments);
+                if !timer.is_interval {
+                    array_free(timer.arguments);
+                    array_unordered_remove_by_index(*vm.timer_queue, next_timer_index);
+                } else {
+                    vm.timer_queue[next_timer_index].trigger_time = now + timer.interval_ms / 1000.0;
+                }
+
+                call_value(vm, .{}, timer.callback, timer.arguments);
+            }
+        } else if vm.active_background_tasks > 0 {
+            wait_for(*vm.event_loop_semaphore, -1);
         }
     }
 }
@@ -2718,6 +2745,9 @@ deinit :: (vm: *Vm) {
     for vm.timer_queue array_free(it.arguments);
     array_free(vm.timer_queue);
 
+    destroy(*vm.external_events_mutex);
+    destroy(*vm.event_loop_semaphore);
+
     for * vm.builtin_prototypes it.* = null;
     for   vm.loaded_modules     free(it.path);
 
@@ -2936,6 +2966,11 @@ Timer :: struct {
     interval_ms: float64;
 }
 
+External_Event :: struct {
+    data: *void;
+    handler: (vm: *Vm, data: *void);
+}
+
 Vm :: struct {
     gc: Gc;
 
@@ -2964,6 +2999,13 @@ Vm :: struct {
     microtask_queue: [..] Microtask;
     timer_queue:     [..] Timer;
     timer_id_counter: int;
+
+    active_background_tasks: int;
+
+    external_events_mutex: Mutex;
+    external_events:       [..] External_Event;
+
+    event_loop_semaphore: Semaphore;
 
     exception:     Value;
     has_exception: bool;

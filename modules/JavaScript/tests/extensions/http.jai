@@ -6,7 +6,7 @@ test_http :: () {
         JS
 
         run_test(code);
-        expect_global("error", .STRING, "Permission denied: net");
+        expect_global("error", .STRING, "Permission denied: network");
     });
 
     test(() => {
@@ -16,7 +16,7 @@ test_http :: () {
         JS
 
         run_test(code, permissions = .NETWORK);
-        
+
         if context.vm.has_exception {
             print("Test Exception: %\n", context.vm.exception);
         }
