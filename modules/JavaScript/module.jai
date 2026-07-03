@@ -88,6 +88,7 @@ Permission :: enum_flags {
 #load "extensions/array.jai";
 #load "extensions/boolean.jai";
 #load "extensions/date.jai";
+#load "extensions/fetch.jai";
 #load "extensions/file.jai";
 #load "extensions/global_this.jai";
 #load "extensions/http.jai";
@@ -115,3 +116,4 @@ Permission :: enum_flags {
 #import "String";
 
 #import,dir "../Http_Server";
+#import,dir "../Http_Client";

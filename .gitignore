@@ -2,12 +2,20 @@
 
 *.exe
 *.pdb
+*.dll
 
 .DS_Store
 *.dSYM
 
 build_debug
 build_release
+
+modules/Curl/linux
+modules/Curl/macos
+modules/Curl/windows
+
+modules/Http_Client/examples/blocking_request
+modules/Http_Client/examples/concurrent_requests
 
 modules/Http_Server/examples/example
 modules/Http_Server/examples/sse

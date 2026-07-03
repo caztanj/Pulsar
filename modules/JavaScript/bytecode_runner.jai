@@ -2293,6 +2293,7 @@ init_common_vm_globals :: (vm: *Vm) {
     init_vm_print(vm);
     init_vm_http(vm);
     init_vm_router(vm);
+    init_vm_fetch(vm);
     init_vm_global_this(vm);
     init_vm_uint8_array(vm);
 }
