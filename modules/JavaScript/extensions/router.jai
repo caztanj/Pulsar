@@ -49,8 +49,14 @@ router_add_route :: (vm: *Vm, this: Value, method: string, path: string, handler
 
     route_object := allocate_object(vm);
 
-    set_object_property(vm, route_object, "method",  .{ type = .STRING, s = copy_temporary_string(method) });
-    set_object_property(vm, route_object, "path",    .{ type = .STRING, s = copy_temporary_string(path) });
+    method_str := copy_string(method);
+    path_str := copy_string(path);
+
+    array_add(*vm.allocated_strings, method_str);
+    array_add(*vm.allocated_strings, path_str);
+
+    set_object_property(vm, route_object, "method",  .{ type = .STRING, s = method_str });
+    set_object_property(vm, route_object, "path",    .{ type = .STRING, s = path_str });
     set_object_property(vm, route_object, "handler", handler);
 
     array_add(*routes_value.object.elements, .{ type = .OBJECT, object = route_object });
