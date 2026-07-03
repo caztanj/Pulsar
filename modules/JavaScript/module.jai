@@ -103,6 +103,7 @@ Permission :: enum_flags {
 #load "extensions/set.jai";
 #load "extensions/string.jai";
 #load "extensions/uint8_array.jai";
+#load "extensions/timer.jai";
 
 #scope_module
 

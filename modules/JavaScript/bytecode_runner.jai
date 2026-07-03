@@ -351,6 +351,11 @@ collect_garbage_minor :: (vm: *Vm) {
         mark_value_minor(it.arg, *visited_environments);
     }
 
+    for vm.timer_queue {
+        mark_value_minor(it.callback, *visited_environments);
+        for arg: it.arguments mark_value_minor(arg, *visited_environments);
+    }
+
     for vm.builtin_prototypes mark_object_minor(it, *visited_environments);
 
     for vm.gc.remembered_set {
@@ -476,6 +481,11 @@ collect_garbage_major :: (vm: *Vm) {
     for vm.microtask_queue {
         mark_value(it.callback, *visited_environments);
         mark_value(it.arg, *visited_environments);
+    }
+
+    for vm.timer_queue {
+        mark_value(it.callback, *visited_environments);
+        for arg: it.arguments mark_value(arg, *visited_environments);
     }
 
     for vm.builtin_prototypes mark_object(it, *visited_environments);
@@ -612,7 +622,7 @@ execute_main :: (vm: *Vm, program: *Bytecode_Program) -> Value {
 
     if vm.has_exception return result;
 
-    run_microtasks(vm);
+    run_event_loop(vm);
 
     return result;
 }
@@ -2151,6 +2161,44 @@ run_microtasks :: (vm: *Vm) {
     }
 }
 
+run_event_loop :: (vm: *Vm) {
+    while vm.timer_queue.count > 0 || vm.microtask_queue.count > 0 {
+        if vm.microtask_queue.count > 0 {
+            run_microtasks(vm);
+            continue;
+        }
+
+        now := seconds_since_init();
+
+        next_timer_index := -1;
+        next_timer_time  := 100000000.0;
+
+        for vm.timer_queue {
+            if it.trigger_time < next_timer_time {
+                next_timer_time = it.trigger_time;
+                next_timer_index = it_index;
+            }
+        }
+
+        if next_timer_index != -1 {
+            if next_timer_time > now {
+                sleep_milliseconds(cast(s32) ((next_timer_time - now) * 1000));
+                now = seconds_since_init();
+            }
+
+            timer := vm.timer_queue[next_timer_index];
+            if !timer.is_interval {
+                array_free(timer.arguments);
+                array_unordered_remove_by_index(*vm.timer_queue, next_timer_index);
+            } else {
+                vm.timer_queue[next_timer_index].trigger_time = now + timer.interval_ms / 1000.0;
+            }
+
+            call_value(vm, .{}, timer.callback, timer.arguments);
+        }
+    }
+}
+
 call_value :: inline (vm: *Vm, this: Value, callee: Value, arguments: [] Value, is_new: bool = false) -> Value {
     arguments_copy: [256] Value;
 
@@ -2296,6 +2344,7 @@ init_common_vm_globals :: (vm: *Vm) {
     init_vm_fetch(vm);
     init_vm_global_this(vm);
     init_vm_uint8_array(vm);
+    init_vm_timer(vm);
 }
 
 init_vm_core :: (vm: *Vm) {
@@ -2666,6 +2715,9 @@ deinit :: (vm: *Vm) {
 
     array_free(vm.microtask_queue);
 
+    for vm.timer_queue array_free(it.arguments);
+    array_free(vm.timer_queue);
+
     for * vm.builtin_prototypes it.* = null;
     for   vm.loaded_modules     free(it.path);
 
@@ -2875,6 +2927,15 @@ Call_Frame :: struct {
     generator:            *Gc_Object;
 }
 
+Timer :: struct {
+    id: int;
+    callback: Value;
+    arguments: [..] Value;
+    trigger_time: float64;
+    is_interval: bool;
+    interval_ms: float64;
+}
+
 Vm :: struct {
     gc: Gc;
 
@@ -2901,6 +2962,8 @@ Vm :: struct {
 
     program:         *Bytecode_Program;
     microtask_queue: [..] Microtask;
+    timer_queue:     [..] Timer;
+    timer_id_counter: int;
 
     exception:     Value;
     has_exception: bool;
