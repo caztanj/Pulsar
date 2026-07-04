@@ -34,6 +34,19 @@ get_property_or_undefined :: inline (vm: *Vm, object: *Gc_Object, name: string, 
     return .{ type = .UNDEFINED };
 }
 
+add_inline_cache :: inline (cache: *Inline_Cache, incoming_shape: *Shape, offset: s32, target_shape: *Shape = null) {
+    count := cast(int)cache.count;
+    if count >= PIC_SIZE return;
+
+    for i: 0..count - 1 if cache.shapes[i] == incoming_shape return;
+
+    cache.shapes[count]  = incoming_shape;
+    cache.offsets[count] = offset;
+    if target_shape cache.target_shapes[count] = target_shape;
+
+    cache.count += 1;
+}
+
 lookup_property :: (vm: *Vm, object: *Gc_Object, name: string, imm: int = -1) -> found: bool, Value {
     is_all_digits := name.count > 0 && name[0] >= "0" && name[0] <= "9";
 
@@ -1055,20 +1068,7 @@ execute_function_internal :: (vm: *Vm, initial_function: *Bytecode_Function, ini
                                     offset, shape_found := shape_lookup_property(object.shape, property_name, instruction.imm);
 
                                     if shape_found {
-                                        count := cast(int)instruction.inline_cache.count;
-
-                                        if count < PIC_SIZE {
-                                            already_has := false;
-
-                                            for i: 0..count-1 if instruction.inline_cache.shapes[i] == incoming_shape already_has = true;
-
-                                            if !already_has {
-                                                instruction.inline_cache.shapes[count]         = incoming_shape;
-                                                instruction.inline_cache.target_shapes[count]  = object.shape;
-                                                instruction.inline_cache.offsets[count]        = cast(s32) offset;
-                                                instruction.inline_cache.count                += 1;
-                                            }
-                                        }
+                                        add_inline_cache(*instruction.inline_cache, incoming_shape, cast(s32) offset, object.shape);
                                     }
                                 }
                             }
@@ -1104,19 +1104,7 @@ execute_function_internal :: (vm: *Vm, initial_function: *Bytecode_Function, ini
                                 offset, shape_found := shape_lookup_property(object.shape, property_name, instruction.imm);
 
                                 if shape_found {
-                                    count := cast(int)instruction.inline_cache.count;
-
-                                    if count < PIC_SIZE {
-                                        already_has := false;
-
-                                        for i: 0..count - 1 if instruction.inline_cache.shapes[i] == object.shape already_has = true;
-
-                                        if !already_has {
-                                            instruction.inline_cache.shapes[count]   = object.shape;
-                                            instruction.inline_cache.offsets[count]  = cast(s32) offset;
-                                            instruction.inline_cache.count          += 1;
-                                        }
-                                    }
+                                    add_inline_cache(*instruction.inline_cache, object.shape, cast(s32) offset);
                                 }
                             }
                         }
