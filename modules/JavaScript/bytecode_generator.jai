@@ -442,31 +442,11 @@ get_local_index :: (generator: *Bytecode_Generator, name: string) -> int {
     return -1;
 }
 
-store_local_or_global :: (generator: *Bytecode_Generator, name: string, register: u8) {
+resolve_variable :: (generator: *Bytecode_Generator, name: string) -> Variable_Location {
     index := -1;
+    level := 0;
 
-    for generator.locals {
-        if it == name {
-            index = it_index;
-            break;
-        }
-    }
-
-    if index != -1 {
-        instruction := Instruction.{
-            op_code = .STORE_LOCAL,
-            arg1    = register,
-            imm     = cast(s32) index,
-        };
-
-        emit_instruction(generator, instruction);
-
-        return;
-    }
-
-    level   := 1;
-    current := generator.parent;
-
+    current := generator;
     while current {
         for current.locals {
             if it == name {
@@ -482,71 +462,61 @@ store_local_or_global :: (generator: *Bytecode_Generator, name: string, register
     }
 
     if index != -1 {
-        instruction := Instruction.{
-            op_code = .STORE_UPVALUE,
-            arg1    = register,
-            imm     = (cast(s32) level << 16) | cast(s32) index,
-        };
-
-        emit_instruction(generator, instruction);
-
-        return;
+        if level == 0 return .{ .LOCAL, index, 0 };
+        else          return .{ .UPVALUE, index, level };
     }
 
     for generator.program.globals {
-        if it == name {
-            instruction := Instruction.{
-                op_code = .STORE_GLOBAL,
-                arg1    = register,
-                imm     = cast(s32) it_index,
-            };
-
-            emit_instruction(generator, instruction);
-
-            return;
-        }
+        if it == name return .{ .GLOBAL, it_index, 0 };
     }
 
-    is_global := generator.current_function && (generator.current_function.flags & .TOP_LEVEL);
+    return .{ .NOT_FOUND, -1, 0 };
+}
 
-    if is_global {
-        index := -1;
+store_local_or_global :: (generator: *Bytecode_Generator, name: string, register: u8) {
+    location := resolve_variable(generator, name);
 
-        for generator.program.globals {
-            if it == name {
-                index = it_index;
-                break;
+    instruction := Instruction.{
+        arg1 = register,
+    };
+
+    if location.type == {
+        case .LOCAL;
+            instruction.op_code = .STORE_LOCAL;
+            instruction.imm = cast(s32) location.index;
+            emit_instruction(generator, instruction);
+
+        case .UPVALUE;
+            instruction.op_code = .STORE_UPVALUE;
+            instruction.imm = (cast(s32) location.level << 16) | cast(s32) location.index;
+            emit_instruction(generator, instruction);
+
+        case .GLOBAL;
+            instruction.op_code = .STORE_GLOBAL;
+            instruction.imm = cast(s32) location.index;
+            emit_instruction(generator, instruction);
+
+        case .NOT_FOUND;
+            is_global := generator.current_function && (generator.current_function.flags & .TOP_LEVEL);
+
+            if is_global {
+                array_add(*generator.program.globals, name);
+
+                instruction.op_code = .STORE_GLOBAL;
+                instruction.imm = cast(s32) (generator.program.globals.count - 1);
+                emit_instruction(generator, instruction);
+            } else {
+                array_add(*generator.locals, name);
+                index := generator.locals.count - 1;
+
+                instruction.op_code = .STORE_LOCAL;
+                instruction.imm = cast(s32) index;
+
+                if generator.current_function {
+                    emit_instruction(generator, instruction);
+                    if index >= generator.current_function.locals_count generator.current_function.locals_count = index + 1;
+                }
             }
-        }
-
-        if index == -1 {
-            array_add(*generator.program.globals, name);
-            index = generator.program.globals.count - 1;
-        }
-
-        instruction := Instruction.{
-            op_code = .STORE_GLOBAL,
-            arg1    = register,
-            imm     = cast(s32) index,
-        };
-
-        emit_instruction(generator, instruction);
-    } else {
-        array_add(*generator.locals, name);
-
-        index = generator.locals.count - 1;
-
-        instruction := Instruction.{
-            op_code = .STORE_LOCAL,
-            arg1    = register,
-            imm     = cast(s32) index,
-        };
-
-        if generator.current_function {
-            array_add(*generator.current_function.instructions, instruction);
-
-            if index >= generator.current_function.locals_count generator.current_function.locals_count = index + 1;
-        }
     }
 }
 
@@ -1601,25 +1571,9 @@ emit_expression :: (generator: *Bytecode_Generator, node: *Ast_Node, force_new_r
         case .IDENTIFIER;
             identifier := cast(*Ast_Identifier) node;
 
-            index := -1;
-            level := 0;
+            location := resolve_variable(generator, identifier.name);
 
-            current := generator;
-            while current {
-                for current.locals {
-                    if it == identifier.name {
-                        index = it_index;
-                        break;
-                    }
-                }
-
-                if index != -1 break;
-
-                current = current.parent;
-                level  += 1;
-            }
-
-            if index != -1 && level == 0 && !force_new_register && destination_register == -1 return cast(u8) index;
+            if location.type == .LOCAL && !force_new_register && destination_register == -1 return cast(u8) location.index;
 
             register: u8;
 
@@ -1634,31 +1588,20 @@ emit_expression :: (generator: *Bytecode_Generator, node: *Ast_Node, force_new_r
                 dest = register,
             };
 
-            if index != -1 {
-                if level == 0 {
+            if location.type == {
+                case .LOCAL;
                     instruction.op_code = .LOAD_LOCAL;
-                    instruction.imm = cast(s32) index;
-                } else {
+                    instruction.imm = cast(s32) location.index;
+                case .UPVALUE;
                     instruction.op_code = .LOAD_UPVALUE;
-                    instruction.imm = (cast(s32) level << 16) | cast(s32) index;
-                }
-            } else {
-                global_index := -1;
-
-                for generator.program.globals {
-                    if it == identifier.name {
-                        global_index = it_index;
-                        break;
-                    }
-                }
-
-                if global_index == -1 {
+                    instruction.imm = (cast(s32) location.level << 16) | cast(s32) location.index;
+                case .GLOBAL;
+                    instruction.op_code = .LOAD_GLOBAL;
+                    instruction.imm = cast(s32) location.index;
+                case .NOT_FOUND;
                     array_add(*generator.program.globals, identifier.name);
-                    global_index = generator.program.globals.count - 1;
-                }
-
-                instruction.op_code = .LOAD_GLOBAL;
-                instruction.imm = cast(s32) global_index;
+                    instruction.op_code = .LOAD_GLOBAL;
+                    instruction.imm = cast(s32) (generator.program.globals.count - 1);
             }
 
             emit_instruction(generator, instruction);
@@ -3359,6 +3302,14 @@ Loop_Context :: struct {
     break_jumps:     [..] int;
 
     is_switch:       bool;
+}
+
+Variable_Location_Type :: enum { LOCAL; UPVALUE; GLOBAL; NOT_FOUND; }
+
+Variable_Location :: struct {
+    type: Variable_Location_Type;
+    index: int;
+    level: int;
 }
 
 PIC_SIZE :: 4;
