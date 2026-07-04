@@ -28,6 +28,12 @@ allocate_environment :: inline (vm: *Vm) -> *Environment {
     return env;
 }
 
+get_property_or_undefined :: inline (vm: *Vm, object: *Gc_Object, name: string, imm: int = -1) -> Value {
+    found, result := lookup_property(vm, object, name, imm);
+    if found return result;
+    return .{ type = .UNDEFINED };
+}
+
 lookup_property :: (vm: *Vm, object: *Gc_Object, name: string, imm: int = -1) -> found: bool, Value {
     is_all_digits := name.count > 0 && name[0] >= "0" && name[0] <= "9";
 
@@ -333,6 +339,17 @@ sweep_strings :: (vm: *Vm) {
     array_free(to_remove);
 }
 
+gc_array_reset :: inline (arr: *$T) {
+    if arr.allocated > 64 {
+        array_free(arr.*);
+        arr.data      = null;
+        arr.allocated = 0;
+        arr.count     = 0;
+    } else {
+        arr.count = 0;
+    }
+}
+
 sweep_environments :: (vm: *Vm, is_major := false) {
     previous_env: *Environment;
 
@@ -347,14 +364,7 @@ sweep_environments :: (vm: *Vm, is_major := false) {
 
             if current_env current_env.previous = previous_env;
 
-            if unreachable.values.allocated > 64 {
-                array_free(unreachable.values);
-                unreachable.values.data = null;
-                unreachable.values.allocated = 0;
-                unreachable.values.count = 0;
-            } else {
-                unreachable.values.count = 0;
-            }
+            gc_array_reset(*unreachable.values);
 
             unreachable.next       = vm.gc.environment_pool;
             vm.gc.environment_pool = unreachable;
@@ -448,32 +458,9 @@ collect_garbage_minor :: (vm: *Vm) {
             if previous previous.next       = current;
             else        vm.gc.young_objects = current;
 
-            if unreachable.fields.allocated > 64 {
-                array_free(unreachable.fields);
-                unreachable.fields.data = null;
-                unreachable.fields.allocated = 0;
-                unreachable.fields.count = 0;
-            } else {
-                unreachable.fields.count = 0;
-            }
-
-            if unreachable.elements.allocated > 64 {
-                array_free(unreachable.elements);
-                unreachable.elements.data = null;
-                unreachable.elements.allocated = 0;
-                unreachable.elements.count = 0;
-            } else {
-                unreachable.elements.count = 0;
-            }
-
-            if unreachable.map_entries.allocated > 64 {
-                array_free(unreachable.map_entries);
-                unreachable.map_entries.data = null;
-                unreachable.map_entries.allocated = 0;
-                unreachable.map_entries.count = 0;
-            } else {
-                unreachable.map_entries.count = 0;
-            }
+            gc_array_reset(*unreachable.fields);
+            gc_array_reset(*unreachable.elements);
+            gc_array_reset(*unreachable.map_entries);
 
             if unreachable.kind == .PROMISE                                           unreachable.promise_then_callbacks.count = 0;
             if unreachable.kind == .GENERATOR || unreachable.kind == .ASYNC_EXECUTION unreachable.generator_registers.count    = 0;
@@ -543,32 +530,9 @@ collect_garbage_major :: (vm: *Vm) {
                 if previous previous.next = current;
                 else        list_head.*   = current;
 
-                if unreachable.fields.allocated > 64 {
-                    array_free(unreachable.fields);
-                    unreachable.fields.data = null;
-                    unreachable.fields.allocated = 0;
-                    unreachable.fields.count = 0;
-                } else {
-                    unreachable.fields.count = 0;
-                }
-
-                if unreachable.elements.allocated > 64 {
-                    array_free(unreachable.elements);
-                    unreachable.elements.data = null;
-                    unreachable.elements.allocated = 0;
-                    unreachable.elements.count = 0;
-                } else {
-                    unreachable.elements.count = 0;
-                }
-
-                if unreachable.map_entries.allocated > 64 {
-                    array_free(unreachable.map_entries);
-                    unreachable.map_entries.data = null;
-                    unreachable.map_entries.allocated = 0;
-                    unreachable.map_entries.count = 0;
-                } else {
-                    unreachable.map_entries.count = 0;
-                }
+                gc_array_reset(*unreachable.fields);
+                gc_array_reset(*unreachable.elements);
+                gc_array_reset(*unreachable.map_entries);
 
                 if unreachable.kind == .PROMISE                                           unreachable.promise_then_callbacks.count = 0;
                 if unreachable.kind == .GENERATOR || unreachable.kind == .ASYNC_EXECUTION unreachable.generator_registers.count    = 0;
@@ -1134,10 +1098,7 @@ execute_function_internal :: (vm: *Vm, initial_function: *Bytecode_Function, ini
                         }
 
                         if !pic_hit {
-                            found, res := lookup_property(vm, object, property_name, instruction.imm);
-
-                            if found registers_data[instruction.dest] = res;
-                            else     registers_data[instruction.dest] = .{ type = .UNDEFINED };
+                            registers_data[instruction.dest] = get_property_or_undefined(vm, object, property_name, instruction.imm);
 
                             if object.shape {
                                 offset, shape_found := shape_lookup_property(object.shape, property_name, instruction.imm);
@@ -1164,10 +1125,7 @@ execute_function_internal :: (vm: *Vm, initial_function: *Bytecode_Function, ini
                             registers_data[instruction.dest].type   = .NUMBER;
                             registers_data[instruction.dest].number = cast(float64) value.s.count;
                         } else {
-                            found, res := lookup_property(vm, vm.string_prototype, property_name, instruction.imm);
-
-                            if found registers_data[instruction.dest] = res;
-                            else     registers_data[instruction.dest] = .{ type = .UNDEFINED };
+                            registers_data[instruction.dest] = get_property_or_undefined(vm, vm.string_prototype, property_name, instruction.imm);
                         }
                     } else if value.type == .OBJECT || value.type == .ARRAY || value.type == .GENERATOR || value.type == .FUNCTION || value.type == .NATIVE_FUNCTION {
                         current := ifx value.type == .GENERATOR value.generator_object else value.object;
@@ -1184,23 +1142,14 @@ execute_function_internal :: (vm: *Vm, initial_function: *Bytecode_Function, ini
                                 registers_data[instruction.dest] = .{ type = .UNDEFINED };
                             }
                         } else if current {
-                            found, result := lookup_property(vm, current, property_name, instruction.imm);
-
-                            if found registers_data[instruction.dest] = result;
-                            else     registers_data[instruction.dest] = .{ type = .UNDEFINED };
+                            registers_data[instruction.dest] = get_property_or_undefined(vm, current, property_name, instruction.imm);
                         } else {
                             registers_data[instruction.dest] = .{ type = .UNDEFINED };
                         }
                     } else if value.type == .NUMBER {
-                        found, result := lookup_property(vm, vm.number_prototype, property_name, instruction.imm);
-
-                        if found registers_data[instruction.dest] = result;
-                        else     registers_data[instruction.dest] = .{ type = .UNDEFINED };
+                        registers_data[instruction.dest] = get_property_or_undefined(vm, vm.number_prototype, property_name, instruction.imm);
                     } else if value.type == .BOOLEAN {
-                        found, result := lookup_property(vm, vm.boolean_prototype, property_name, instruction.imm);
-
-                        if found registers_data[instruction.dest] = result;
-                        else     registers_data[instruction.dest] = .{ type = .UNDEFINED };
+                        registers_data[instruction.dest] = get_property_or_undefined(vm, vm.boolean_prototype, property_name, instruction.imm);
                     } else {
                         registers_data[instruction.dest] = .{ type = .UNDEFINED };
                     }
@@ -1243,10 +1192,7 @@ execute_function_internal :: (vm: *Vm, initial_function: *Bytecode_Function, ini
                                 registers_data[instruction.dest] = .{ type = .UNDEFINED };
                             }
                         } else if property.type == .STRING {
-                            found, result := lookup_property(vm, object, property.s);
-
-                            if found registers_data[instruction.dest] = result;
-                            else     registers_data[instruction.dest] = .{ type = .UNDEFINED };
+                            registers_data[instruction.dest] = get_property_or_undefined(vm, object, property.s);
                         } else {
                             registers_data[instruction.dest] = .{ type = .UNDEFINED };
                         }
@@ -1265,10 +1211,7 @@ execute_function_internal :: (vm: *Vm, initial_function: *Bytecode_Function, ini
                                 registers_data[instruction.dest].type   = .NUMBER;
                                 registers_data[instruction.dest].number = cast(float64) value.s.count;
                             } else {
-                                found, result := lookup_property(vm, vm.string_prototype, property.s);
-
-                                if found registers_data[instruction.dest] = result;
-                                else     registers_data[instruction.dest] = .{ type = .UNDEFINED };
+                                registers_data[instruction.dest] = get_property_or_undefined(vm, vm.string_prototype, property.s);
                             }
                         } else {
                             registers_data[instruction.dest] = .{ type = .UNDEFINED };
