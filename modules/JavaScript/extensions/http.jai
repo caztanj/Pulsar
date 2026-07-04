@@ -229,9 +229,9 @@ run_http_event_handler :: (vm: *Vm, data: *void) {
         method := copy_string(safe_event.request_method);
         body := copy_string(safe_event.request_body);
 
-        array_add(*vm.allocated_strings, uri);
-        array_add(*vm.allocated_strings, method);
-        array_add(*vm.allocated_strings, body);
+        table_set(*vm.allocated_strings, uri.data, .{ s = uri, marked = false });
+        table_set(*vm.allocated_strings, method.data, .{ s = method, marked = false });
+        table_set(*vm.allocated_strings, body.data, .{ s = body, marked = false });
 
         set_object_property(vm, js_request, "uri",        .{ type = .STRING, s = uri });
         set_object_property(vm, js_request, "method",     .{ type = .STRING, s = method });
@@ -242,7 +242,7 @@ run_http_event_handler :: (vm: *Vm, data: *void) {
 
         for header: safe_event.request_headers {
             value := copy_string(header.value);
-            array_add(*vm.allocated_strings, value);
+            table_set(*vm.allocated_strings, value.data, .{ s = value, marked = false });
             set_object_property(vm, js_headers, header.key, .{ type = .STRING, s = value });
             free(header.value);
         }
@@ -253,7 +253,7 @@ run_http_event_handler :: (vm: *Vm, data: *void) {
 
         set_object_property(vm, js_response, "status", .{ type = .NUMBER, number = 200 });
         body_str := copy_string("");
-        array_add(*vm.allocated_strings, body_str);
+        table_set(*vm.allocated_strings, body_str.data, .{ s = body_str, marked = false });
         set_object_property(vm, js_response, "body",   .{ type = .STRING, s = body_str });
 
         js_result_headers := allocate_object(vm);

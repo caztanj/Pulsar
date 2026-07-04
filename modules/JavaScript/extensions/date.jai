@@ -147,7 +147,7 @@ date_to_string :: (vm: *Vm, this: Value, arguments: [] Value, is_new: bool) -> V
 
     s := sprint("%-%-% %:%:%", calendar.year, calendar.month_starting_at_0 + 1, calendar.day_of_month_starting_at_0 + 1, calendar.hour, calendar.minute, calendar.second);
 
-    array_add(*vm.allocated_strings, s);
+    table_set(*vm.allocated_strings, s.data, .{ s = s, marked = false });
 
     return .{ type = .STRING, s = s };
 }
@@ -158,7 +158,7 @@ date_to_iso_string :: (vm: *Vm, this: Value, arguments: [] Value, is_new: bool) 
 
     s := sprint("%-%-%T%:%:%.%Z", formatInt(calendar.year, minimum_digits = 4), formatInt(calendar.month_starting_at_0 + 1, minimum_digits = 2), formatInt(calendar.day_of_month_starting_at_0 + 1, minimum_digits = 2), formatInt(calendar.hour, minimum_digits = 2), formatInt(calendar.minute, minimum_digits = 2), formatInt(calendar.second, minimum_digits=2), formatInt(calendar.millisecond, minimum_digits = 3));
 
-    array_add(*vm.allocated_strings, s);
+    table_set(*vm.allocated_strings, s.data, .{ s = s, marked = false });
 
     return .{ type = .STRING, s = s };
 }

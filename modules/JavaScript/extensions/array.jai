@@ -105,7 +105,7 @@ array_join :: (vm: *Vm, this: Value, arguments: [] Value, is_new: bool) -> Value
         }
 
         result := builder_to_string(*builder);
-        array_add(*vm.allocated_strings, result);
+        table_set(*vm.allocated_strings, result.data, .{ s = result, marked = false });
 
         return .{ type = .STRING, s = result };
     }
@@ -684,7 +684,7 @@ array_from :: (vm: *Vm, this: Value, arguments: [] Value, is_new: bool) -> Value
             char           := slice(array_like.s, it, 1);
             allocated_char := copy_string(char);
 
-            array_add(*vm.allocated_strings, allocated_char);
+            table_set(*vm.allocated_strings, allocated_char.data, .{ s = allocated_char, marked = false });
             array_add(*result_object.elements, .{ type = .STRING, s = allocated_char });
         }
     } else if (array_like.type == .OBJECT || array_like.type == .ARRAY) && array_like.object {

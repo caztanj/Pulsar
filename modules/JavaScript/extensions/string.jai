@@ -111,7 +111,7 @@ string_substring :: (vm: *Vm, this: Value, arguments: [] Value, is_new: bool) ->
     result           := slice(this.s, start, end - start);
     allocated_result := copy_string(result);
 
-    array_add(*vm.allocated_strings, allocated_result);
+    table_set(*vm.allocated_strings, allocated_result.data, .{ s = allocated_result, marked = false });
 
     return .{ type = .STRING, s = allocated_result };
 }
@@ -121,7 +121,7 @@ string_to_lower_case :: (vm: *Vm, this: Value, arguments: [] Value, is_new: bool
 
     result := to_lower_copy(this.s);
 
-    array_add(*vm.allocated_strings, result);
+    table_set(*vm.allocated_strings, result.data, .{ s = result, marked = false });
 
     return .{ type = .STRING, s = result };
 }
@@ -131,7 +131,7 @@ string_to_upper_case :: (vm: *Vm, this: Value, arguments: [] Value, is_new: bool
 
     result := to_upper_copy(this.s);
 
-    array_add(*vm.allocated_strings, result);
+    table_set(*vm.allocated_strings, result.data, .{ s = result, marked = false });
 
     return .{ type = .STRING, s = result };
 }
@@ -148,7 +148,7 @@ string_char_at :: (vm: *Vm, this: Value, arguments: [] Value, is_new: bool) -> V
     result           := slice(this.s, index, 1);
     allocated_result := copy_string(result);
 
-    array_add(*vm.allocated_strings, allocated_result);
+    table_set(*vm.allocated_strings, allocated_result.data, .{ s = allocated_result, marked = false });
 
     return .{ type = .STRING, s = allocated_result };
 }
@@ -179,7 +179,7 @@ string_repeat :: (vm: *Vm, this: Value, arguments: [] Value, is_new: bool) -> Va
 
     result := builder_to_string(*builder);
 
-    array_add(*vm.allocated_strings, result);
+    table_set(*vm.allocated_strings, result.data, .{ s = result, marked = false });
 
     return .{ type = .STRING, s = result };
 }
@@ -190,7 +190,7 @@ string_trim :: (vm: *Vm, this: Value, arguments: [] Value, is_new: bool) -> Valu
     result           := trim(this.s);
     allocated_result := copy_string(result);
 
-    array_add(*vm.allocated_strings, allocated_result);
+    table_set(*vm.allocated_strings, allocated_result.data, .{ s = allocated_result, marked = false });
 
     return .{ type = .STRING, s = allocated_result };
 }
@@ -211,7 +211,7 @@ string_split :: (vm: *Vm, this: Value, arguments: [] Value, is_new: bool) -> Val
             char           := slice(this.s, it, 1);
             allocated := copy_string(char);
 
-            array_add(*vm.allocated_strings, allocated);
+            table_set(*vm.allocated_strings, allocated.data, .{ s = allocated, marked = false });
             array_add(*object.elements,      .{ type = .STRING, s = allocated });
         }
     } else {
@@ -220,7 +220,7 @@ string_split :: (vm: *Vm, this: Value, arguments: [] Value, is_new: bool) -> Val
         for parts {
             allocated_part := copy_string(it);
 
-            array_add(*vm.allocated_strings, allocated_part);
+            table_set(*vm.allocated_strings, allocated_part.data, .{ s = allocated_part, marked = false });
             array_add(*object.elements,      .{ type = .STRING, s = allocated_part });
         }
     }
@@ -285,7 +285,7 @@ string_slice :: (vm: *Vm, this: Value, arguments: [] Value, is_new: bool) -> Val
     result           := slice(this.s, start, end - start);
     allocated_result := copy_string(result);
 
-    array_add(*vm.allocated_strings, allocated_result);
+    table_set(*vm.allocated_strings, allocated_result.data, .{ s = allocated_result, marked = false });
 
     return .{ type = .STRING, s = allocated_result };
 }
@@ -309,7 +309,7 @@ string_replace :: (vm: *Vm, this: Value, arguments: [] Value, is_new: bool) -> V
 
     result := builder_to_string(*builder);
 
-    array_add(*vm.allocated_strings, result);
+    table_set(*vm.allocated_strings, result.data, .{ s = result, marked = false });
 
     return .{ type = .STRING, s = result };
 }
@@ -347,7 +347,7 @@ string_pad_start :: (vm: *Vm, this: Value, arguments: [] Value, is_new: bool) ->
 
     result := builder_to_string(*builder);
 
-    array_add(*vm.allocated_strings, result);
+    table_set(*vm.allocated_strings, result.data, .{ s = result, marked = false });
 
     return .{ type = .STRING, s = result };
 }
@@ -385,7 +385,7 @@ string_pad_end :: (vm: *Vm, this: Value, arguments: [] Value, is_new: bool) -> V
 
     result := builder_to_string(*builder);
 
-    array_add(*vm.allocated_strings, result);
+    table_set(*vm.allocated_strings, result.data, .{ s =result, marked = false });
 
     return .{ type = .STRING, s = result };
 }
@@ -396,7 +396,7 @@ string_trim_start :: (vm: *Vm, this: Value, arguments: [] Value, is_new: bool) -
     result           := trim_left(this.s);
     allocated_result := copy_string(result);
 
-    array_add(*vm.allocated_strings, allocated_result);
+    table_set(*vm.allocated_strings, allocated_result.data, .{ s = allocated_result, marked = false });
 
     return .{ type = .STRING, s = allocated_result };
 }
@@ -407,7 +407,7 @@ string_trim_end :: (vm: *Vm, this: Value, arguments: [] Value, is_new: bool) -> 
     result           := trim_right(this.s);
     allocated_result := copy_string(result);
 
-    array_add(*vm.allocated_strings, allocated_result);
+    table_set(*vm.allocated_strings, allocated_result.data, .{ s = allocated_result, marked = false });
 
     return .{ type = .STRING, s = allocated_result };
 }
@@ -424,7 +424,7 @@ string_at :: (vm: *Vm, this: Value, arguments: [] Value, is_new: bool) -> Value 
     result           := slice(this.s, index, 1);
     allocated_result := copy_string(result);
 
-    array_add(*vm.allocated_strings, allocated_result);
+    table_set(*vm.allocated_strings, allocated_result.data, .{ s = allocated_result, marked = false});
 
     return .{ type = .STRING, s = allocated_result };
 }

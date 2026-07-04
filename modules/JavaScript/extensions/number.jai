@@ -182,7 +182,7 @@ number_to_string :: (vm: *Vm, this: Value, arguments: [] Value, is_new: bool) ->
         result_string = sprint("%", formatInt(cast(s64) number_value, base = cast(u32) radix));
     }
 
-    array_add(*vm.allocated_strings, result_string);
+    table_set(*vm.allocated_strings, result_string.data, .{ s = result_string, marked = false });
 
     return .{ type = .STRING, s = result_string };
 }
@@ -214,7 +214,7 @@ number_to_fixed :: (vm: *Vm, this: Value, arguments: [] Value, is_new: bool) -> 
 
     result_string := sprint("%", formatFloat(number_value, width = 0, trailing_width = cast(s32) fraction_digits, zero_removal = .NO));
 
-    array_add(*vm.allocated_strings, result_string);
+    table_set(*vm.allocated_strings, result_string.data, .{ s = result_string, marked = false });
 
     return .{ type = .STRING, s = result_string };
 }

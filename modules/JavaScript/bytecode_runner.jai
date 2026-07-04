@@ -203,54 +203,58 @@ allocate_object :: (vm: *Vm) -> *Gc_Object {
     return object;
 }
 
-mark_object :: (object: *Gc_Object, visited_environments: *Table(*Environment, bool)) {
+mark_object :: (vm: *Vm, object: *Gc_Object, visited_environments: *Table(*Environment, bool)) {
     if !object || object.marked return;
 
     object.marked = true;
 
-    if object.prototype mark_object(object.prototype, visited_environments);
+    if object.prototype mark_object(vm, object.prototype, visited_environments);
+    if object.shape object.shape.marked = true;
 
-    for object.fields      mark_value(it, visited_environments);
-    for object.elements    mark_value(it, visited_environments);
+    for object.fields      mark_value(vm, it, visited_environments);
+    for object.elements    mark_value(vm, it, visited_environments);
 
     if object.kind == .MAP || object.kind == .SET {
-        for object.map_entries mark_value(it, visited_environments);
+        for object.map_entries mark_value(vm, it, visited_environments);
     } else if object.kind == .PROMISE {
-        mark_value(object.promise_result, visited_environments);
-        for object.promise_then_callbacks mark_value(it, visited_environments);
+        mark_value(vm, object.promise_result, visited_environments);
+        for object.promise_then_callbacks mark_value(vm, it, visited_environments);
     } else if object.kind == .GENERATOR || object.kind == .ASYNC_EXECUTION {
-        for object.generator_registers mark_value(it, visited_environments);
-        mark_value(object.async_promise, visited_environments);
+        for object.generator_registers mark_value(vm, it, visited_environments);
+        mark_value(vm, object.async_promise, visited_environments);
     } else {
-        mark_value(object.primitive_value, visited_environments);
+        mark_value(vm, object.primitive_value, visited_environments);
     }
 
     if object.realm {
-        for object.realm.globals mark_value(it, visited_environments);
+        for object.realm.globals mark_value(vm, it, visited_environments);
     }
 }
 
-mark_environment :: (env: *Environment, visited_environments: *Table(*Environment, bool)) {
+mark_environment :: (vm: *Vm, env: *Environment, visited_environments: *Table(*Environment, bool)) {
     if !env       return;
     if env.marked return;
 
     env.marked = true;
 
-    for env.values mark_value(it, visited_environments);
+    for env.values mark_value(vm, it, visited_environments);
 
-    mark_environment(env.parent, visited_environments);
+    mark_environment(vm, env.parent, visited_environments);
 }
 
-mark_value :: (value: Value, visited_environments: *Table(*Environment, bool)) {
+mark_value :: (vm: *Vm, value: Value, visited_environments: *Table(*Environment, bool)) {
     if value.type == .GENERATOR {
-        mark_object(value.generator_object, visited_environments);
+        mark_object(vm, value.generator_object, visited_environments);
     } else if value.type == .OBJECT || value.type == .ARRAY {
-        mark_object(value.object, visited_environments);
+        mark_object(vm, value.object, visited_environments);
     } else if value.type == .FUNCTION {
-        mark_object(value.object, visited_environments);
-        mark_environment(value.function.environment, visited_environments);
+        mark_object(vm, value.object, visited_environments);
+        mark_environment(vm, value.function.environment, visited_environments);
     } else if value.type == .NATIVE_FUNCTION {
-        mark_object(value.object, visited_environments);
+        mark_object(vm, value.object, visited_environments);
+    } else if value.type == .STRING {
+        ptr := table_find_pointer(*vm.allocated_strings, value.s.data);
+        if ptr ptr.marked = true;
     }
 }
 
@@ -286,44 +290,48 @@ write_barrier_object :: inline (vm: *Vm, object: *Gc_Object, target: *Gc_Object)
     }
 }
 
-mark_value_minor :: (value: Value, visited_environments: *Table(*Environment, bool)) {
+mark_value_minor :: (vm: *Vm, value: Value, visited_environments: *Table(*Environment, bool)) {
     if value.type == .GENERATOR {
-        mark_object_minor(value.generator_object, visited_environments);
+        mark_object_minor(vm, value.generator_object, visited_environments);
     } else if value.type == .OBJECT || value.type == .ARRAY {
-        mark_object_minor(value.object, visited_environments);
+        mark_object_minor(vm, value.object, visited_environments);
     } else if value.type == .FUNCTION {
-        mark_object_minor(value.object, visited_environments);
-        mark_environment(value.function.environment, visited_environments);
+        mark_object_minor(vm, value.object, visited_environments);
+        mark_environment(vm, value.function.environment, visited_environments);
     } else if value.type == .NATIVE_FUNCTION {
-        mark_object_minor(value.object, visited_environments);
+        mark_object_minor(vm, value.object, visited_environments);
+    } else if value.type == .STRING {
+        ptr := table_find_pointer(*vm.allocated_strings, value.s.data);
+        if ptr ptr.marked = true;
     }
 }
 
-mark_object_minor :: (object: *Gc_Object, visited_environments: *Table(*Environment, bool)) {
+mark_object_minor :: (vm: *Vm, object: *Gc_Object, visited_environments: *Table(*Environment, bool)) {
     if !object || object.marked return;
     if object.is_old            return;
 
     object.marked = true;
 
-    if object.prototype mark_object_minor(object.prototype, visited_environments);
+    if object.prototype mark_object_minor(vm, object.prototype, visited_environments);
+    if object.shape object.shape.marked = true;
 
-    for object.fields      mark_value_minor(it, visited_environments);
-    for object.elements    mark_value_minor(it, visited_environments);
+    for object.fields      mark_value_minor(vm, it, visited_environments);
+    for object.elements    mark_value_minor(vm, it, visited_environments);
 
     if object.kind == .MAP || object.kind == .SET {
-        for object.map_entries mark_value_minor(it, visited_environments);
+        for object.map_entries mark_value_minor(vm, it, visited_environments);
     } else if object.kind == .PROMISE {
-        mark_value_minor(object.promise_result, visited_environments);
-        for object.promise_then_callbacks mark_value_minor(it, visited_environments);
+        mark_value_minor(vm, object.promise_result, visited_environments);
+        for object.promise_then_callbacks mark_value_minor(vm, it, visited_environments);
     } else if object.kind == .GENERATOR || object.kind == .ASYNC_EXECUTION {
-        for object.generator_registers mark_value_minor(it, visited_environments);
-        mark_value_minor(object.async_promise, visited_environments);
+        for object.generator_registers mark_value_minor(vm, it, visited_environments);
+        mark_value_minor(vm, object.async_promise, visited_environments);
     } else {
-        mark_value_minor(object.primitive_value, visited_environments);
+        mark_value_minor(vm, object.primitive_value, visited_environments);
     }
 
     if object.realm {
-        for object.realm.globals mark_value_minor(it, visited_environments);
+        for object.realm.globals mark_value_minor(vm, it, visited_environments);
     }
 }
 
@@ -337,49 +345,90 @@ collect_garbage_minor :: (vm: *Vm) {
     defer deinit(*visited_environments);
 
     if vm.current_realm {
-        for vm.current_realm.globals mark_value_minor(it, *visited_environments);
+        for vm.current_realm.globals mark_value_minor(vm, it, *visited_environments);
     }
 
-    for vm.call_stack     mark_environment(it, *visited_environments);
-    for vm.loaded_modules mark_value_minor(it.exports, *visited_environments);
+    for vm.call_stack     mark_environment(vm, it, *visited_environments);
+    for vm.loaded_modules mark_value_minor(vm, it.exports, *visited_environments);
 
-    if vm.current_exports mark_object_minor(vm.current_exports, *visited_environments);
-    if vm.has_exception   mark_value_minor(vm.exception, *visited_environments);
+    if vm.current_exports mark_object_minor(vm, vm.current_exports, *visited_environments);
+    if vm.has_exception   mark_value_minor(vm, vm.exception, *visited_environments);
 
     for vm.microtask_queue {
-        mark_value_minor(it.callback, *visited_environments);
-        mark_value_minor(it.arg, *visited_environments);
+        mark_value_minor(vm, it.callback, *visited_environments);
+        mark_value_minor(vm, it.arg, *visited_environments);
     }
 
     for vm.timer_queue {
-        mark_value_minor(it.callback, *visited_environments);
-        for arg: it.arguments mark_value_minor(arg, *visited_environments);
+        mark_value_minor(vm, it.callback, *visited_environments);
+        for arg: it.arguments mark_value_minor(vm, arg, *visited_environments);
     }
 
-    for vm.builtin_prototypes mark_object_minor(it, *visited_environments);
+    for vm.builtin_prototypes mark_object_minor(vm, it, *visited_environments);
 
     for vm.gc.remembered_set {
-        if it.prototype mark_object_minor(it.prototype, *visited_environments);
+        if it.prototype mark_object_minor(vm, it.prototype, *visited_environments);
 
-        for it.fields      mark_value_minor(it, *visited_environments);
-        for it.elements    mark_value_minor(it, *visited_environments);
+        for it.fields      mark_value_minor(vm, it, *visited_environments);
+        for it.elements    mark_value_minor(vm, it, *visited_environments);
 
         if it.kind == .MAP || it.kind == .SET {
-            for it.map_entries mark_value_minor(it, *visited_environments);
+            for it.map_entries mark_value_minor(vm, it, *visited_environments);
         } else if it.kind == .PROMISE {
-            mark_value_minor(it.promise_result, *visited_environments);
-            for it.promise_then_callbacks mark_value_minor(it, *visited_environments);
+            mark_value_minor(vm, it.promise_result, *visited_environments);
+            for it.promise_then_callbacks mark_value_minor(vm, it, *visited_environments);
         } else if it.kind == .GENERATOR || it.kind == .ASYNC_EXECUTION {
-            for it.generator_registers mark_value_minor(it, *visited_environments);
-            mark_value_minor(it.async_promise, *visited_environments);
+            for it.generator_registers mark_value_minor(vm, it, *visited_environments);
+            mark_value_minor(vm, it.async_promise, *visited_environments);
         } else {
-            mark_value_minor(it.primitive_value, *visited_environments);
+            mark_value_minor(vm, it.primitive_value, *visited_environments);
         }
 
         it.in_remembered_set = false;
     }
 
     vm.gc.remembered_set.count = 0;
+
+    to_remove: [..] *u8;
+
+    for v, k: vm.allocated_strings {
+        if !v.marked {
+            free(v.s.data);
+            array_add(*to_remove, k);
+        } else {
+            v.marked = false;
+        }
+    }
+
+    for to_remove table_remove(*vm.allocated_strings, it);
+    array_free(to_remove);
+
+    for vm.shapes {
+        if it.marked {
+            for shape, name: it.transitions {
+                if !shape.marked table_remove(*it.transitions, name);
+            }
+        }
+    }
+
+    surviving_shapes: [..] *Shape;
+
+    for vm.shapes {
+        if !it.marked {
+            array_free(it.property_names);
+            array_free(it.fast_offsets);
+            deinit(*it.property_offsets);
+            deinit(*it.transitions);
+            free(it);
+        } else {
+            it.marked = false;
+            array_add(*surviving_shapes, it);
+        }
+    }
+
+    array_free(vm.shapes);
+
+    vm.shapes = surviving_shapes;
 
     previous: *Gc_Object;
 
@@ -392,9 +441,32 @@ collect_garbage_minor :: (vm: *Vm) {
             if previous previous.next       = current;
             else        vm.gc.young_objects = current;
 
-            unreachable.fields.count      = 0;
-            unreachable.elements.count    = 0;
-            unreachable.map_entries.count = 0;
+            if unreachable.fields.allocated > 64 {
+                array_free(unreachable.fields);
+                unreachable.fields.data = null;
+                unreachable.fields.allocated = 0;
+                unreachable.fields.count = 0;
+            } else {
+                unreachable.fields.count = 0;
+            }
+
+            if unreachable.elements.allocated > 64 {
+                array_free(unreachable.elements);
+                unreachable.elements.data = null;
+                unreachable.elements.allocated = 0;
+                unreachable.elements.count = 0;
+            } else {
+                unreachable.elements.count = 0;
+            }
+
+            if unreachable.map_entries.allocated > 64 {
+                array_free(unreachable.map_entries);
+                unreachable.map_entries.data = null;
+                unreachable.map_entries.allocated = 0;
+                unreachable.map_entries.count = 0;
+            } else {
+                unreachable.map_entries.count = 0;
+            }
 
             if unreachable.kind == .PROMISE                                           unreachable.promise_then_callbacks.count = 0;
             if unreachable.kind == .GENERATOR || unreachable.kind == .ASYNC_EXECUTION unreachable.generator_registers.count    = 0;
@@ -433,6 +505,15 @@ collect_garbage_minor :: (vm: *Vm) {
 
             if current_env current_env.previous = previous_env;
 
+            if unreachable.values.allocated > 64 {
+                array_free(unreachable.values);
+                unreachable.values.data = null;
+                unreachable.values.allocated = 0;
+                unreachable.values.count = 0;
+            } else {
+                unreachable.values.count = 0;
+            }
+
             unreachable.next       = vm.gc.environment_pool;
             vm.gc.environment_pool = unreachable;
 
@@ -469,29 +550,70 @@ collect_garbage_major :: (vm: *Vm) {
     }
 
     if vm.current_realm {
-        for vm.current_realm.globals mark_value(it, *visited_environments);
+        for vm.current_realm.globals mark_value(vm, it, *visited_environments);
     }
 
-    for vm.call_stack     mark_environment(it, *visited_environments);
-    for vm.loaded_modules mark_value(it.exports, *visited_environments);
+    for vm.call_stack     mark_environment(vm, it, *visited_environments);
+    for vm.loaded_modules mark_value(vm, it.exports, *visited_environments);
 
-    if vm.current_exports mark_object(vm.current_exports, *visited_environments);
-    if vm.has_exception   mark_value(vm.exception, *visited_environments);
+    if vm.current_exports mark_object(vm, vm.current_exports, *visited_environments);
+    if vm.has_exception   mark_value(vm, vm.exception, *visited_environments);
 
     for vm.microtask_queue {
-        mark_value(it.callback, *visited_environments);
-        mark_value(it.arg, *visited_environments);
+        mark_value(vm, it.callback, *visited_environments);
+        mark_value(vm, it.arg, *visited_environments);
     }
 
     for vm.timer_queue {
-        mark_value(it.callback, *visited_environments);
-        for arg: it.arguments mark_value(arg, *visited_environments);
+        mark_value(vm, it.callback, *visited_environments);
+        for arg: it.arguments mark_value(vm, arg, *visited_environments);
     }
 
-    for vm.builtin_prototypes mark_object(it, *visited_environments);
+    for vm.builtin_prototypes mark_object(vm, it, *visited_environments);
     for vm.gc.remembered_set  it.in_remembered_set = false;
 
     vm.gc.remembered_set.count = 0;
+
+    to_remove: [..] *u8;
+
+    for v, k: vm.allocated_strings {
+        if !v.marked {
+            free(v.s.data);
+            array_add(*to_remove, k);
+        } else {
+            v.marked = false;
+        }
+    }
+
+    for to_remove table_remove(*vm.allocated_strings, it);
+    array_free(to_remove);
+
+    for vm.shapes {
+        if it.marked {
+            for shape, name: it.transitions {
+                if !shape.marked table_remove(*it.transitions, name);
+            }
+        }
+    }
+
+    surviving_shapes: [..] *Shape;
+
+    for vm.shapes {
+        if !it.marked {
+            array_free(it.property_names);
+            array_free(it.fast_offsets);
+            deinit(*it.property_offsets);
+            deinit(*it.transitions);
+            free(it);
+        } else {
+            it.marked = false;
+            array_add(*surviving_shapes, it);
+        }
+    }
+
+    array_free(vm.shapes);
+
+    vm.shapes = surviving_shapes;
 
     sweep_list :: (vm: *Vm, list_head: **Gc_Object, list_count: *int) {
         previous: *Gc_Object;
@@ -505,9 +627,32 @@ collect_garbage_major :: (vm: *Vm) {
                 if previous previous.next = current;
                 else        list_head.*   = current;
 
-                unreachable.fields.count      = 0;
-                unreachable.elements.count    = 0;
-                unreachable.map_entries.count = 0;
+                if unreachable.fields.allocated > 64 {
+                    array_free(unreachable.fields);
+                    unreachable.fields.data = null;
+                    unreachable.fields.allocated = 0;
+                    unreachable.fields.count = 0;
+                } else {
+                    unreachable.fields.count = 0;
+                }
+
+                if unreachable.elements.allocated > 64 {
+                    array_free(unreachable.elements);
+                    unreachable.elements.data = null;
+                    unreachable.elements.allocated = 0;
+                    unreachable.elements.count = 0;
+                } else {
+                    unreachable.elements.count = 0;
+                }
+
+                if unreachable.map_entries.allocated > 64 {
+                    array_free(unreachable.map_entries);
+                    unreachable.map_entries.data = null;
+                    unreachable.map_entries.allocated = 0;
+                    unreachable.map_entries.count = 0;
+                } else {
+                    unreachable.map_entries.count = 0;
+                }
 
                 if unreachable.kind == .PROMISE                                           unreachable.promise_then_callbacks.count = 0;
                 if unreachable.kind == .GENERATOR || unreachable.kind == .ASYNC_EXECUTION unreachable.generator_registers.count    = 0;
@@ -539,6 +684,7 @@ collect_garbage_major :: (vm: *Vm) {
 
             if current_env current_env.previous = previous_env;
 
+            if unreachable.values.allocated > 64 { array_free(unreachable.values); unreachable.values.data = null; unreachable.values.allocated = 0; unreachable.values.count = 0; } else { unreachable.values.count = 0; }
             unreachable.next       = vm.gc.environment_pool;
             vm.gc.environment_pool = unreachable;
 
@@ -2577,7 +2723,7 @@ values_addition :: inline (vm: *Vm, a: Value, b: Value) -> Value {
         memcpy(result.data, string_a.data, string_a.count);
         memcpy(result.data + string_a.count, string_b.data, string_b.count);
 
-        array_add(*vm.allocated_strings, result);
+        table_set(*vm.allocated_strings, result.data, .{ s = result, marked = false });
 
         return .{ type = .STRING, s = result };
     }
@@ -2857,9 +3003,8 @@ deinit :: (vm: *Vm) {
 
     array_free(vm.realms);
 
-    for vm.allocated_strings free(it);
-
-    array_free(vm.allocated_strings);
+    for v, k: vm.allocated_strings free(v.s.data);
+    deinit(*vm.allocated_strings);
 
     if vm.profiler free(vm.profiler);
 
@@ -2973,6 +3118,11 @@ External_Event :: struct {
     handler: (vm: *Vm, data: *void);
 }
 
+Allocated_String :: struct {
+    s: string;
+    marked: bool;
+}
+
 Vm :: struct {
     gc: Gc;
 
@@ -3012,7 +3162,7 @@ Vm :: struct {
     exception:     Value;
     has_exception: bool;
 
-    allocated_strings: [..] string;
+    allocated_strings: Table(*u8, Allocated_String);
 
     loaded_modules:  [..] Module_Entry;
     current_exports: *Gc_Object;
@@ -3081,6 +3231,7 @@ Gc_Object_Kind :: enum u8 {
 }
 
 Shape :: struct {
+    marked: bool;
     property_names:   [..] string;
     property_offsets: Table(string, int);
 

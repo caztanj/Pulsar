@@ -217,7 +217,7 @@ file_list_directory :: (vm: *Vm, this: Value, arguments: [] Value, is_new: bool 
 
     for files {
         alloc_str := copy_string(it);
-        array_add(*vm.allocated_strings, alloc_str);
+        table_set(*vm.allocated_strings, alloc_str.data, .{ s = alloc_str, marked = false });
         array_add(*result_object.elements, .{ type = .STRING, s = alloc_str });
     }
 

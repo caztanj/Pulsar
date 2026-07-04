@@ -24,7 +24,7 @@ json_stringify :: (vm: *Vm, this: Value, arguments: [] Value, is_new: bool) -> V
 
     result := builder_to_string(*builder);
 
-    array_add(*vm.allocated_strings, result);
+    table_set(*vm.allocated_strings, result.data, .{ s = result, marked = false });
 
     return .{ type = .STRING, s = result };
 }
@@ -348,7 +348,7 @@ unescape_json_string :: (vm: *Vm, s: string) -> string {
 
     result := builder_to_string(*builder);
 
-    array_add(*vm.allocated_strings, result);
+    table_set(*vm.allocated_strings, result.data, .{ s =result, marked = false });
 
     return result;
 }
