@@ -24,6 +24,15 @@ build_ast :: (code: string, tokens: [] Token) -> *Ast_Program {
     return program;
 }
 
+create_identifier :: inline (token: Token) -> *Ast_Identifier {
+    identifier := New(Ast_Identifier);
+    identifier.kind   = .IDENTIFIER;
+    identifier.name   = token.text;
+    identifier.line   = token.line;
+    identifier.column = token.column;
+    return identifier;
+}
+
 new_node :: (parser: *Parser, $T: Type) -> *T {
     node := New(T);
 
@@ -142,12 +151,7 @@ parse_try_statement :: (parser: *Parser) -> *Ast_Try_Statement {
             skip_whitespace_and_comments(parser);
 
             identifier_token := consume(parser, .IDENTIFIER);
-            identifier       := New(Ast_Identifier);
-
-            identifier.kind   = .IDENTIFIER;
-            identifier.name   = identifier_token.text;
-            identifier.line   = identifier_token.line;
-            identifier.column = identifier_token.column;
+            identifier := create_identifier(identifier_token);
 
             node.catch_parameter = identifier;
 
@@ -383,12 +387,7 @@ parse_for_statement :: (parser: *Parser) -> *Ast_Node {
                 declarator.identifier = parse_primary(parser);
             } else {
                 identifier_token := consume(parser, .IDENTIFIER);
-                identifier       := New(Ast_Identifier);
-
-                identifier.kind   = .IDENTIFIER;
-                identifier.name   = identifier_token.text;
-                identifier.line   = identifier_token.line;
-                identifier.column = identifier_token.column;
+                identifier := create_identifier(identifier_token);
 
                 declarator.identifier = xx identifier;
             }
@@ -475,12 +474,7 @@ parse_variable_declaration :: (parser: *Parser) -> *Ast_Node {
             declarator.identifier = parse_primary(parser);
         } else {
             identifier_token := consume(parser, .IDENTIFIER);
-            identifier       := New(Ast_Identifier);
-
-            identifier.kind   = .IDENTIFIER;
-            identifier.name   = identifier_token.text;
-            identifier.line   = identifier_token.line;
-            identifier.column = identifier_token.column;
+            identifier := create_identifier(identifier_token);
 
             declarator.identifier = xx identifier;
         }
@@ -520,12 +514,7 @@ parse_function_declaration :: (parser: *Parser) -> *Ast_Function_Declaration {
     }
 
     identifier_token := consume(parser, .IDENTIFIER);
-    identifier       := New(Ast_Identifier);
-
-    identifier.kind   = .IDENTIFIER;
-    identifier.name   = identifier_token.text;
-    identifier.line   = identifier_token.line;
-    identifier.column = identifier_token.column;
+    identifier := create_identifier(identifier_token);
 
     function_declaration.identifier = identifier;
 
@@ -546,12 +535,7 @@ parse_function_declaration :: (parser: *Parser) -> *Ast_Function_Declaration {
                 skip_whitespace_and_comments(parser);
 
                 parameter_token := consume(parser, .IDENTIFIER);
-                parameter       := New(Ast_Identifier);
-
-                parameter.kind   = .IDENTIFIER;
-                parameter.name   = parameter_token.text;
-                parameter.line   = parameter_token.line;
-                parameter.column = parameter_token.column;
+                parameter := create_identifier(parameter_token);
 
                 spread.argument = xx parameter;
 
@@ -562,12 +546,7 @@ parse_function_declaration :: (parser: *Parser) -> *Ast_Function_Declaration {
                 break;
             } else {
                 parameter_token := consume(parser, .IDENTIFIER);
-                parameter       := New(Ast_Identifier);
-
-                parameter.kind   = .IDENTIFIER;
-                parameter.name   = parameter_token.text;
-                parameter.line   = parameter_token.line;
-                parameter.column = parameter_token.column;
+                parameter := create_identifier(parameter_token);
 
                 array_add(*function_declaration.parameters, xx parameter);
             }
@@ -890,12 +869,7 @@ parse_postfix :: (parser: *Parser, allow_calls: bool = true) -> *Ast_Node {
             skip_whitespace_and_comments(parser);
 
             property_token := consume(parser, .IDENTIFIER);
-            identifier     := New(Ast_Identifier);
-
-            identifier.kind   = .IDENTIFIER;
-            identifier.name   = property_token.text;
-            identifier.line   = property_token.line;
-            identifier.column = property_token.column;
+            identifier := create_identifier(property_token);
 
             member.property = xx identifier;
 
@@ -1034,12 +1008,7 @@ parse_primary :: (parser: *Parser) -> *Ast_Node {
 
                     if next.type == .IDENTIFIER {
                         parameter_token := advance(parser);
-                        parameter       := New(Ast_Identifier);
-
-                        parameter.kind   = .IDENTIFIER;
-                        parameter.name   = parameter_token.text;
-                        parameter.line   = parameter_token.line;
-                        parameter.column = parameter_token.column;
+                        parameter := create_identifier(parameter_token);
 
                         array_add(*node.parameters, xx parameter);
                     } else {
@@ -1050,12 +1019,7 @@ parse_primary :: (parser: *Parser) -> *Ast_Node {
                                 skip_whitespace_and_comments(parser);
 
                                 parameter_token := consume(parser, .IDENTIFIER);
-                                parameter       := New(Ast_Identifier);
-
-                                parameter.kind   = .IDENTIFIER;
-                                parameter.name   = parameter_token.text;
-                                parameter.line   = parameter_token.line;
-                                parameter.column = parameter_token.column;
+                                parameter := create_identifier(parameter_token);
 
                                 array_add(*node.parameters, xx parameter);
 
@@ -1183,12 +1147,7 @@ parse_primary :: (parser: *Parser) -> *Ast_Node {
                         skip_whitespace_and_comments(parser);
 
                         parameter_token := consume(parser, .IDENTIFIER);
-                        parameter       := New(Ast_Identifier);
-
-                        parameter.kind   = .IDENTIFIER;
-                        parameter.name   = parameter_token.text;
-                        parameter.line   = parameter_token.line;
-                        parameter.column = parameter_token.column;
+                        parameter := create_identifier(parameter_token);
 
                         array_add(*node.parameters, xx parameter);
 
@@ -1296,12 +1255,7 @@ parse_primary :: (parser: *Parser) -> *Ast_Node {
 
                         value = parse_expression(parser);
                     } else {
-                        identifier := New(Ast_Identifier);
-
-                        identifier.kind   = .IDENTIFIER;
-                        identifier.name   = key_token.text;
-                        identifier.line   = key_token.line;
-                        identifier.column = key_token.column;
+                        identifier := create_identifier(key_token);
 
                         value = xx identifier;
                     }
@@ -1392,12 +1346,7 @@ parse_function_expression :: (parser: *Parser) -> *Ast_Function_Expression {
                 skip_whitespace_and_comments(parser);
 
                 parameter_token := consume(parser, .IDENTIFIER);
-                parameter       := New(Ast_Identifier);
-
-                parameter.kind   = .IDENTIFIER;
-                parameter.name   = parameter_token.text;
-                parameter.line   = parameter_token.line;
-                parameter.column = parameter_token.column;
+                parameter := create_identifier(parameter_token);
 
                 spread.argument = xx parameter;
 
@@ -1408,12 +1357,7 @@ parse_function_expression :: (parser: *Parser) -> *Ast_Function_Expression {
                 break;
             } else {
                 parameter_token := consume(parser, .IDENTIFIER);
-                parameter       := New(Ast_Identifier);
-
-                parameter.kind   = .IDENTIFIER;
-                parameter.name   = parameter_token.text;
-                parameter.line   = parameter_token.line;
-                parameter.column = parameter_token.column;
+                parameter := create_identifier(parameter_token);
 
                 array_add(*node.parameters, xx parameter);
             }
@@ -1571,12 +1515,7 @@ parse_import_statement :: (parser: *Parser) -> *Ast_Import_Statement {
         skip_whitespace_and_comments(parser);
 
         identifier_token := consume(parser, .IDENTIFIER);
-        identifier       := New(Ast_Identifier);
-
-        identifier.kind   = .IDENTIFIER;
-        identifier.name   = identifier_token.text;
-        identifier.line   = identifier_token.line;
-        identifier.column = identifier_token.column;
+        identifier := create_identifier(identifier_token);
 
         node.namespace_import = identifier;
     } else if match(parser, "{") {
@@ -1584,12 +1523,7 @@ parse_import_statement :: (parser: *Parser) -> *Ast_Import_Statement {
             skip_whitespace_and_comments(parser);
 
             imported_token := consume(parser, .IDENTIFIER);
-            imported       := New(Ast_Identifier);
-
-            imported.kind   = .IDENTIFIER;
-            imported.name   = imported_token.text;
-            imported.line   = imported_token.line;
-            imported.column = imported_token.column;
+            imported := create_identifier(imported_token);
 
             local := imported;
 
@@ -1618,12 +1552,7 @@ parse_import_statement :: (parser: *Parser) -> *Ast_Import_Statement {
         consume(parser, "}");
     } else {
         default_token      := consume(parser, .IDENTIFIER);
-        default_identifier := New(Ast_Identifier);
-
-        default_identifier.kind   = .IDENTIFIER;
-        default_identifier.name   = default_token.text;
-        default_identifier.line   = default_token.line;
-        default_identifier.column = default_token.column;
+        default_identifier := create_identifier(default_token);
 
         node.default_import = default_identifier;
 
@@ -1638,12 +1567,7 @@ parse_import_statement :: (parser: *Parser) -> *Ast_Import_Statement {
                 skip_whitespace_and_comments(parser);
 
                 identifier_token := consume(parser, .IDENTIFIER);
-                identifier       := New(Ast_Identifier);
-
-                identifier.kind   = .IDENTIFIER;
-                identifier.name   = identifier_token.text;
-                identifier.line   = identifier_token.line;
-                identifier.column = identifier_token.column;
+                identifier := create_identifier(identifier_token);
 
                 node.namespace_import = identifier;
             } else {
@@ -1653,12 +1577,7 @@ parse_import_statement :: (parser: *Parser) -> *Ast_Import_Statement {
                     skip_whitespace_and_comments(parser);
 
                     imported_token := consume(parser, .IDENTIFIER);
-                    imported       := New(Ast_Identifier);
-
-                    imported.kind   = .IDENTIFIER;
-                    imported.name   = imported_token.text;
-                    imported.line   = imported_token.line;
-                    imported.column = imported_token.column;
+                    imported := create_identifier(imported_token);
 
                     local := imported;
 
@@ -1741,12 +1660,7 @@ parse_export_statement :: (parser: *Parser) -> *Ast_Export_Statement {
             skip_whitespace_and_comments(parser);
 
             local_token := consume(parser, .IDENTIFIER);
-            local       := New(Ast_Identifier);
-
-            local.kind   = .IDENTIFIER;
-            local.name   = local_token.text;
-            local.line   = local_token.line;
-            local.column = local_token.column;
+            local := create_identifier(local_token);
 
             exported := local;
 
@@ -1808,12 +1722,7 @@ parse_class_declaration :: (parser: *Parser) -> *Ast_Class_Declaration {
 
     if peek(parser).type == .IDENTIFIER && peek(parser).text != "extends" {
         identifier_token := consume(parser, .IDENTIFIER);
-        identifier       := New(Ast_Identifier);
-
-        identifier.kind   = .IDENTIFIER;
-        identifier.name   = identifier_token.text;
-        identifier.line   = identifier_token.line;
-        identifier.column = identifier_token.column;
+        identifier := create_identifier(identifier_token);
 
         node.identifier = xx identifier;
 
@@ -1842,12 +1751,7 @@ parse_class_expression :: (parser: *Parser) -> *Ast_Class_Expression {
 
     if peek(parser).type == .IDENTIFIER && peek(parser).text != "extends" {
         identifier_token := consume(parser, .IDENTIFIER);
-        identifier       := New(Ast_Identifier);
-
-        identifier.kind   = .IDENTIFIER;
-        identifier.name   = identifier_token.text;
-        identifier.line   = identifier_token.line;
-        identifier.column = identifier_token.column;
+        identifier := create_identifier(identifier_token);
 
         node.identifier = xx identifier;
 
@@ -1921,12 +1825,7 @@ parse_method_definition :: (parser: *Parser) -> *Ast_Method_Definition {
 
     if !node.key {
         identifier_token := consume(parser, .IDENTIFIER);
-        identifier       := New(Ast_Identifier);
-
-        identifier.kind   = .IDENTIFIER;
-        identifier.name   = identifier_token.text;
-        identifier.line   = identifier_token.line;
-        identifier.column = identifier_token.column;
+        identifier := create_identifier(identifier_token);
 
         node.key = xx identifier;
 
@@ -1955,12 +1854,7 @@ parse_method_definition :: (parser: *Parser) -> *Ast_Method_Definition {
                 skip_whitespace_and_comments(parser);
 
                 parameter_token := consume(parser, .IDENTIFIER);
-                parameter       := New(Ast_Identifier);
-
-                parameter.kind   = .IDENTIFIER;
-                parameter.name   = parameter_token.text;
-                parameter.line   = parameter_token.line;
-                parameter.column = parameter_token.column;
+                parameter := create_identifier(parameter_token);
 
                 spread.argument = xx parameter;
 
@@ -1971,12 +1865,7 @@ parse_method_definition :: (parser: *Parser) -> *Ast_Method_Definition {
                 break;
             } else {
                 parameter_token := consume(parser, .IDENTIFIER);
-                parameter       := New(Ast_Identifier);
-
-                parameter.kind   = .IDENTIFIER;
-                parameter.name   = parameter_token.text;
-                parameter.line   = parameter_token.line;
-                parameter.column = parameter_token.column;
+                parameter := create_identifier(parameter_token);
 
                 array_add(*func.parameters, xx parameter);
             }
