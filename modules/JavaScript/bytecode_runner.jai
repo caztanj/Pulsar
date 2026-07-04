@@ -203,31 +203,56 @@ allocate_object :: (vm: *Vm) -> *Gc_Object {
     return object;
 }
 
-mark_object :: (vm: *Vm, object: *Gc_Object, visited_environments: *Table(*Environment, bool)) {
+mark_roots :: (vm: *Vm, visited_environments: *Table(*Environment, bool), $is_minor: bool) {
+    if vm.current_realm {
+        for vm.current_realm.globals mark_value(vm, it, visited_environments, is_minor);
+    }
+
+    for vm.call_stack     mark_environment(vm, it, visited_environments);
+    for vm.loaded_modules mark_value(vm, it.exports, visited_environments, is_minor);
+
+    if vm.current_exports mark_object(vm, vm.current_exports, visited_environments, is_minor);
+    if vm.has_exception   mark_value(vm, vm.exception, visited_environments, is_minor);
+
+    for vm.microtask_queue {
+        mark_value(vm, it.callback, visited_environments, is_minor);
+        mark_value(vm, it.arg, visited_environments, is_minor);
+    }
+
+    for vm.timer_queue {
+        mark_value(vm, it.callback, visited_environments, is_minor);
+        for arg: it.arguments mark_value(vm, arg, visited_environments, is_minor);
+    }
+
+    for vm.builtin_prototypes mark_object(vm, it, visited_environments, is_minor);
+}
+
+mark_object :: (vm: *Vm, object: *Gc_Object, visited_environments: *Table(*Environment, bool), $is_minor: bool = false) {
     if !object || object.marked return;
+    #if is_minor if object.is_old return;
 
     object.marked = true;
 
-    if object.prototype mark_object(vm, object.prototype, visited_environments);
+    if object.prototype mark_object(vm, object.prototype, visited_environments, is_minor);
     if object.shape object.shape.marked = true;
 
-    for object.fields      mark_value(vm, it, visited_environments);
-    for object.elements    mark_value(vm, it, visited_environments);
+    for object.fields      mark_value(vm, it, visited_environments, is_minor);
+    for object.elements    mark_value(vm, it, visited_environments, is_minor);
 
     if object.kind == .MAP || object.kind == .SET {
-        for object.map_entries mark_value(vm, it, visited_environments);
+        for object.map_entries mark_value(vm, it, visited_environments, is_minor);
     } else if object.kind == .PROMISE {
-        mark_value(vm, object.promise_result, visited_environments);
-        for object.promise_then_callbacks mark_value(vm, it, visited_environments);
+        mark_value(vm, object.promise_result, visited_environments, is_minor);
+        for object.promise_then_callbacks mark_value(vm, it, visited_environments, is_minor);
     } else if object.kind == .GENERATOR || object.kind == .ASYNC_EXECUTION {
-        for object.generator_registers mark_value(vm, it, visited_environments);
-        mark_value(vm, object.async_promise, visited_environments);
+        for object.generator_registers mark_value(vm, it, visited_environments, is_minor);
+        mark_value(vm, object.async_promise, visited_environments, is_minor);
     } else {
-        mark_value(vm, object.primitive_value, visited_environments);
+        mark_value(vm, object.primitive_value, visited_environments, is_minor);
     }
 
     if object.realm {
-        for object.realm.globals mark_value(vm, it, visited_environments);
+        for object.realm.globals mark_value(vm, it, visited_environments, is_minor);
     }
 }
 
@@ -242,16 +267,16 @@ mark_environment :: (vm: *Vm, env: *Environment, visited_environments: *Table(*E
     mark_environment(vm, env.parent, visited_environments);
 }
 
-mark_value :: (vm: *Vm, value: Value, visited_environments: *Table(*Environment, bool)) {
+mark_value :: (vm: *Vm, value: Value, visited_environments: *Table(*Environment, bool), $is_minor: bool = false) {
     if value.type == .GENERATOR {
-        mark_object(vm, value.generator_object, visited_environments);
+        mark_object(vm, value.generator_object, visited_environments, is_minor);
     } else if value.type == .OBJECT || value.type == .ARRAY {
-        mark_object(vm, value.object, visited_environments);
+        mark_object(vm, value.object, visited_environments, is_minor);
     } else if value.type == .FUNCTION {
-        mark_object(vm, value.object, visited_environments);
+        mark_object(vm, value.object, visited_environments, is_minor);
         mark_environment(vm, value.function.environment, visited_environments);
     } else if value.type == .NATIVE_FUNCTION {
-        mark_object(vm, value.object, visited_environments);
+        mark_object(vm, value.object, visited_environments, is_minor);
     } else if value.type == .STRING {
         ptr := table_find_pointer(*vm.allocated_strings, value.s.data);
         if ptr ptr.marked = true;
@@ -290,50 +315,7 @@ write_barrier_object :: inline (vm: *Vm, object: *Gc_Object, target: *Gc_Object)
     }
 }
 
-mark_value_minor :: (vm: *Vm, value: Value, visited_environments: *Table(*Environment, bool)) {
-    if value.type == .GENERATOR {
-        mark_object_minor(vm, value.generator_object, visited_environments);
-    } else if value.type == .OBJECT || value.type == .ARRAY {
-        mark_object_minor(vm, value.object, visited_environments);
-    } else if value.type == .FUNCTION {
-        mark_object_minor(vm, value.object, visited_environments);
-        mark_environment(vm, value.function.environment, visited_environments);
-    } else if value.type == .NATIVE_FUNCTION {
-        mark_object_minor(vm, value.object, visited_environments);
-    } else if value.type == .STRING {
-        ptr := table_find_pointer(*vm.allocated_strings, value.s.data);
-        if ptr ptr.marked = true;
-    }
-}
 
-mark_object_minor :: (vm: *Vm, object: *Gc_Object, visited_environments: *Table(*Environment, bool)) {
-    if !object || object.marked return;
-    if object.is_old            return;
-
-    object.marked = true;
-
-    if object.prototype mark_object_minor(vm, object.prototype, visited_environments);
-    if object.shape object.shape.marked = true;
-
-    for object.fields      mark_value_minor(vm, it, visited_environments);
-    for object.elements    mark_value_minor(vm, it, visited_environments);
-
-    if object.kind == .MAP || object.kind == .SET {
-        for object.map_entries mark_value_minor(vm, it, visited_environments);
-    } else if object.kind == .PROMISE {
-        mark_value_minor(vm, object.promise_result, visited_environments);
-        for object.promise_then_callbacks mark_value_minor(vm, it, visited_environments);
-    } else if object.kind == .GENERATOR || object.kind == .ASYNC_EXECUTION {
-        for object.generator_registers mark_value_minor(vm, it, visited_environments);
-        mark_value_minor(vm, object.async_promise, visited_environments);
-    } else {
-        mark_value_minor(vm, object.primitive_value, visited_environments);
-    }
-
-    if object.realm {
-        for object.realm.globals mark_value_minor(vm, it, visited_environments);
-    }
-}
 
 sweep_strings :: (vm: *Vm) {
     to_remove: [..] *u8;
@@ -427,44 +409,24 @@ collect_garbage_minor :: (vm: *Vm) {
 
     defer deinit(*visited_environments);
 
-    if vm.current_realm {
-        for vm.current_realm.globals mark_value_minor(vm, it, *visited_environments);
-    }
-
-    for vm.call_stack     mark_environment(vm, it, *visited_environments);
-    for vm.loaded_modules mark_value_minor(vm, it.exports, *visited_environments);
-
-    if vm.current_exports mark_object_minor(vm, vm.current_exports, *visited_environments);
-    if vm.has_exception   mark_value_minor(vm, vm.exception, *visited_environments);
-
-    for vm.microtask_queue {
-        mark_value_minor(vm, it.callback, *visited_environments);
-        mark_value_minor(vm, it.arg, *visited_environments);
-    }
-
-    for vm.timer_queue {
-        mark_value_minor(vm, it.callback, *visited_environments);
-        for arg: it.arguments mark_value_minor(vm, arg, *visited_environments);
-    }
-
-    for vm.builtin_prototypes mark_object_minor(vm, it, *visited_environments);
+    mark_roots(vm, *visited_environments, true);
 
     for vm.gc.remembered_set {
-        if it.prototype mark_object_minor(vm, it.prototype, *visited_environments);
+        if it.prototype mark_object(vm, it.prototype, *visited_environments, true);
 
-        for it.fields      mark_value_minor(vm, it, *visited_environments);
-        for it.elements    mark_value_minor(vm, it, *visited_environments);
+        for it.fields      mark_value(vm, it, *visited_environments, true);
+        for it.elements    mark_value(vm, it, *visited_environments, true);
 
         if it.kind == .MAP || it.kind == .SET {
-            for it.map_entries mark_value_minor(vm, it, *visited_environments);
+            for it.map_entries mark_value(vm, it, *visited_environments, true);
         } else if it.kind == .PROMISE {
-            mark_value_minor(vm, it.promise_result, *visited_environments);
-            for it.promise_then_callbacks mark_value_minor(vm, it, *visited_environments);
+            mark_value(vm, it.promise_result, *visited_environments, true);
+            for it.promise_then_callbacks mark_value(vm, it, *visited_environments, true);
         } else if it.kind == .GENERATOR || it.kind == .ASYNC_EXECUTION {
-            for it.generator_registers mark_value_minor(vm, it, *visited_environments);
-            mark_value_minor(vm, it.async_promise, *visited_environments);
+            for it.generator_registers mark_value(vm, it, *visited_environments, true);
+            mark_value(vm, it.async_promise, *visited_environments, true);
         } else {
-            mark_value_minor(vm, it.primitive_value, *visited_environments);
+            mark_value(vm, it.primitive_value, *visited_environments, true);
         }
 
         it.in_remembered_set = false;
@@ -561,27 +523,7 @@ collect_garbage_major :: (vm: *Vm) {
         current = current.next;
     }
 
-    if vm.current_realm {
-        for vm.current_realm.globals mark_value(vm, it, *visited_environments);
-    }
-
-    for vm.call_stack     mark_environment(vm, it, *visited_environments);
-    for vm.loaded_modules mark_value(vm, it.exports, *visited_environments);
-
-    if vm.current_exports mark_object(vm, vm.current_exports, *visited_environments);
-    if vm.has_exception   mark_value(vm, vm.exception, *visited_environments);
-
-    for vm.microtask_queue {
-        mark_value(vm, it.callback, *visited_environments);
-        mark_value(vm, it.arg, *visited_environments);
-    }
-
-    for vm.timer_queue {
-        mark_value(vm, it.callback, *visited_environments);
-        for arg: it.arguments mark_value(vm, arg, *visited_environments);
-    }
-
-    for vm.builtin_prototypes mark_object(vm, it, *visited_environments);
+    mark_roots(vm, *visited_environments, false);
     for vm.gc.remembered_set  it.in_remembered_set = false;
 
     vm.gc.remembered_set.count = 0;
