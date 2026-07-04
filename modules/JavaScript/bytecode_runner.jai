@@ -351,6 +351,44 @@ sweep_strings :: (vm: *Vm) {
     array_free(to_remove);
 }
 
+sweep_environments :: (vm: *Vm, is_major := false) {
+    previous_env: *Environment;
+
+    current_env := vm.gc.environments;
+    while current_env {
+        if !current_env.marked {
+            unreachable := current_env;
+            current_env  = current_env.next;
+
+            if previous_env previous_env.next  = current_env;
+            else            vm.gc.environments = current_env;
+
+            if current_env current_env.previous = previous_env;
+
+            if unreachable.values.allocated > 64 {
+                array_free(unreachable.values);
+                unreachable.values.data = null;
+                unreachable.values.allocated = 0;
+                unreachable.values.count = 0;
+            } else {
+                unreachable.values.count = 0;
+            }
+
+            unreachable.next       = vm.gc.environment_pool;
+            vm.gc.environment_pool = unreachable;
+
+            vm.gc.environment_count -= 1;
+        } else {
+            current_env.marked   = false;
+            current_env.previous = previous_env;
+            if is_major current_env.is_captured = true;
+
+            previous_env = current_env;
+            current_env  = current_env.next;
+        }
+    }
+}
+
 sweep_shapes :: (vm: *Vm) {
     for vm.shapes {
         if it.marked {
@@ -499,40 +537,7 @@ collect_garbage_minor :: (vm: *Vm) {
         }
     }
 
-    previous_env: *Environment;
-
-    current_env := vm.gc.environments;
-    while current_env {
-        if !current_env.marked {
-            unreachable := current_env;
-            current_env  = current_env.next;
-
-            if previous_env previous_env.next  = current_env;
-            else            vm.gc.environments = current_env;
-
-            if current_env current_env.previous = previous_env;
-
-            if unreachable.values.allocated > 64 {
-                array_free(unreachable.values);
-                unreachable.values.data = null;
-                unreachable.values.allocated = 0;
-                unreachable.values.count = 0;
-            } else {
-                unreachable.values.count = 0;
-            }
-
-            unreachable.next       = vm.gc.environment_pool;
-            vm.gc.environment_pool = unreachable;
-
-            vm.gc.environment_count -= 1;
-        } else {
-            current_env.marked   = false;
-            current_env.previous = previous_env;
-
-            previous_env = current_env;
-            current_env  = current_env.next;
-        }
-    }
+    sweep_environments(vm);
 }
 
 collect_garbage_major :: (vm: *Vm) {
@@ -640,31 +645,7 @@ collect_garbage_major :: (vm: *Vm) {
     sweep_list(vm, *vm.gc.young_objects, *vm.gc.young_object_count);
     sweep_list(vm, *vm.gc.old_objects, *vm.gc.old_object_count);
 
-    previous_env: *Environment;
-
-    current_env := vm.gc.environments;
-    while current_env {
-        if !current_env.marked {
-            unreachable := current_env;
-            current_env  = current_env.next;
-
-            if previous_env previous_env.next  = current_env;
-            else            vm.gc.environments = current_env;
-
-            if current_env current_env.previous = previous_env;
-
-            if unreachable.values.allocated > 64 { array_free(unreachable.values); unreachable.values.data = null; unreachable.values.allocated = 0; unreachable.values.count = 0; } else { unreachable.values.count = 0; }
-            unreachable.next       = vm.gc.environment_pool;
-            vm.gc.environment_pool = unreachable;
-
-            vm.gc.environment_count -= 1;
-        } else {
-            current_env.marked      = false;
-            current_env.is_captured = true;
-            previous_env            = current_env;
-            current_env             = current_env.next;
-        }
-    }
+    sweep_environments(vm, true);
 }
 
 run_bytecode :: (program: *Bytecode_Program, profile := false, permissions: Permission = 0) -> *Vm {
