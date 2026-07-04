@@ -335,6 +335,51 @@ mark_object_minor :: (vm: *Vm, object: *Gc_Object, visited_environments: *Table(
     }
 }
 
+sweep_strings :: (vm: *Vm) {
+    to_remove: [..] *u8;
+
+    for v, k: vm.allocated_strings {
+        if !v.marked {
+            free(v.s.data);
+            array_add(*to_remove, k);
+        } else {
+            v.marked = false;
+        }
+    }
+
+    for to_remove table_remove(*vm.allocated_strings, it);
+    array_free(to_remove);
+}
+
+sweep_shapes :: (vm: *Vm) {
+    for vm.shapes {
+        if it.marked {
+            for shape, name: it.transitions {
+                if !shape.marked table_remove(*it.transitions, name);
+            }
+        }
+    }
+
+    surviving_shapes: [..] *Shape;
+
+    for vm.shapes {
+        if !it.marked {
+            array_free(it.property_names);
+            array_free(it.fast_offsets);
+            deinit(*it.property_offsets);
+            deinit(*it.transitions);
+            free(it);
+        } else {
+            it.marked = false;
+            array_add(*surviving_shapes, it);
+        }
+    }
+
+    array_free(vm.shapes);
+
+    vm.shapes = surviving_shapes;
+}
+
 collect_garbage_minor :: (vm: *Vm) {
     #if TRACE_GARBAGE_COLLECTION {
         print("Minor GC: Starting collection (young objects before: %)\n", vm.gc.young_object_count);
@@ -389,46 +434,8 @@ collect_garbage_minor :: (vm: *Vm) {
 
     vm.gc.remembered_set.count = 0;
 
-    to_remove: [..] *u8;
-
-    for v, k: vm.allocated_strings {
-        if !v.marked {
-            free(v.s.data);
-            array_add(*to_remove, k);
-        } else {
-            v.marked = false;
-        }
-    }
-
-    for to_remove table_remove(*vm.allocated_strings, it);
-    array_free(to_remove);
-
-    for vm.shapes {
-        if it.marked {
-            for shape, name: it.transitions {
-                if !shape.marked table_remove(*it.transitions, name);
-            }
-        }
-    }
-
-    surviving_shapes: [..] *Shape;
-
-    for vm.shapes {
-        if !it.marked {
-            array_free(it.property_names);
-            array_free(it.fast_offsets);
-            deinit(*it.property_offsets);
-            deinit(*it.transitions);
-            free(it);
-        } else {
-            it.marked = false;
-            array_add(*surviving_shapes, it);
-        }
-    }
-
-    array_free(vm.shapes);
-
-    vm.shapes = surviving_shapes;
+    sweep_strings(vm);
+    sweep_shapes(vm);
 
     previous: *Gc_Object;
 
@@ -574,46 +581,8 @@ collect_garbage_major :: (vm: *Vm) {
 
     vm.gc.remembered_set.count = 0;
 
-    to_remove: [..] *u8;
-
-    for v, k: vm.allocated_strings {
-        if !v.marked {
-            free(v.s.data);
-            array_add(*to_remove, k);
-        } else {
-            v.marked = false;
-        }
-    }
-
-    for to_remove table_remove(*vm.allocated_strings, it);
-    array_free(to_remove);
-
-    for vm.shapes {
-        if it.marked {
-            for shape, name: it.transitions {
-                if !shape.marked table_remove(*it.transitions, name);
-            }
-        }
-    }
-
-    surviving_shapes: [..] *Shape;
-
-    for vm.shapes {
-        if !it.marked {
-            array_free(it.property_names);
-            array_free(it.fast_offsets);
-            deinit(*it.property_offsets);
-            deinit(*it.transitions);
-            free(it);
-        } else {
-            it.marked = false;
-            array_add(*surviving_shapes, it);
-        }
-    }
-
-    array_free(vm.shapes);
-
-    vm.shapes = surviving_shapes;
+    sweep_strings(vm);
+    sweep_shapes(vm);
 
     sweep_list :: (vm: *Vm, list_head: **Gc_Object, list_count: *int) {
         previous: *Gc_Object;
@@ -1179,29 +1148,12 @@ execute_function_internal :: (vm: *Vm, initial_function: *Bytecode_Function, ini
                             pic_hit   := false;
                             pic_count := instruction.inline_cache.count;
 
-                            if pic_count > 0 {
-                                if instruction.inline_cache.shapes[0] == object.shape {
-                                    pic_set_field(vm, object, instruction.inline_cache.offsets[0], registers_data[instruction.arg1]);
-                                    if instruction.inline_cache.target_shapes[0] object.shape = instruction.inline_cache.target_shapes[0];
+                            for i: 0..pic_count - 1 {
+                                if instruction.inline_cache.shapes[i] == object.shape {
+                                    pic_set_field(vm, object, instruction.inline_cache.offsets[i], registers_data[instruction.arg1]);
+                                    if instruction.inline_cache.target_shapes[i] object.shape = instruction.inline_cache.target_shapes[i];
                                     pic_hit = true;
-                                } else if pic_count > 1 {
-                                    if instruction.inline_cache.shapes[1] == object.shape {
-                                        pic_set_field(vm, object, instruction.inline_cache.offsets[1], registers_data[instruction.arg1]);
-                                        if instruction.inline_cache.target_shapes[1] object.shape = instruction.inline_cache.target_shapes[1];
-                                        pic_hit = true;
-                                    } else if pic_count > 2 {
-                                        if instruction.inline_cache.shapes[2] == object.shape {
-                                            pic_set_field(vm, object, instruction.inline_cache.offsets[2], registers_data[instruction.arg1]);
-                                            if instruction.inline_cache.target_shapes[2] object.shape = instruction.inline_cache.target_shapes[2];
-                                            pic_hit = true;
-                                        } else if pic_count > 3 {
-                                            if instruction.inline_cache.shapes[3] == object.shape {
-                                                pic_set_field(vm, object, instruction.inline_cache.offsets[3], registers_data[instruction.arg1]);
-                                                if instruction.inline_cache.target_shapes[3] object.shape = instruction.inline_cache.target_shapes[3];
-                                                pic_hit = true;
-                                            }
-                                        }
-                                    }
+                                    break;
                                 }
                             }
 
@@ -1248,33 +1200,13 @@ execute_function_internal :: (vm: *Vm, initial_function: *Bytecode_Function, ini
                         pic_hit   := false;
                         pic_count := instruction.inline_cache.count;
 
-                        if pic_count > 0 {
-                            if instruction.inline_cache.shapes[0] == object.shape {
-                                offset := instruction.inline_cache.offsets[0];
+                        for i: 0..pic_count - 1 {
+                            if instruction.inline_cache.shapes[i] == object.shape {
+                                offset := instruction.inline_cache.offsets[i];
                                 if offset < object.fields.count registers_data[instruction.dest] = object.fields.data[offset];
                                 else                            registers_data[instruction.dest] = .{ type = .UNDEFINED };
                                 pic_hit = true;
-                            } else if pic_count > 1 {
-                                if instruction.inline_cache.shapes[1] == object.shape {
-                                    offset := instruction.inline_cache.offsets[1];
-                                    if offset < object.fields.count registers_data[instruction.dest] = object.fields.data[offset];
-                                    else                            registers_data[instruction.dest] = .{ type = .UNDEFINED };
-                                    pic_hit = true;
-                                } else if pic_count > 2 {
-                                    if instruction.inline_cache.shapes[2] == object.shape {
-                                        offset := instruction.inline_cache.offsets[2];
-                                        if offset < object.fields.count registers_data[instruction.dest] = object.fields.data[offset];
-                                        else                            registers_data[instruction.dest] = .{ type = .UNDEFINED };
-                                        pic_hit = true;
-                                    } else if pic_count > 3 {
-                                        if instruction.inline_cache.shapes[3] == object.shape {
-                                            offset := instruction.inline_cache.offsets[3];
-                                            if offset < object.fields.count registers_data[instruction.dest] = object.fields.data[offset];
-                                            else                            registers_data[instruction.dest] = .{ type = .UNDEFINED };
-                                            pic_hit = true;
-                                        }
-                                    }
-                                }
+                                break;
                             }
                         }
 
