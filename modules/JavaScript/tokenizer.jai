@@ -1,3 +1,15 @@
+add_token :: inline (tokens: *[..] Token, type: Token_Type, data: *u8, length: int, line: int, column: int) {
+    token := Token.{
+        type       = type,
+        text.data  = data,
+        text.count = length,
+        line       = line,
+        column     = column,
+    };
+
+    array_add(tokens, token);
+}
+
 tokenize :: (code: string) -> error: bool, error_message: string, [] Token {
     tokens: [..] Token;
 
@@ -22,26 +34,10 @@ tokenize :: (code: string) -> error: bool, error_message: string, [] Token {
             while t < max_t {
                 if t.* == "`" {
                     if t > start_t {
-                        token := Token.{
-                            type       = .TEMPLATE_PART,
-                            text.data  = start_t,
-                            text.count = t - start_t,
-                            line       = start_line,
-                            column     = start_column,
-                        };
-
-                        array_add(*tokens, token);
+                        add_token(*tokens, .TEMPLATE_PART, start_t, t - start_t, start_line, start_column);
                     }
 
-                    token := Token.{
-                        type       = .PUNCTUATION,
-                        text.data  = t,
-                        text.count = 1,
-                        line       = line,
-                        column     = column,
-                    };
-
-                    array_add(*tokens, token);
+                    add_token(*tokens, .PUNCTUATION, t, 1, line, column);
 
                     t      += 1;
                     column += 1;
@@ -51,26 +47,10 @@ tokenize :: (code: string) -> error: bool, error_message: string, [] Token {
                     break;
                 } else if t.* == "$" && t + 1 < max_t && (t + 1).* == "{" {
                     if t > start_t {
-                        token := Token.{
-                            type       = .TEMPLATE_PART,
-                            text.data  = start_t,
-                            text.count = t - start_t,
-                            line       = start_line,
-                            column     = start_column,
-                        };
-
-                        array_add(*tokens, token);
+                        add_token(*tokens, .TEMPLATE_PART, start_t, t - start_t, start_line, start_column);
                     }
 
-                    token := Token.{
-                        type       = .PUNCTUATION,
-                        text.data  = t,
-                        text.count = 2,
-                        line       = line,
-                        column     = column,
-                    };
-
-                    array_add(*tokens, token);
+                    add_token(*tokens, .PUNCTUATION, t, 2, line, column);
 
                     t      += 2;
                     column += 2;
@@ -116,15 +96,7 @@ tokenize :: (code: string) -> error: bool, error_message: string, [] Token {
                     column += 1;
                 }
 
-                token := Token.{
-                    type       = .COMMENT,
-                    text.data  = start_t,
-                    text.count = t - start_t,
-                    line       = start_line,
-                    column     = start_column,
-                };
-
-                array_add(*tokens, token);
+                add_token(*tokens, .COMMENT, start_t, t - start_t, start_line, start_column);
 
                 continue;
             } else if t + 1 < max_t && (t + 1).* == "*" {
@@ -151,15 +123,7 @@ tokenize :: (code: string) -> error: bool, error_message: string, [] Token {
                     t += 1;
                 }
 
-                token := Token.{
-                    type       = .COMMENT,
-                    text.data  = start_t,
-                    text.count = t - start_t,
-                    line       = start_line,
-                    column     = start_column,
-                };
-
-                array_add(*tokens, token);
+                add_token(*tokens, .COMMENT, start_t, t - start_t, start_line, start_column);
 
                 continue;
             }
@@ -173,15 +137,7 @@ tokenize :: (code: string) -> error: bool, error_message: string, [] Token {
                 column += 1;
             }
 
-            token := Token.{
-                type       = .NUMBER,
-                text.data  = start_t,
-                text.count = t - start_t,
-                line       = start_line,
-                column     = start_column,
-            };
-
-            array_add(*tokens, token);
+            add_token(*tokens, .NUMBER, start_t, t - start_t, start_line, start_column);
 
             continue;
         }
@@ -194,15 +150,7 @@ tokenize :: (code: string) -> error: bool, error_message: string, [] Token {
                 column += 1;
             }
 
-            token := Token.{
-                type       = .IDENTIFIER,
-                text.data  = start_t,
-                text.count = t - start_t,
-                line       = start_line,
-                column     = start_column,
-            };
-
-            array_add(*tokens, token);
+            add_token(*tokens, .IDENTIFIER, start_t, t - start_t, start_line, start_column);
 
             continue;
         }
@@ -241,29 +189,13 @@ tokenize :: (code: string) -> error: bool, error_message: string, [] Token {
                 column += 1;
             }
 
-            token := Token.{
-                type       = .STRING,
-                text.data  = start_t,
-                text.count = t - start_t,
-                line       = start_line,
-                column     = start_column,
-            };
-
-            array_add(*tokens, token);
+            add_token(*tokens, .STRING, start_t, t - start_t, start_line, start_column);
 
             continue;
         }
 
         if t.* == "`" {
-            token := Token.{
-                type       = .PUNCTUATION,
-                text.data  = t,
-                text.count = 1,
-                line       = start_line,
-                column     = start_column,
-            };
-
-            array_add(*tokens, token);
+            add_token(*tokens, .PUNCTUATION, t, 1, start_line, start_column);
 
             t      += 1;
             column += 1;
@@ -287,15 +219,7 @@ tokenize :: (code: string) -> error: bool, error_message: string, [] Token {
                 t += 1;
             }
 
-            token := Token.{
-                type       = .WHITESPACE,
-                text.data  = start_t,
-                text.count = t - start_t,
-                line       = start_line,
-                column     = start_column,
-            };
-
-            array_add(*tokens, token);
+            add_token(*tokens, .WHITESPACE, start_t, t - start_t, start_line, start_column);
 
             continue;
         }
@@ -320,30 +244,14 @@ tokenize :: (code: string) -> error: bool, error_message: string, [] Token {
                 }
             }
 
-            token := Token.{
-                type       = .OPERATOR,
-                text.data  = start_t,
-                text.count = t - start_t,
-                line       = start_line,
-                column     = start_column,
-            };
-
-            array_add(*tokens, token);
+            add_token(*tokens, .OPERATOR, start_t, t - start_t, start_line, start_column);
 
             continue;
         }
 
         if t.* == "." {
             if t + 1 < max_t && (t + 1).* == "." && t + 2 < max_t && (t + 2).* == "." {
-                token := Token.{
-                    type       = .PUNCTUATION,
-                    text.data  = t,
-                    text.count = 3,
-                    line       = start_line,
-                    column     = start_column,
-                };
-
-                array_add(*tokens, token);
+                add_token(*tokens, .PUNCTUATION, t, 3, start_line, start_column);
 
                 t      += 3;
                 column += 3;
@@ -360,15 +268,7 @@ tokenize :: (code: string) -> error: bool, error_message: string, [] Token {
                     brace_type := pop(*brace_stack);
 
                     if brace_type == .TEMPLATE_STRING {
-                        token := Token.{
-                            type       = .PUNCTUATION,
-                            text.data  = t,
-                            text.count = 1,
-                            line       = start_line,
-                            column     = start_column,
-                        };
-
-                        array_add(*tokens, token);
+                        add_token(*tokens, .PUNCTUATION, t, 1, start_line, start_column);
 
                         t      += 1;
                         column += 1;
@@ -380,15 +280,7 @@ tokenize :: (code: string) -> error: bool, error_message: string, [] Token {
                 }
             }
 
-            token := Token.{
-                type       = .PUNCTUATION,
-                text.data  = t,
-                text.count = 1,
-                line       = start_line,
-                column     = start_column,
-            };
-
-            array_add(*tokens, token);
+            add_token(*tokens, .PUNCTUATION, t, 1, start_line, start_column);
 
             t      += 1;
             column += 1;
