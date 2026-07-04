@@ -432,6 +432,13 @@ generate_module_bytecode :: (ast: *Ast_Program, program: *Bytecode_Program, name
     return module_function;
 }
 
+allocate_register :: inline (generator: *Bytecode_Generator, destination_register: s16) -> u8 {
+    if destination_register != -1 return cast(u8) destination_register;
+    register := generator.next_register;
+    generator.next_register += 1;
+    return register;
+}
+
 get_local_index :: (generator: *Bytecode_Generator, name: string) -> int {
     for generator.locals {
         if it == name {
@@ -1524,14 +1531,7 @@ emit_expression :: (generator: *Bytecode_Generator, node: *Ast_Node, force_new_r
 
             array_add(*generator.program.constants, .{ type = .NUMBER, number = literal_number.value });
 
-            register: u8;
-
-            if destination_register != -1 {
-                register = cast(u8) destination_register;
-            } else {
-                register = generator.next_register;
-                generator.next_register += 1;
-            }
+            register := allocate_register(generator, destination_register);
 
             instruction := Instruction.{
                 op_code = .LOAD_CONST,
@@ -1549,14 +1549,7 @@ emit_expression :: (generator: *Bytecode_Generator, node: *Ast_Node, force_new_r
 
             array_add(*generator.program.constants, .{ type = .STRING, s = literal_string.value });
 
-            register: u8;
-
-            if destination_register != -1 {
-                register = cast(u8) destination_register;
-            } else {
-                register = generator.next_register;
-                generator.next_register += 1;
-            }
+            register := allocate_register(generator, destination_register);
 
             instruction := Instruction.{
                 op_code = .LOAD_CONST,
@@ -1575,14 +1568,7 @@ emit_expression :: (generator: *Bytecode_Generator, node: *Ast_Node, force_new_r
 
             if location.type == .LOCAL && !force_new_register && destination_register == -1 return cast(u8) location.index;
 
-            register: u8;
-
-            if destination_register != -1 {
-                register = cast(u8) destination_register;
-            } else {
-                register = generator.next_register;
-                generator.next_register += 1;
-            }
+            register := allocate_register(generator, destination_register);
 
             instruction := Instruction.{
                 dest = register,
@@ -1609,13 +1595,7 @@ emit_expression :: (generator: *Bytecode_Generator, node: *Ast_Node, force_new_r
             return register;
 
         case .THIS_EXPRESSION;
-            register: u8;
-            if destination_register != -1 {
-                register = cast(u8) destination_register;
-            } else {
-                register = generator.next_register;
-                generator.next_register += 1;
-            }
+            register := allocate_register(generator, destination_register);
 
             instruction := Instruction.{
                 op_code = .LOAD_THIS,
@@ -1644,13 +1624,7 @@ emit_expression :: (generator: *Bytecode_Generator, node: *Ast_Node, force_new_r
 
             right: u8;
 
-            register: u8;
-            if destination_register != -1 {
-                register = cast(u8) destination_register;
-            } else {
-                register = generator.next_register;
-                generator.next_register += 1;
-            }
+            register := allocate_register(generator, destination_register);
 
             instruction := Instruction.{
                 dest = register,
@@ -1711,14 +1685,7 @@ emit_expression :: (generator: *Bytecode_Generator, node: *Ast_Node, force_new_r
         case .ARRAY_LITERAL;
             array_literal := cast(*Ast_Array_Literal) node;
 
-            register: u8;
-
-            if destination_register != -1 {
-                register = cast(u8) destination_register;
-            } else {
-                register = generator.next_register;
-                generator.next_register += 1;
-            }
+            register := allocate_register(generator, destination_register);
 
             instruction := Instruction.{
                 op_code = .NEW_ARRAY,
@@ -1760,14 +1727,7 @@ emit_expression :: (generator: *Bytecode_Generator, node: *Ast_Node, force_new_r
         case .OBJECT_LITERAL;
             object_literal := cast(*Ast_Object_Literal) node;
 
-            register: u8;
-
-            if destination_register != -1 {
-                register = cast(u8) destination_register;
-            } else {
-                register = generator.next_register;
-                generator.next_register += 1;
-            }
+            register := allocate_register(generator, destination_register);
 
             instruction := Instruction.{
                 op_code = .NEW_OBJECT,
@@ -1810,14 +1770,7 @@ emit_expression :: (generator: *Bytecode_Generator, node: *Ast_Node, force_new_r
 
             object_register := emit_expression(generator, member_expression.object);
 
-            register: u8;
-
-            if destination_register != -1 {
-                register = cast(u8) destination_register;
-            } else {
-                register = generator.next_register;
-                generator.next_register += 1;
-            }
+            register := allocate_register(generator, destination_register);
 
             if member_expression.computed {
                 property_register := emit_expression(generator, member_expression.property);
@@ -1897,14 +1850,7 @@ emit_expression :: (generator: *Bytecode_Generator, node: *Ast_Node, force_new_r
                 callee_register = emit_expression(generator, call_expression.callee);
             }
 
-            register: u8;
-
-            if destination_register != -1 {
-                register = cast(u8) destination_register;
-            } else {
-                register = generator.next_register;
-                generator.next_register += 1;
-            }
+            register := allocate_register(generator, destination_register);
 
             if has_spread {
                 args_array_register := generator.next_register;
@@ -1988,14 +1934,7 @@ emit_expression :: (generator: *Bytecode_Generator, node: *Ast_Node, force_new_r
 
             callee_register := emit_expression(generator, new_expression.callee);
 
-            register: u8;
-
-            if destination_register != -1 {
-                register = cast(u8) destination_register;
-            } else {
-                register = generator.next_register;
-                generator.next_register += 1;
-            }
+            register := allocate_register(generator, destination_register);
 
             if has_spread {
                 arguments_array_register := generator.next_register;
@@ -2109,14 +2048,7 @@ emit_expression :: (generator: *Bytecode_Generator, node: *Ast_Node, force_new_r
 
             function_index := generator.program.functions.count - 1;
 
-            register: u8;
-
-            if destination_register != -1 {
-                register = cast(u8) destination_register;
-            } else {
-                register = generator.next_register;
-                generator.next_register += 1;
-            }
+            register := allocate_register(generator, destination_register);
 
             instruction := Instruction.{
                 op_code = .LOAD_FUNC,
@@ -2185,14 +2117,7 @@ emit_expression :: (generator: *Bytecode_Generator, node: *Ast_Node, force_new_r
 
             function_index := generator.program.functions.count - 1;
 
-            register: u8;
-
-            if destination_register != -1 {
-                register = cast(u8) destination_register;
-            } else {
-                register = generator.next_register;
-                generator.next_register += 1;
-            }
+            register := allocate_register(generator, destination_register);
 
             instruction := Instruction.{
                 op_code = .LOAD_FUNC,
@@ -2303,14 +2228,7 @@ emit_expression :: (generator: *Bytecode_Generator, node: *Ast_Node, force_new_r
 
             right := emit_expression(generator, unary_expression.right);
 
-            register: u8;
-
-            if destination_register != -1 {
-                register = cast(u8) destination_register;
-            } else {
-                register = generator.next_register;
-                generator.next_register += 1;
-            }
+            register := allocate_register(generator, destination_register);
 
             instruction := Instruction.{
                 dest = register,
@@ -2338,14 +2256,7 @@ emit_expression :: (generator: *Bytecode_Generator, node: *Ast_Node, force_new_r
             argument_register: u8 = 0;
             if yield_expression.argument argument_register = emit_expression(generator, yield_expression.argument);
 
-            register: u8;
-
-            if destination_register != -1 {
-                register = cast(u8) destination_register;
-            } else {
-                register = generator.next_register;
-                generator.next_register += 1;
-            }
+            register := allocate_register(generator, destination_register);
 
             instruction := Instruction.{
                 op_code = .YIELD,
@@ -2362,14 +2273,7 @@ emit_expression :: (generator: *Bytecode_Generator, node: *Ast_Node, force_new_r
 
             argument_register := emit_expression(generator, await_expression.argument);
 
-            register: u8;
-
-            if destination_register != -1 {
-                register = cast(u8) destination_register;
-            } else {
-                register = generator.next_register;
-                generator.next_register += 1;
-            }
+            register := allocate_register(generator, destination_register);
 
             instruction := Instruction.{
                 op_code = .AWAIT,
@@ -2548,14 +2452,7 @@ emit_expression :: (generator: *Bytecode_Generator, node: *Ast_Node, force_new_r
         case .LOGICAL_EXPRESSION;
             logical_expression := cast(*Ast_Logical_Expression) node;
 
-            register: u8;
-
-            if destination_register != -1 {
-                register = cast(u8) destination_register;
-            } else {
-                register = generator.next_register;
-                generator.next_register += 1;
-            }
+            register := allocate_register(generator, destination_register);
 
             left_register := emit_expression(generator, logical_expression.left);
 
@@ -2605,13 +2502,7 @@ emit_expression :: (generator: *Bytecode_Generator, node: *Ast_Node, force_new_r
                 local_index := get_local_index(generator, identifier.name);
 
                 if local_index != -1 {
-                    register: u8;
-                    if destination_register != -1 {
-                        register = cast(u8) destination_register;
-                    } else {
-                        register = generator.next_register;
-                        generator.next_register += 1;
-                    }
+                    register := allocate_register(generator, destination_register);
 
                     if !update_expression.prefix {
                         move_instruction := Instruction.{
@@ -2652,14 +2543,7 @@ emit_expression :: (generator: *Bytecode_Generator, node: *Ast_Node, force_new_r
 
                 value_register := emit_expression(generator, update_expression.argument);
 
-                register: u8;
-
-                if destination_register != -1 {
-                    register = cast(u8) destination_register;
-                } else {
-                    register = generator.next_register;
-                    generator.next_register += 1;
-                }
+                register := allocate_register(generator, destination_register);
 
                 if !update_expression.prefix {
                     move_instruction := Instruction.{
@@ -2749,14 +2633,7 @@ emit_expression :: (generator: *Bytecode_Generator, node: *Ast_Node, force_new_r
 
             value_register := emit_expression(generator, update_expression.argument);
 
-            register: u8;
-
-            if destination_register != -1 {
-                register = cast(u8) destination_register;
-            } else {
-                register = generator.next_register;
-                generator.next_register += 1;
-            }
+            register := allocate_register(generator, destination_register);
 
             if update_expression.prefix {
                 move_instruction := Instruction.{
@@ -2828,14 +2705,7 @@ emit_expression :: (generator: *Bytecode_Generator, node: *Ast_Node, force_new_r
 
             array_add(*generator.current_function.instructions, jump_if_false_instruction);
 
-            register: u8;
-
-            if destination_register != -1 {
-                register = cast(u8) destination_register;
-            } else {
-                register = generator.next_register;
-                generator.next_register += 1;
-            }
+            register := allocate_register(generator, destination_register);
 
             consequent_register := emit_expression(generator, conditional_expression.consequent);
 
@@ -2872,14 +2742,7 @@ emit_expression :: (generator: *Bytecode_Generator, node: *Ast_Node, force_new_r
             return register;
 
         case .CLASS_EXPRESSION;
-            register: u8;
-
-            if destination_register != -1 {
-                register = cast(u8) destination_register;
-            } else {
-                register = generator.next_register;
-                generator.next_register += 1;
-            }
+            register := allocate_register(generator, destination_register);
 
             emit_class_expression(generator, cast(*Ast_Class_Expression) node, register);
 
@@ -2888,14 +2751,7 @@ emit_expression :: (generator: *Bytecode_Generator, node: *Ast_Node, force_new_r
         case .METHOD_DEFINITION;
 
         case .SUPER_EXPRESSION;
-            register: u8;
-
-            if destination_register != -1 {
-                register = cast(u8) destination_register;
-            } else {
-                register = generator.next_register;
-                generator.next_register += 1;
-            }
+            register := allocate_register(generator, destination_register);
 
             emit_super_expression(generator, cast(*Ast_Super_Expression) node, register);
 
