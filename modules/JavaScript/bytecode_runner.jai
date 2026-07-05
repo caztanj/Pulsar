@@ -472,10 +472,14 @@ collect_garbage_minor :: (vm: *Vm) {
 
             gc_array_reset(*unreachable.fields);
             gc_array_reset(*unreachable.elements);
-            gc_array_reset(*unreachable.map_entries);
 
-            if unreachable.kind == .PROMISE                                           unreachable.promise_then_callbacks.count = 0;
-            if unreachable.kind == .GENERATOR || unreachable.kind == .ASYNC_EXECUTION unreachable.generator_registers.count    = 0;
+            if unreachable.kind == .MAP || unreachable.kind == .SET {
+                gc_array_reset(*unreachable.map_entries);
+            } else if unreachable.kind == .PROMISE {
+                gc_array_reset(*unreachable.promise_then_callbacks);
+            } else if unreachable.kind == .GENERATOR || unreachable.kind == .ASYNC_EXECUTION {
+                gc_array_reset(*unreachable.generator_registers);
+            }
 
             unreachable.next = vm.gc.object_pool;
 
@@ -544,10 +548,14 @@ collect_garbage_major :: (vm: *Vm) {
 
                 gc_array_reset(*unreachable.fields);
                 gc_array_reset(*unreachable.elements);
-                gc_array_reset(*unreachable.map_entries);
 
-                if unreachable.kind == .PROMISE                                           unreachable.promise_then_callbacks.count = 0;
-                if unreachable.kind == .GENERATOR || unreachable.kind == .ASYNC_EXECUTION unreachable.generator_registers.count    = 0;
+                if unreachable.kind == .MAP || unreachable.kind == .SET {
+                    gc_array_reset(*unreachable.map_entries);
+                } else if unreachable.kind == .PROMISE {
+                    gc_array_reset(*unreachable.promise_then_callbacks);
+                } else if unreachable.kind == .GENERATOR || unreachable.kind == .ASYNC_EXECUTION {
+                    gc_array_reset(*unreachable.generator_registers);
+                }
 
                 unreachable.next   = vm.gc.object_pool;
                 vm.gc.object_pool  = unreachable;

@@ -395,6 +395,8 @@ generate_bytecode :: (ast: *Ast_Program, program: *Bytecode_Program = null) -> *
     for ast.statements collect_globals(*generator, it);
     for ast.statements emit_statement(*generator, it);
 
+    main_function.locals_count = max(main_function.locals_count, generator.next_register);
+
     if generator.has_error {
         generator.program.has_error = true;
         generator.program.error_message = generator.error_message;
@@ -421,6 +423,8 @@ generate_module_bytecode :: (ast: *Ast_Program, program: *Bytecode_Program, name
 
     for ast.statements collect_globals(*generator, it);
     for ast.statements emit_statement(*generator, it);
+
+    module_function.locals_count = max(module_function.locals_count, generator.next_register);
 
     if generator.has_error {
         generator.program.has_error = true;
@@ -738,6 +742,8 @@ emit_statement :: (generator: *Bytecode_Generator, node: *Ast_Node) {
             nested_generator.current_function = bytecode_function;
 
             for function_declaration.body.body emit_statement(*nested_generator, it);
+
+            bytecode_function.locals_count = max(bytecode_function.locals_count, nested_generator.next_register);
 
             for nested_generator.locals array_add(*bytecode_function.locals, it);
 
@@ -2048,6 +2054,8 @@ emit_expression :: (generator: *Bytecode_Generator, node: *Ast_Node, force_new_r
 
             for function_expression.body.body emit_statement(*nested_generator, it);
 
+            bytecode_function.locals_count = max(bytecode_function.locals_count, nested_generator.next_register);
+
             for nested_generator.locals array_add(*bytecode_function.locals, it);
 
             array_add(*generator.program.functions, bytecode_function);
@@ -2114,6 +2122,8 @@ emit_expression :: (generator: *Bytecode_Generator, node: *Ast_Node, force_new_r
 
                 array_add(*bytecode_function.instructions, instruction);
             }
+
+            bytecode_function.locals_count = max(bytecode_function.locals_count, nested_generator.next_register);
 
             for nested_generator.locals array_add(*bytecode_function.locals, it);
 
