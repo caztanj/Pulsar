@@ -38,6 +38,11 @@ main :: () {
     if vm.has_exception {
         print("Uncaught exception: ");
         print(vm, .{}, .[vm.exception]);
+
+        if vm.has_stack_trace {
+            print("%\n", vm.stack_trace);
+        }
+
         exit(EXIT_CODE_JS_ERROR);
     }
 

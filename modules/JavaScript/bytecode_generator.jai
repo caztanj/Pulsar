@@ -1,11 +1,13 @@
-
 get_property_index :: (generator: *Bytecode_Generator, name: string) -> int {
     return get_property_index_standalone(generator.program, name);
 }
 
 emit_instruction :: (generator: *Bytecode_Generator, instruction: Instruction) {
     assert(generator.current_function != null);
-    array_add(*generator.current_function.instructions, instruction);
+
+    modified_instruction := instruction;
+    modified_instruction.line = generator.current_line;
+    array_add(*generator.current_function.instructions, modified_instruction);
 }
 
 deinit :: (program: *Bytecode_Program) {
@@ -655,6 +657,8 @@ emit_store :: (generator: *Bytecode_Generator, left: *Ast_Node, value_register: 
 
 emit_statement :: (generator: *Bytecode_Generator, node: *Ast_Node) {
     if !node return;
+
+    if node.line > 0 then generator.current_line = cast(u32) node.line;
 
     if #complete node.kind == {
         case .VARIABLE_DECLARATOR;
@@ -1523,6 +1527,10 @@ emit_statement :: (generator: *Bytecode_Generator, node: *Ast_Node) {
 
 emit_expression :: (generator: *Bytecode_Generator, node: *Ast_Node, force_new_register := false, destination_register: s16 = -1) -> u8 {
     if !node return 0;
+
+    if node.line > 0 then generator.current_line = cast(u32) node.line;
+
+    register: u8;
 
     if #complete node.kind == {
         case .LITERAL_NUMBER;
@@ -3060,6 +3068,8 @@ Instruction :: struct {
 
     imm:     s32;
 
+    line:    u32;
+
     inline_cache: Inline_Cache;
 }
 
@@ -3108,6 +3118,8 @@ Bytecode_Generator :: struct {
     program:          *Bytecode_Program;
     current_function: *Bytecode_Function;
     parent:           *Bytecode_Generator;
+
+    current_line:     u32;
 
     next_register: u8;
 

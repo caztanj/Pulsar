@@ -876,24 +876,7 @@ execute_function_internal :: (vm: *Vm, initial_function: *Bytecode_Function, ini
                     } else {
                         registers_data[instruction.dest] = values_addition(vm, v1.*, v2.*);
 
-                        if vm.has_exception {
-                            if try_stack.count > initial_try_count {
-                                ctx := try_stack.data[try_stack.count - 1];
-
-                                try_stack.count -= 1;
-
-                                pc_pointer = instructions_pointer + ctx.catch_pc;
-
-                                if ctx.catch_reg != 255 {
-                                    registers_data[ctx.catch_reg] = vm.exception;
-                                }
-
-                                vm.has_exception = false;
-                                vm.exception     = .{};
-                            } else {
-                                return .{};
-                            }
-                        }
+                        if vm.has_exception break;
                     }
 
                     last_value = registers_data[instruction.dest];
@@ -1995,12 +1978,22 @@ execute_function_internal :: (vm: *Vm, initial_function: *Bytecode_Function, ini
         if needs_frame_init continue;
 
         if vm.has_exception {
+            if !vm.has_stack_trace {
+                generate_stack_trace(vm, function, pc_pointer);
+                vm.has_stack_trace = true;
+            }
+
             if try_stack.count > initial_try_count {
                 ctx := try_stack.data[try_stack.count - 1];
                 try_stack.count -= 1;
                 pc_pointer = instructions_pointer + ctx.catch_pc;
                 if ctx.catch_reg != 255 registers_data[ctx.catch_reg] = vm.exception;
                 vm.has_exception = false;
+                vm.has_stack_trace = false;
+                if vm.stack_trace.data {
+                    free(vm.stack_trace.data);
+                    vm.stack_trace = "";
+                }
                 vm.exception     = .{};
                 continue;
             } else {
@@ -2948,6 +2941,9 @@ Vm :: struct {
     exception:     Value;
     has_exception: bool;
 
+    has_stack_trace: bool;
+    stack_trace: string;
+
     allocated_strings: Table(*u8, Allocated_String);
 
     loaded_modules:  [..] Module_Entry;
@@ -3091,3 +3087,31 @@ maximum_value:           float64 = #run -1.0 / zero_value_for_division;
 positive_infinity_value         := #run  1.0 / zero_value_for_division;
 negative_infinity_value         := #run -1.0 / zero_value_for_division;
 not_a_number_value              := #run  0.0 / zero_value_for_division;
+
+generate_stack_trace :: (vm: *Vm, current_function: *Bytecode_Function, current_pc: *Instruction) {
+    builder: String_Builder;
+    init_string_builder(*builder);
+
+    append_stack_frame(vm, *builder, current_function, current_pc);
+
+    for i: 0 .. vm.call_frames.count - 1 {
+        index := vm.call_frames.count - 1 - i;
+        frame := vm.call_frames[index];
+        append_stack_frame(vm, *builder, frame.function, frame.pc_pointer);
+    }
+
+    vm.stack_trace = builder_to_string(*builder);
+}
+
+append_stack_frame :: (vm: *Vm, builder: *String_Builder, function: *Bytecode_Function, pc: *Instruction) {
+    name := function.name;
+    if !name name = "<anonymous>";
+
+    line: u32 = 0;
+    if pc {
+        instruction := pc - 1;
+        line = instruction.line;
+    }
+
+    print_to_builder(builder, "    at % (line %)\n", name, line);
+}
