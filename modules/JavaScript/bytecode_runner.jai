@@ -2310,6 +2310,7 @@ init_common_vm_globals :: (vm: *Vm) {
     init_vm_date(vm);
     init_vm_file(vm);
     init_vm_print(vm);
+    init_vm_console(vm);
     init_vm_http(vm);
     init_vm_router(vm);
     init_vm_fetch(vm);

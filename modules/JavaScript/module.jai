@@ -98,6 +98,7 @@ Permission :: enum_flags {
 #load "extensions/number.jai";
 #load "extensions/object.jai";
 #load "extensions/print.jai";
+#load "extensions/console.jai";
 #load "extensions/promise.jai";
 #load "extensions/router.jai";
 #load "extensions/set.jai";

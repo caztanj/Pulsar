@@ -5,20 +5,6 @@ init_vm_print :: (vm: *Vm) {
         vm.current_realm.globals[index].type            = .NATIVE_FUNCTION;
         vm.current_realm.globals[index].native_function = print;
     }
-
-    found=, console_index := get_global_index(vm, "console");
-    if found {
-        console_object := allocate_object(vm);
-
-        vm.current_realm.globals[console_index].type   = .OBJECT;
-        vm.current_realm.globals[console_index].object = console_object;
-
-        add_static_method(vm, console_object, "log",   print);
-        add_static_method(vm, console_object, "error", print);
-        add_static_method(vm, console_object, "warn",  print);
-        add_static_method(vm, console_object, "info",  print);
-        add_static_method(vm, console_object, "debug", print);
-    }
 }
 
 print :: (vm: *Vm, this: Value, arguments: [] Value, is_new: bool = false) -> Value {
