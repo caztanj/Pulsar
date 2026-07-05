@@ -247,6 +247,10 @@ optimize_node :: (node: *Ast_Node) -> *Ast_Node {
         case .IMPORT_STATEMENT; #through;
         case .BREAK_STATEMENT;  #through;
         case .CONTINUE_STATEMENT;
+
+        case .IMPORT_EXPRESSION;
+            import_expression := cast(*Ast_Import_Expression) node;
+            optimize_field(*import_expression.argument);
     }
 
     folded := constant_folding(node);

@@ -91,7 +91,17 @@ parse_statement :: (parser: *Parser) -> *Ast_Node {
         } else if token.text == "for" {
             return parse_for_statement(parser);
         } else if token.text == "import" {
-            return xx parse_import_statement(parser);
+            old_current := parser.current;
+
+            advance(parser);
+            skip_whitespace_and_comments(parser);
+
+            if peek(parser).text == "(" {
+                parser.current = old_current;
+            } else {
+                parser.current = old_current;
+                return xx parse_import_statement(parser);
+            }
         } else if token.text == "export" {
             return xx parse_export_statement(parser);
         } else if token.text == "try" {
@@ -1082,6 +1092,25 @@ parse_primary :: (parser: *Parser) -> *Ast_Node {
             node.column = token.column;
 
             return node;
+        } else if token.text == "import" {
+            advance(parser);
+
+            node := new_node(parser, Ast_Import_Expression);
+
+            node.kind   = .IMPORT_EXPRESSION;
+            node.line   = token.line;
+            node.column = token.column;
+
+            skip_whitespace_and_comments(parser);
+            consume(parser, "(");
+
+            skip_whitespace_and_comments(parser);
+            node.argument = parse_expression(parser);
+
+            skip_whitespace_and_comments(parser);
+            consume(parser, ")");
+
+            return xx node;
         }
 
         advance(parser);
@@ -2043,6 +2072,7 @@ Ast_Kind :: enum {
     AWAIT_EXPRESSION;
     THIS_EXPRESSION;
     IMPORT_STATEMENT;
+    IMPORT_EXPRESSION;
     EXPORT_STATEMENT;
     TRY_STATEMENT;
     FOR_OF_STATEMENT;
@@ -2295,6 +2325,12 @@ Ast_Import_Statement :: struct {
     specifiers:       [..] Import_Specifier;
     default_import:   *Ast_Identifier;
     namespace_import: *Ast_Identifier;
+}
+
+Ast_Import_Expression :: struct {
+    using base: Ast_Node;
+
+    argument: *Ast_Node;
 }
 
 Export_Specifier :: struct {

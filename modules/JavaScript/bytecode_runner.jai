@@ -630,8 +630,25 @@ execute_main :: (vm: *Vm, program: *Bytecode_Program) -> Value {
     }
 
     result: Value;
-    if main_function result = execute_function(vm, main_function, this_value = global_this);
+    if main_function {
+        if main_function.flags & .ASYNC {
+            promise_value := promise_constructor(vm, .{}, .[], true);
 
+            async_object                := allocate_object(vm);
+            async_object.kind            = .ASYNC_EXECUTION;
+            async_object.generator_func  = main_function;
+            async_object.generator_pc    = 0;
+            async_object.async_promise   = promise_value;
+
+            for i: 0..main_function.locals_count - 1 array_add(*async_object.generator_registers, .{ type = .UNDEFINED });
+
+            result = promise_value;
+
+            execute_function(vm, main_function, this_value = global_this, generator = async_object);
+        } else {
+            result = execute_function(vm, main_function, this_value = global_this);
+        }
+    }
     if vm.current_realm.globals.count < program.globals.count {
         old_globals := vm.current_realm.globals;
 
@@ -1800,6 +1817,94 @@ execute_function_internal :: (vm: *Vm, initial_function: *Bytecode_Function, ini
 
                     last_value = registers_data[instruction.dest];
 
+                case .DYNAMIC_IMPORT;
+                    source_path_value := *registers_data[instruction.arg1];
+                    if source_path_value.type != .STRING {
+                        throw_exception(vm, "Dynamic import requires a string argument.");
+                        break;
+                    }
+                    source_path := source_path_value.s;
+
+                    import_promise := promise_constructor(vm, .{}, .[], true);
+                    registers_data[instruction.dest] = import_promise;
+
+                    found := false;
+                    for vm.loaded_modules if it.path == source_path {
+                        promise_resolve_inner(vm, import_promise, it.exports);
+                        found = true;
+                        break;
+                    }
+
+                    if !found {
+                        content, success := read_entire_file(source_path);
+
+                        if !success {
+                            promise_reject_inner(vm, import_promise, .{ type = .STRING, s = copy_string(sprint("Could not load module: %", source_path)) });
+                        } else {
+                            defer free(content);
+
+                            module_function: *Bytecode_Function;
+                            {
+                                push_allocator(temp);
+                                error, error_message, tokens := tokenize(content);
+                                if error {
+                                    promise_reject_inner(vm, import_promise, .{ type = .STRING, s = copy_string(error_message) });
+                                    continue;
+                                }
+
+                                ast := build_ast(content, tokens);
+                                if ast.has_error {
+                                    promise_reject_inner(vm, import_promise, .{ type = .STRING, s = copy_string(ast.error_message) });
+                                    continue;
+                                }
+
+                                {
+                                    push_allocator(vm.program.functions.allocator);
+                                    module_function = generate_module_bytecode(ast, vm.program, source_path);
+                                }
+
+                                if vm.program.has_error {
+                                    promise_reject_inner(vm, import_promise, .{ type = .STRING, s = copy_string(vm.program.error_message) });
+                                    continue;
+                                }
+                            }
+
+                            old_realm := vm.current_realm;
+                            vm.current_realm         = New(Realm);
+                            vm.current_realm.globals = NewArray(vm.program.globals.count, Value);
+                            array_add(*vm.realms, vm.current_realm);
+                            init_common_vm_globals(vm);
+
+                            old_exports := vm.current_exports;
+                            vm.current_exports = allocate_object(vm);
+
+                            module_result := execute_function(vm, module_function);
+
+                            module_exports := Value.{
+                                type   = .OBJECT,
+                                object = vm.current_exports,
+                            };
+
+                            entry := Module_Entry.{
+                                path    = copy_string(source_path),
+                                exports = module_exports,
+                            
+                            };
+                            array_add(*vm.loaded_modules, entry);
+
+                            promise_resolve_inner(vm, import_promise, module_exports);
+
+                            vm.current_exports = old_exports;
+                            vm.current_realm   = old_realm;
+
+                            globals_data = vm.current_realm.globals.data;
+                        }
+                    }
+
+                    if vm.has_exception break;
+
+                    last_value = registers_data[instruction.dest];
+
                 case .EXPORT;
                     if !vm.current_exports vm.current_exports = allocate_object(vm);
 
@@ -2207,19 +2312,19 @@ call_value :: inline (vm: *Vm, this: Value, callee: Value, arguments: [] Value, 
         if (callee.function.function.flags & .ASYNC) {
             promise_value := promise_constructor(vm, .{}, .[], true);
 
-            async_obj                := allocate_object(vm);
-            async_obj.kind            = .ASYNC_EXECUTION;
-            async_obj.generator_func  = callee.function.function;
-            async_obj.generator_pc    = 0;
-            async_obj.async_promise   = promise_value;
+            async_object                := allocate_object(vm);
+            async_object.kind            = .ASYNC_EXECUTION;
+            async_object.generator_func  = callee.function.function;
+            async_object.generator_pc    = 0;
+            async_object.async_promise   = promise_value;
 
-            for i: 0..callee.function.function.locals_count - 1 array_add(*async_obj.generator_registers, .{ type = .UNDEFINED });
+            for i: 0..callee.function.function.locals_count - 1 array_add(*async_object.generator_registers, .{ type = .UNDEFINED });
 
             for i: 0..final_arguments.count - 1 {
-                if i < async_obj.generator_registers.count async_obj.generator_registers[i] = final_arguments[i];
+                if i < async_object.generator_registers.count async_object.generator_registers[i] = final_arguments[i];
             }
 
-            execute_function(vm, callee.function.function, .[], .{}, async_obj);
+            execute_function(vm, callee.function.function, .[], .{}, async_object);
 
             return promise_value;
         }

@@ -1298,6 +1298,9 @@ emit_statement :: (generator: *Bytecode_Generator, node: *Ast_Node) {
         case .AWAIT_EXPRESSION;
             emit_expression(generator, node);
 
+        case .IMPORT_EXPRESSION;
+            emit_expression(generator, node);
+
         case .UPDATE_EXPRESSION;
             emit_expression(generator, node);
 
@@ -2283,6 +2286,7 @@ emit_expression :: (generator: *Bytecode_Generator, node: *Ast_Node, force_new_r
             return register;
 
         case .AWAIT_EXPRESSION;
+            generator.current_function.flags |= .ASYNC;
             await_expression := cast(*Ast_Yield_Expression) node;
 
             argument_register := emit_expression(generator, await_expression.argument);
@@ -2291,6 +2295,23 @@ emit_expression :: (generator: *Bytecode_Generator, node: *Ast_Node, force_new_r
 
             instruction := Instruction.{
                 op_code = .AWAIT,
+                dest    = register,
+                arg1    = argument_register,
+            };
+
+            emit_instruction(generator, instruction);
+
+            return register;
+
+        case .IMPORT_EXPRESSION;
+            import_expression := cast(*Ast_Import_Expression) node;
+
+            argument_register := emit_expression(generator, import_expression.argument);
+
+            register := allocate_register(generator, destination_register);
+
+            instruction := Instruction.{
+                op_code = .DYNAMIC_IMPORT,
                 dest    = register,
                 arg1    = argument_register,
             };
@@ -3033,6 +3054,7 @@ Op_Code :: enum u8 {
     YIELD;
     AWAIT;
     IMPORT;
+    DYNAMIC_IMPORT;
     EXPORT;
     LOAD_UPVALUE;
     STORE_UPVALUE;
