@@ -339,7 +339,7 @@ write_barrier_object :: inline (vm: *Vm, object: *Gc_Object, target: *Gc_Object)
 sweep_strings :: (vm: *Vm) {
     to_remove: [..] *u8;
 
-    for v, k: vm.allocated_strings {
+    for *v, k: vm.allocated_strings {
         if !v.marked {
             free(v.s.data);
             array_add(*to_remove, k);
@@ -392,6 +392,8 @@ sweep_environments :: (vm: *Vm, is_major := false) {
             current_env  = current_env.next;
         }
     }
+
+    for vm.call_stack it.marked = false;
 }
 
 sweep_shapes :: (vm: *Vm) {
@@ -456,9 +458,6 @@ collect_garbage_minor :: (vm: *Vm) {
     }
 
     vm.gc.remembered_set.count = 0;
-
-    sweep_strings(vm);
-    sweep_shapes(vm);
 
     previous: *Gc_Object;
 
@@ -2486,6 +2485,10 @@ values_addition :: inline (vm: *Vm, a: Value, b: Value) -> Value {
     }
 
     if a.type == .STRING || b.type == .STRING {
+        if vm.allocated_strings.count > 10000 {
+            collect_garbage_major(vm);
+        }
+
         string_a := value_to_string(vm, a);
         string_b := value_to_string(vm, b);
 

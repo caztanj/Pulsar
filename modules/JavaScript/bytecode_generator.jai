@@ -395,8 +395,6 @@ generate_bytecode :: (ast: *Ast_Program, program: *Bytecode_Program = null) -> *
     for ast.statements collect_globals(*generator, it);
     for ast.statements emit_statement(*generator, it);
 
-    main_function.locals_count = generator.next_register;
-
     if generator.has_error {
         generator.program.has_error = true;
         generator.program.error_message = generator.error_message;
@@ -424,8 +422,6 @@ generate_module_bytecode :: (ast: *Ast_Program, program: *Bytecode_Program, name
     for ast.statements collect_globals(*generator, it);
     for ast.statements emit_statement(*generator, it);
 
-    module_function.locals_count = generator.next_register;
-
     if generator.has_error {
         generator.program.has_error = true;
         generator.program.error_message = generator.error_message;
@@ -436,8 +432,14 @@ generate_module_bytecode :: (ast: *Ast_Program, program: *Bytecode_Program, name
 
 allocate_register :: inline (generator: *Bytecode_Generator, destination_register: s16) -> u8 {
     if destination_register != -1 return cast(u8) destination_register;
+
     register := generator.next_register;
     generator.next_register += 1;
+
+    if generator.current_function && generator.next_register > generator.current_function.locals_count {
+        generator.current_function.locals_count = generator.next_register;
+    }
+
     return register;
 }
 
@@ -736,8 +738,6 @@ emit_statement :: (generator: *Bytecode_Generator, node: *Ast_Node) {
             nested_generator.current_function = bytecode_function;
 
             for function_declaration.body.body emit_statement(*nested_generator, it);
-
-            bytecode_function.locals_count = nested_generator.next_register;
 
             for nested_generator.locals array_add(*bytecode_function.locals, it);
 
@@ -2048,8 +2048,6 @@ emit_expression :: (generator: *Bytecode_Generator, node: *Ast_Node, force_new_r
 
             for function_expression.body.body emit_statement(*nested_generator, it);
 
-            bytecode_function.locals_count = nested_generator.next_register;
-
             for nested_generator.locals array_add(*bytecode_function.locals, it);
 
             array_add(*generator.program.functions, bytecode_function);
@@ -2116,8 +2114,6 @@ emit_expression :: (generator: *Bytecode_Generator, node: *Ast_Node, force_new_r
 
                 array_add(*bytecode_function.instructions, instruction);
             }
-
-            bytecode_function.locals_count = nested_generator.next_register;
 
             for nested_generator.locals array_add(*bytecode_function.locals, it);
 
