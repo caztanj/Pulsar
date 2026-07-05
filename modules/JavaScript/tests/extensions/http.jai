@@ -6,7 +6,7 @@ test_http :: () {
         JS
 
         run_test(code);
-        expect_global("error", .STRING, "Permission denied: network");
+        expect_object_property(context.vm, get_global(context.vm, "error"), "message", .STRING, "Permission denied: network");
     });
 
     test(() => {

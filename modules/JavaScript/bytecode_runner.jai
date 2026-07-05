@@ -976,7 +976,11 @@ execute_function_internal :: (vm: *Vm, initial_function: *Bytecode_Function, ini
                         needs_frame_init = true;
                         break;
                     }
-                    else registers_data[instruction.dest] = call_value(vm, this_val, callee.*, final_arguments, false);
+                    else {
+                        vm.current_function = function;
+                        vm.current_pc       = pc_pointer;
+                        registers_data[instruction.dest] = call_value(vm, this_val, callee.*, final_arguments, false);
+                    }
 
                     if vm.has_exception break;
 
@@ -993,6 +997,8 @@ execute_function_internal :: (vm: *Vm, initial_function: *Bytecode_Function, ini
                     final_arguments.data  = *registers_data[first_argument_register];
                     final_arguments.count = arguments_count;
 
+                    vm.current_function = function;
+                    vm.current_pc       = pc_pointer;
                     registers_data[instruction.dest] = call_value(vm, this_val, callee, final_arguments, true);
 
                     run_microtasks(vm);
@@ -1934,6 +1940,8 @@ execute_function_internal :: (vm: *Vm, initial_function: *Bytecode_Function, ini
                     arguments_array := *registers_data[instruction.arg2];
 
                     if arguments_array.type == .ARRAY && arguments_array.object {
+                        vm.current_function = function;
+                        vm.current_pc       = pc_pointer;
                         result := call_value(vm, .{}, callee, arguments_array.object.elements, true);
 
                         registers_data[instruction.dest] = result;
@@ -1947,6 +1955,8 @@ execute_function_internal :: (vm: *Vm, initial_function: *Bytecode_Function, ini
                     arguments_array := *registers_data[instruction.imm];
 
                     if arguments_array.type == .ARRAY && arguments_array.object {
+                        vm.current_function = function;
+                        vm.current_pc       = pc_pointer;
                         result := call_value(vm, this_value, callee, arguments_array.object.elements, false);
 
                         registers_data[instruction.dest] = result;
@@ -2306,6 +2316,7 @@ init_common_vm_globals :: (vm: *Vm) {
     init_vm_global_this(vm);
     init_vm_uint8_array(vm);
     init_vm_timer(vm);
+    init_vm_error(vm);
 }
 
 init_vm_core :: (vm: *Vm) {
@@ -2867,6 +2878,51 @@ shape_lookup_property :: inline (shape: *Shape, property_name: string, imm: int 
     return -1, false;
 }
 
+generate_stack_trace :: (vm: *Vm, current_function: *Bytecode_Function, current_pc: *Instruction) {
+    builder: String_Builder;
+    init_string_builder(*builder);
+
+    append_stack_frame(vm, *builder, current_function, current_pc);
+
+    for i: 0 .. vm.call_frames.count - 1 {
+        index := vm.call_frames.count - 1 - i;
+        frame := vm.call_frames[index];
+        append_stack_frame(vm, *builder, frame.function, frame.pc_pointer);
+    }
+
+    vm.stack_trace = builder_to_string(*builder);
+}
+
+get_stack_trace_string :: (vm: *Vm) -> string {
+    builder: String_Builder;
+    init_string_builder(*builder);
+
+    if vm.current_function {
+        append_stack_frame(vm, *builder, vm.current_function, vm.current_pc);
+    }
+
+    for i: 0 .. vm.call_frames.count - 1 {
+        index := vm.call_frames.count - 1 - i;
+        frame := vm.call_frames[index];
+        append_stack_frame(vm, *builder, frame.function, frame.pc_pointer);
+    }
+
+    return builder_to_string(*builder);
+}
+
+append_stack_frame :: (vm: *Vm, builder: *String_Builder, function: *Bytecode_Function, pc: *Instruction) {
+    name := function.name;
+    if !name name = "<anonymous>";
+
+    line: u32 = 0;
+    if pc {
+        instruction := pc - 1;
+        line = instruction.line;
+    }
+
+    print_to_builder(builder, "    at % (line %)\n", name, line);
+}
+
 Microtask :: struct {
     callback: Value;
     arg:      Value;
@@ -2925,7 +2981,7 @@ Vm :: struct {
     root_shape:    *Shape;
 
     union {
-        builtin_prototypes: [7] *Gc_Object;
+        builtin_prototypes: [8] *Gc_Object;
         struct {
             object_prototype:  *Gc_Object;
             number_prototype:  *Gc_Object;
@@ -2934,6 +2990,7 @@ Vm :: struct {
             boolean_prototype: *Gc_Object;
             date_prototype:    *Gc_Object;
             uint8_array_prototype: *Gc_Object;
+            error_prototype:   *Gc_Object;
         };
     };
 
@@ -2966,6 +3023,9 @@ Vm :: struct {
     try_context_stack: [..] Try_Context;
     call_stack:        [..] *Environment;
     call_frames:        [..] Call_Frame;
+
+    current_function: *Bytecode_Function;
+    current_pc:       *Instruction;
 }
 
 throw_exception :: (vm: *Vm, value: Value) {
@@ -2974,8 +3034,21 @@ throw_exception :: (vm: *Vm, value: Value) {
 }
 
 throw_exception :: (vm: *Vm, message: string) {
-    vm.exception = .{ type = .STRING, s = message };
+    stack_trace := get_stack_trace_string(vm);
+
+    error_object := allocate_object(vm);
+    error_object.prototype = vm.error_prototype;
+
+    message_value := Value.{ type = .STRING, s = message };
+    set_object_property(vm, error_object, "message", message_value);
+
+    stack_value := Value.{ type = .STRING, s = stack_trace };
+    set_object_property(vm, error_object, "stack", stack_value);
+
+    vm.exception = .{ type = .OBJECT, object = error_object };
     vm.has_exception = true;
+    vm.has_stack_trace = true;
+    vm.stack_trace = stack_trace;
 }
 
 Profiler :: struct {
@@ -3098,31 +3171,3 @@ maximum_value:           float64 = #run -1.0 / zero_value_for_division;
 positive_infinity_value         := #run  1.0 / zero_value_for_division;
 negative_infinity_value         := #run -1.0 / zero_value_for_division;
 not_a_number_value              := #run  0.0 / zero_value_for_division;
-
-generate_stack_trace :: (vm: *Vm, current_function: *Bytecode_Function, current_pc: *Instruction) {
-    builder: String_Builder;
-    init_string_builder(*builder);
-
-    append_stack_frame(vm, *builder, current_function, current_pc);
-
-    for i: 0 .. vm.call_frames.count - 1 {
-        index := vm.call_frames.count - 1 - i;
-        frame := vm.call_frames[index];
-        append_stack_frame(vm, *builder, frame.function, frame.pc_pointer);
-    }
-
-    vm.stack_trace = builder_to_string(*builder);
-}
-
-append_stack_frame :: (vm: *Vm, builder: *String_Builder, function: *Bytecode_Function, pc: *Instruction) {
-    name := function.name;
-    if !name name = "<anonymous>";
-
-    line: u32 = 0;
-    if pc {
-        instruction := pc - 1;
-        line = instruction.line;
-    }
-
-    print_to_builder(builder, "    at % (line %)\n", name, line);
-}

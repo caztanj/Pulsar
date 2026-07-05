@@ -6,7 +6,8 @@ test_fetch :: () {
         JS
 
         run_test(code);
-        expect_global("error", .STRING, "Permission denied: Requires NETWORK permission.");
+
+        expect_object_property(context.vm, get_global(context.vm, "error"), "message", .STRING, "Permission denied: Requires NETWORK permission.");
     });
 
     test("fetch successful request", () => {

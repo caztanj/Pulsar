@@ -11,6 +11,7 @@ main :: () {
         test_closures,
         test_date,
         test_destructuring,
+        test_error,
         test_exceptions,
         test_fetch,
         test_file,
@@ -87,6 +88,36 @@ expect_property_exists :: (object: *Gc_Object, property_name: string, loc := #ca
     }
 }
 
+expect_object_property :: (vm: *Vm, value: Value, property_name: string, $type: Value_Type, to_be: $T, loc := #caller_location) {
+    if value.type != .OBJECT {
+        has_error = true;
+        log_error("[%]: expect_object_property() - not an object %", context.test_name, loc);
+        return;
+    }
+
+    found, property_value := lookup_property(vm, value.object, property_name);
+    if !found {
+        has_error = true;
+        log_error("[%]: expect_object_property() - property '%' not found %", context.test_name, property_name, loc);
+        return;
+    }
+
+    expected := to_value(type, to_be);
+
+    #if T == *void {
+        if property_value.type != expected.type {
+            has_error = true;
+            log_error("[%]: expect_object_property(%, .%, %) - expected .%, got .% %", context.test_name, property_name, type, to_be, expected.type, property_value.type, loc);
+        }
+        return;
+    }
+
+    if !values_strict_equal(property_value, expected) {
+        has_error = true;
+        log_error("[%]: expect_object_property(%, .%, %) - got incorrect value %", context.test_name, property_name, type, to_be, loc);
+    }
+}
+
 expect_not_null :: (ptr: *$T, loc := #caller_location) {
     if ptr == null {
         has_error = true;
@@ -115,10 +146,10 @@ expect_false :: (actual: bool, loc := #caller_location) {
     }
 }
 
-expect_type :: (val: Value, expected: Value_Type, loc := #caller_location) {
-    if val.type != expected {
+expect_type :: (value: Value, expected: Value_Type, loc := #caller_location) {
+    if value.type != expected {
         has_error = true;
-        log_error("[%]: expect_type() - expected .%, got .% %", context.test_name, expected, val.type, loc);
+        log_error("[%]: expect_type() - expected .%, got .% %", context.test_name, expected, value.type, loc);
     }
 }
 
@@ -323,6 +354,7 @@ has_error := false;
 #load "extensions/array.jai";
 #load "extensions/boolean.jai";
 #load "extensions/date.jai";
+#load "extensions/error.jai";
 #load "extensions/fetch.jai";
 #load "extensions/file.jai";
 #load "extensions/global_this.jai";

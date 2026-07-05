@@ -104,6 +104,7 @@ Permission :: enum_flags {
 #load "extensions/string.jai";
 #load "extensions/uint8_array.jai";
 #load "extensions/timer.jai";
+#load "extensions/error.jai";
 
 #scope_module
 
