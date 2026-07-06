@@ -1310,8 +1310,25 @@ emit_statement :: (generator: *Bytecode_Generator, node: *Ast_Node) {
         case .TRY_STATEMENT;
             try_statement := cast(*Ast_Try_Statement) node;
 
+            has_exception_register: u8;
+            exception_value_register: u8;
+            finally_try_context_index: int = -1;
+
+            if try_statement.finally_block {
+                has_exception_register = generator.next_register; generator.next_register += 1;
+                exception_value_register = generator.next_register; generator.next_register += 1;
+
+                false_value := Value.{ type = .BOOLEAN, boolean = false };
+                load_const(generator, has_exception_register, false_value);
+
+                finally_try_context_index = generator.current_function.instructions.count;
+                try_context_instruction := Instruction.{ op_code = .TRY_CONTEXT, arg1 = exception_value_register };
+                array_add(*generator.current_function.instructions, try_context_instruction);
+            }
+
             catch_pc := -1;
             catch_register: u8 = 255;
+            jump_over_catch_index := -1;
 
             if try_statement.catch_block {
                 try_context_index := generator.current_function.instructions.count;
@@ -1324,11 +1341,9 @@ emit_statement :: (generator: *Bytecode_Generator, node: *Ast_Node) {
 
                 if try_statement.catch_parameter {
                     catch_register = generator.next_register;
-
                     generator.next_register += 1;
 
                     array_add(*generator.locals, try_statement.catch_parameter.name);
-
                     if generator.locals.count > generator.current_function.locals_count generator.current_function.locals_count = generator.locals.count;
                 }
 
@@ -1337,17 +1352,13 @@ emit_statement :: (generator: *Bytecode_Generator, node: *Ast_Node) {
                 pop_instruction := Instruction.{
                     op_code = .POP_TRY_CONTEXT,
                 };
-
                 array_add(*generator.current_function.instructions, pop_instruction);
 
                 jump_over_catch_instruction := Instruction.{ op_code = .JUMP };
-
-                jump_over_catch_index := generator.current_function.instructions.count;
-
+                jump_over_catch_index = generator.current_function.instructions.count;
                 array_add(*generator.current_function.instructions, jump_over_catch_instruction);
 
                 catch_pc = generator.current_function.instructions.count;
-
                 generator.current_function.instructions[try_context_index].imm = cast(s32) catch_pc;
                 generator.current_function.instructions[try_context_index].arg1 = catch_register;
 
@@ -1361,7 +1372,28 @@ emit_statement :: (generator: *Bytecode_Generator, node: *Ast_Node) {
             }
 
             if try_statement.finally_block {
+                array_add(*generator.current_function.instructions, Instruction.{ op_code = .POP_TRY_CONTEXT });
+
+                jump_to_finally_index := generator.current_function.instructions.count;
+                array_add(*generator.current_function.instructions, Instruction.{ op_code = .JUMP });
+
+                finally_stub_pc := generator.current_function.instructions.count;
+                generator.current_function.instructions[finally_try_context_index].imm = cast(s32) finally_stub_pc;
+
+                true_value := Value.{ type = .BOOLEAN, boolean = true };
+                load_const(generator, has_exception_register, true_value);
+
+                finally_block_pc := generator.current_function.instructions.count;
+                generator.current_function.instructions[jump_to_finally_index].imm = cast(s32) finally_block_pc;
+
                 emit_statement(generator, cast(*Ast_Node) try_statement.finally_block);
+
+                jump_if_false_index := generator.current_function.instructions.count;
+                array_add(*generator.current_function.instructions, Instruction.{ op_code = .JUMP_IF_FALSE, arg1 = has_exception_register });
+
+                array_add(*generator.current_function.instructions, Instruction.{ op_code = .THROW, arg1 = exception_value_register });
+
+                generator.current_function.instructions[jump_if_false_index].imm = cast(s32) generator.current_function.instructions.count;
             }
 
         case .SWITCH_STATEMENT;
