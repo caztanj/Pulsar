@@ -574,7 +574,7 @@ collect_garbage_major :: (vm: *Vm) {
     sweep_environments(vm, true);
 }
 
-run_bytecode :: (program: *Bytecode_Program, profile := false, permissions: Permission = 0) -> *Vm {
+run_bytecode :: (program: *Bytecode_Program, profile := false, permissions: Permission = 0, execute_main_function := true) -> *Vm {
     vm := New(Vm);
 
     vm.program     = program;
@@ -598,7 +598,9 @@ run_bytecode :: (program: *Bytecode_Program, profile := false, permissions: Perm
 
     init_common_vm_globals(vm);
 
-    execute_main(vm, program);
+    if execute_main_function {
+        execute_main(vm, program);
+    }
 
     return vm;
 }

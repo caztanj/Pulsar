@@ -820,6 +820,7 @@ get_precedence :: (op: string) -> int {
 
 parse_postfix :: (parser: *Parser, allow_calls: bool = true) -> *Ast_Node {
     left := parse_primary(parser);
+    if !left return null;
 
     while true {
         skip_whitespace_and_comments(parser);

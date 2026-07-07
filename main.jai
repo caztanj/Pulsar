@@ -4,6 +4,15 @@ main :: () {
     success, args, is_set, free_args := parse_arguments(Arguments);
     if !success exit(EXIT_CODE_INVALID_ARGUMENTS);
 
+    permissions: Permission;
+    if args.network    permissions |= .NETWORK;
+    if args.filesystem permissions |= .FILESYSTEM;
+
+    if args.repl {
+        run_repl(permissions);
+        exit(EXIT_CODE_SUCCESS);
+    }
+
     if free_args.count != 1 {
         log_error("Usage: Pulsar [options] <file.js>");
         exit(EXIT_CODE_INVALID_ARGUMENTS);
@@ -29,10 +38,6 @@ main :: () {
     bytecode := generate_bytecode(ast);
     optimize_bytecode(bytecode);
 
-    permissions: Permission;
-    if args.network    permissions |= .NETWORK;
-    if args.filesystem permissions |= .FILESYSTEM;
-
     vm := run_bytecode(bytecode, false, permissions = permissions);
 
     if vm.has_exception {
@@ -57,6 +62,8 @@ main :: () {
 Arguments :: struct {
     network:    bool;
     filesystem: bool;
+
+    repl:       bool;
 }
 
 EXIT_CODE_SUCCESS            :: 0;
@@ -65,6 +72,14 @@ EXIT_CODE_FILE_NOT_FOUND     :: 2;
 EXIT_CODE_JS_ERROR           :: 3;
 
 DEBUG_MEMORY :: false;
+
+#if OS == .WINDOWS {
+    Windows :: #import "Windows";
+} else {
+    POSIX :: #import "POSIX";
+}
+
+#load "repl.jai";
 
 #import "Basic" () (MEMORY_DEBUGGER = DEBUG_MEMORY, TEMP_ALLOCATOR_OVERWRITE_MEMORY = false);
 #import "Command_Line";
