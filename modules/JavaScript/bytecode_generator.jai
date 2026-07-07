@@ -369,6 +369,7 @@ generate_bytecode :: (ast: *Ast_Program, program: *Bytecode_Program = null) -> *
         array_add(*generator.program.globals, "Set");
         array_add(*generator.program.globals, "HttpServer");
         array_add(*generator.program.globals, "fetch");
+        array_add(*generator.program.globals, "RegExp");
     }
 
     main_function: *Bytecode_Function;

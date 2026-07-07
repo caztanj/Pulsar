@@ -555,6 +555,8 @@ collect_garbage_major :: (vm: *Vm) {
                     gc_array_reset(*unreachable.promise_then_callbacks);
                 } else if unreachable.kind == .GENERATOR || unreachable.kind == .ASYNC_EXECUTION {
                     gc_array_reset(*unreachable.generator_registers);
+                } else if unreachable.kind == .REGEXP {
+                    Uniform.uninit(*unreachable.regexp);
                 }
 
                 unreachable.next   = vm.gc.object_pool;
@@ -1890,7 +1892,7 @@ execute_function_internal :: (vm: *Vm, initial_function: *Bytecode_Function, ini
                             entry := Module_Entry.{
                                 path    = copy_string(source_path),
                                 exports = module_exports,
-                            
+
                             };
                             array_add(*vm.loaded_modules, entry);
 
@@ -2425,6 +2427,7 @@ init_common_vm_globals :: (vm: *Vm) {
     init_vm_uint8_array(vm);
     init_vm_timer(vm);
     init_vm_error(vm);
+    init_vm_regexp(vm);
 }
 
 init_vm_core :: (vm: *Vm) {
@@ -3089,7 +3092,7 @@ Vm :: struct {
     root_shape:    *Shape;
 
     union {
-        builtin_prototypes: [8] *Gc_Object;
+        builtin_prototypes: [9] *Gc_Object;
         struct {
             object_prototype:  *Gc_Object;
             number_prototype:  *Gc_Object;
@@ -3099,6 +3102,7 @@ Vm :: struct {
             date_prototype:    *Gc_Object;
             uint8_array_prototype: *Gc_Object;
             error_prototype:   *Gc_Object;
+            regexp_prototype:  *Gc_Object;
         };
     };
 
@@ -3202,6 +3206,7 @@ Gc_Object_Kind :: enum u8 {
     NUMBER_WRAPPER;
     STRING_WRAPPER;
     UINT8_ARRAY;
+    REGEXP;
 }
 
 Shape :: struct {
@@ -3251,6 +3256,8 @@ Gc_Object :: struct {
             generator_func:      *Bytecode_Function;
             generator_closed:    bool;
         };
+
+        regexp: Uniform.Regexp;
     };
 }
 

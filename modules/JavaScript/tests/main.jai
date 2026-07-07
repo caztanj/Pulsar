@@ -38,6 +38,7 @@ main :: () {
         test_spread,
         test_string,
         test_switch,
+        test_regexp,
         test_template_literals,
         test_uint8_array,
         test_vm_basic,
@@ -369,6 +370,7 @@ has_error := false;
 #load "extensions/set.jai";
 #load "extensions/string.jai";
 #load "extensions/uint8_array.jai";
+#load "extensions/regexp.jai";
 
 #import "Basic" () (MEMORY_DEBUGGER = DEBUG_MEMORY, TEMP_ALLOCATOR_OVERWRITE_MEMORY = false);
 #import "File";
@@ -376,3 +378,6 @@ has_error := false;
 #import "String";
 
 #import,file "../module.jai";
+#import,dir "../../Http_Server";
+
+Uniform :: #import,dir "../../Uniform";

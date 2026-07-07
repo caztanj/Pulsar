@@ -106,6 +106,7 @@ Permission :: enum_flags {
 #load "extensions/uint8_array.jai";
 #load "extensions/timer.jai";
 #load "extensions/error.jai";
+#load "extensions/regexp.jai";
 
 #scope_module
 
@@ -121,3 +122,5 @@ Permission :: enum_flags {
 
 #import,dir "../Http_Server";
 #import,dir "../Http_Client";
+
+Uniform :: #import,dir "../Uniform";
