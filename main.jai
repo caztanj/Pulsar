@@ -35,8 +35,18 @@ main :: () {
     ast := build_ast(code, tokens,, temp);
     optimize_ast(ast);
 
+    if args.print_ast {
+        print("AST:\n%\n\n", ast.*);
+    }
+
     bytecode := generate_bytecode(ast);
     optimize_bytecode(bytecode);
+
+    if args.print_bytecode {
+        print("Bytecode:\n");
+        print(bytecode);
+        print("\n");
+    }
 
     vm := run_bytecode(bytecode, false, permissions = permissions);
 
@@ -62,6 +72,9 @@ main :: () {
 Arguments :: struct {
     network:    bool;
     filesystem: bool;
+
+    print_ast:      bool;
+    print_bytecode: bool;
 
     repl:       bool;
 }

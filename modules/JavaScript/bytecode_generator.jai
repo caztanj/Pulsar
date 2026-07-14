@@ -133,6 +133,7 @@ print :: (program: *Bytecode_Program) {
                 case .ARRAY_APPEND;       print(" ARRAY_APPEND       arg1: R%, arg2: R%", instruction.arg1, instruction.arg2);
                 case .NEW_CALL_APPLY;     print(" NEW_CALL_APPLY     dest: R%, callee: R%, args_array: R%", instruction.dest, instruction.arg1, instruction.arg2);
                 case .CALL_APPLY;         print(" CALL_APPLY         dest: R%, callee: R%, this: R%, args_array: R% (imm)", instruction.dest, instruction.arg1, instruction.arg2, instruction.imm);
+                case .DYNAMIC_IMPORT;     print(" DYNAMIC_IMPORT     dest: R%, arg1: R%", instruction.dest, instruction.arg1);
             }
 
             print("\n");
