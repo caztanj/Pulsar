@@ -20,6 +20,9 @@ print :: (vm: *Vm, this: Value, arguments: [] Value, is_new: bool = false) -> Va
             case .NATIVE_FUNCTION; print("[object NativeFunction]");
             case .STRING;          print("%", it.s);
             case .GENERATOR;       print("[object Generator]");
+            case .SYMBOL;
+                if it.symbol_object.primitive_value.type == .STRING print("Symbol(%)", it.symbol_object.primitive_value.s);
+                else print("Symbol()");
         }
 
         if it_index < arguments.count - 1 print(" ");

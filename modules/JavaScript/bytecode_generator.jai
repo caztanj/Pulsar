@@ -3127,6 +3127,7 @@ operator == :: (a: Value, b: Value) -> bool {
         case .NATIVE_FUNCTION; return a.native_function      == b.native_function;
         case .STRING;          return a.s                    == b.s;
         case .GENERATOR;       return a.generator_object     == b.generator_object;
+        case .SYMBOL;          return a.symbol_object        == b.symbol_object;
     }
 }
 
@@ -3290,6 +3291,7 @@ Value_Type :: enum u8 {
     NATIVE_FUNCTION;
     STRING;
     GENERATOR;
+    SYMBOL;
 }
 
 Function :: struct {
@@ -3309,6 +3311,7 @@ Value :: struct {
         .FUNCTION        ,, function:         Function;
         .GENERATOR       ,, generator_object: *Gc_Object;
         .NATIVE_FUNCTION ,, native_function:  Native_Function;
+        .SYMBOL          ,, symbol_object:    *Gc_Object;
     }
 }
 

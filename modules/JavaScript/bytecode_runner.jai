@@ -1665,6 +1665,7 @@ execute_function_internal :: (vm: *Vm, initial_function: *Bytecode_Function, ini
                         case .OBJECT;          type_name = "object";
                         case .ARRAY;           type_name = "object";
                         case .GENERATOR;       type_name = "object";
+                        case .SYMBOL;          type_name = "symbol";
                     }
 
                     registers_data[instruction.dest].type = .STRING;
@@ -2483,6 +2484,7 @@ init_common_vm_globals :: (vm: *Vm) {
     init_vm_timer(vm);
     init_vm_error(vm);
     init_vm_regexp(vm);
+    init_vm_symbol(vm);
 }
 
 init_vm_core :: (vm: *Vm) {
@@ -2649,6 +2651,12 @@ value_to_string :: (vm: *Vm, value: Value) -> string {
         case .STRING;    return value.s;
         case .NUMBER;    return tprint("%", value.number);
         case .BOOLEAN;   return ifx value.boolean "true" else "false";
+        case .SYMBOL;
+            if value.symbol_object.primitive_value.type == .STRING {
+                return tprint("Symbol(%)", value.symbol_object.primitive_value.s);
+            } else {
+                return "Symbol()";
+            }
 
         case .OBJECT;
             if value.object.kind == .PROMISE         return "[object Promise]";
@@ -2777,6 +2785,7 @@ values_strict_equal :: (a: Value, b: Value) -> bool {
         case .NATIVE_FUNCTION; return a.native_function      == b.native_function;
         case .STRING;          return a.s                    == b.s;
         case .GENERATOR;       return a.generator_object     == b.generator_object;
+        case .SYMBOL;          return a.symbol_object        == b.symbol_object;
     }
 
     return false;
@@ -2794,6 +2803,7 @@ is_truthy :: (value: Value) -> bool {
         case .NATIVE_FUNCTION; return true;
         case .STRING;          return value.s.count > 0;
         case .GENERATOR;       return true;
+        case .SYMBOL;          return true;
     }
 
     return false;
@@ -3147,7 +3157,7 @@ Vm :: struct {
     root_shape:    *Shape;
 
     union {
-        builtin_prototypes: [9] *Gc_Object;
+        builtin_prototypes: [10] *Gc_Object;
         struct {
             object_prototype:  *Gc_Object;
             number_prototype:  *Gc_Object;
@@ -3158,6 +3168,7 @@ Vm :: struct {
             uint8_array_prototype: *Gc_Object;
             error_prototype:   *Gc_Object;
             regexp_prototype:  *Gc_Object;
+            symbol_prototype:  *Gc_Object;
         };
     };
 
@@ -3262,6 +3273,7 @@ Gc_Object_Kind :: enum u8 {
     STRING_WRAPPER;
     UINT8_ARRAY;
     REGEXP;
+    SYMBOL;
 }
 
 Shape :: struct {
