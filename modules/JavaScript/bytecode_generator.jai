@@ -112,6 +112,7 @@ print :: (program: *Bytecode_Program) {
                 case .POP_TRY_CONTEXT;    print(" POP_TRY_CONTEXT");
                 case .ITERATOR_NEXT;      print(" ITERATOR_NEXT      dest: R%, arg1: R%, imm: % (jump_target)", instruction.dest, instruction.arg1, instruction.imm);
                 case .ITERATOR_CLOSE;     print(" ITERATOR_CLOSE     arg1: R%", instruction.arg1);
+                case .GET_KEYS;           print(" GET_KEYS           dest: R%, arg1: R%", instruction.dest, instruction.arg1);
                 case .COMPUTED_SET;       print(" COMPUTED_SET       dest: R% (obj), arg1: R% (prop), arg2: R% (val)", instruction.dest, instruction.arg1, instruction.arg2);
                 case .EXPONENTIATION;     print(" EXPONENTIATION     dest: R%, arg1: R%, arg2: R%", instruction.dest, instruction.arg1, instruction.arg2);
                 case .JUMP_IF_NOT_NULLISH; print(" JUMP_IF_NOT_NULLISH arg1: R%, imm: %", instruction.arg1, instruction.imm);
@@ -295,6 +296,13 @@ collect_globals :: (generator: *Bytecode_Generator, node: *Ast_Node) {
             collect_globals(generator, for_of_statement.left);
             collect_globals(generator, for_of_statement.right);
             collect_globals(generator, for_of_statement.body);
+
+        case .FOR_IN_STATEMENT;
+            for_in_statement := cast(*Ast_For_In_Statement) node;
+
+            collect_globals(generator, for_in_statement.left);
+            collect_globals(generator, for_in_statement.right);
+            collect_globals(generator, for_in_statement.body);
 
         case .BREAK_STATEMENT;
         case .CONTINUE_STATEMENT;
@@ -1102,6 +1110,83 @@ emit_statement :: (generator: *Bytecode_Generator, node: *Ast_Node) {
             };
 
             array_add(*generator.current_function.instructions, close_instruction);
+
+        case .FOR_IN_STATEMENT;
+            for_in_statement := cast(*Ast_For_In_Statement) node;
+
+            object_register := emit_expression(generator, for_in_statement.right);
+
+            iterable_register := generator.next_register;
+            generator.next_register += 1;
+
+            get_keys_instruction := Instruction.{
+                op_code = .GET_KEYS,
+                dest    = iterable_register,
+                arg1    = object_register,
+            };
+
+            array_add(*generator.current_function.instructions, get_keys_instruction);
+
+            value_register := generator.next_register;
+            generator.next_register += 1;
+
+            loop_start_pc := generator.current_function.instructions.count;
+
+            loop_context := Loop_Context.{
+                continue_jumps.allocator = temp,
+                break_jumps.allocator    = temp,
+                continue_target          = loop_start_pc,
+            };
+
+            array_add(*generator.loop_stack, loop_context);
+
+            next_instruction := Instruction.{
+                op_code = .ITERATOR_NEXT,
+                dest    = value_register,
+                arg1    = iterable_register,
+            };
+
+            next_instruction_index := generator.current_function.instructions.count;
+
+            array_add(*generator.current_function.instructions, next_instruction);
+
+            if for_in_statement.left.kind == .VARIABLE_DECLARATION {
+                variable_declaration := cast(*Ast_Variable_Declaration) for_in_statement.left;
+                if variable_declaration.declarations.count > 0 emit_store(generator, variable_declaration.declarations[0].identifier, value_register);
+            } else {
+                emit_store(generator, for_in_statement.left, value_register);
+            }
+
+            emit_statement(generator, for_in_statement.body);
+
+            jump_back_instruction := Instruction.{
+                op_code = .JUMP,
+                imm     = cast(s32) loop_start_pc,
+            };
+
+            array_add(*generator.current_function.instructions, jump_back_instruction);
+
+            end_pc := generator.current_function.instructions.count;
+
+            generator.current_function.instructions[next_instruction_index].imm = cast(s32) end_pc;
+
+            loop_context_finished := generator.loop_stack[generator.loop_stack.count - 1];
+
+            generator.loop_stack.count -= 1;
+
+            for loop_context_finished.break_jumps    generator.current_function.instructions[it].imm = cast(s32) end_pc;
+            for loop_context_finished.continue_jumps generator.current_function.instructions[it].imm = cast(s32) loop_start_pc;
+
+            array_reset(*loop_context_finished.break_jumps);
+            array_reset(*loop_context_finished.continue_jumps);
+
+            close_instruction := Instruction.{
+                op_code = .ITERATOR_CLOSE,
+                arg1    = iterable_register,
+            };
+
+            array_add(*generator.current_function.instructions, close_instruction);
+
 
         case .THROW_STATEMENT;
             throw_statement := cast(*Ast_Throw_Statement) node;
@@ -2512,6 +2597,7 @@ emit_expression :: (generator: *Bytecode_Generator, node: *Ast_Node, force_new_r
         case .EXPORT_STATEMENT;
         case .TRY_STATEMENT;
         case .FOR_OF_STATEMENT;
+        case .FOR_IN_STATEMENT;
         case .BREAK_STATEMENT;
         case .CONTINUE_STATEMENT;
         case .SWITCH_STATEMENT;
@@ -3097,6 +3183,7 @@ Op_Code :: enum u8 {
     POP_TRY_CONTEXT;
     ITERATOR_NEXT;
     ITERATOR_CLOSE;
+    GET_KEYS;
     COMPUTED_SET;
     EXPONENTIATION;
     JUMP_IF_NOT_NULLISH;

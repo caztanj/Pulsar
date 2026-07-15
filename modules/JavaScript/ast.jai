@@ -316,6 +316,7 @@ parse_for_statement :: (parser: *Parser) -> *Ast_Node {
     skip_whitespace_and_comments(parser);
 
     is_for_of := false;
+    is_for_in := false;
     token     := peek(parser);
 
     if token.type == .IDENTIFIER && (token.text == "let" || token.text == "const" || token.text == "var") {
@@ -344,6 +345,8 @@ parse_for_statement :: (parser: *Parser) -> *Ast_Node {
 
             if peek(parser).type == .IDENTIFIER && peek(parser).text == "of" {
                 is_for_of = true;
+            } else if peek(parser).type == .IDENTIFIER && peek(parser).text == "in" {
+                is_for_in = true;
             }
         }
     } else if token.type == .IDENTIFIER || (token.type == .PUNCTUATION && (token.text == "[" || token.text == "{")) {
@@ -366,14 +369,24 @@ parse_for_statement :: (parser: *Parser) -> *Ast_Node {
 
         if peek(parser).type == .IDENTIFIER && peek(parser).text == "of" {
             is_for_of = true;
+        } else if peek(parser).type == .IDENTIFIER && peek(parser).text == "in" {
+            is_for_in = true;
         }
     }
 
     parser.current = old_current;
 
-    if is_for_of {
-        node := new_node(parser, Ast_For_Of_Statement);
-        node.kind = .FOR_OF_STATEMENT;
+    if is_for_of || is_for_in {
+        node_kind := ifx is_for_of then Ast_Kind.FOR_OF_STATEMENT else Ast_Kind.FOR_IN_STATEMENT;
+
+        node: *Ast_Node;
+        if is_for_of {
+            node = xx new_node(parser, Ast_For_Of_Statement);
+        } else {
+            node = xx new_node(parser, Ast_For_In_Statement);
+        }
+
+        node.kind = node_kind;
         node.line = start_token.line;
         node.column = start_token.column;
 
@@ -403,21 +416,41 @@ parse_for_statement :: (parser: *Parser) -> *Ast_Node {
             }
             array_add(*decl.declarations, declarator);
 
-            node.left = xx decl;
+            if is_for_of {
+                (cast(*Ast_For_Of_Statement) node).left = xx decl;
+            } else {
+                (cast(*Ast_For_In_Statement) node).left = xx decl;
+            }
         } else {
-            node.left = parse_expression(parser);
+            left_expr := parse_expression(parser);
+            if is_for_of {
+                (cast(*Ast_For_Of_Statement) node).left = left_expr;
+            } else {
+                (cast(*Ast_For_In_Statement) node).left = left_expr;
+            }
         }
 
         skip_whitespace_and_comments(parser);
-        consume(parser, "of");
+        if is_for_of consume(parser, "of");
+        else         consume(parser, "in");
 
-        node.right = parse_expression(parser);
+        right_expr := parse_expression(parser);
+        if is_for_of {
+            (cast(*Ast_For_Of_Statement) node).right = right_expr;
+        } else {
+            (cast(*Ast_For_In_Statement) node).right = right_expr;
+        }
 
         consume(parser, ")");
 
         skip_whitespace_and_comments(parser);
 
-        node.body = parse_statement(parser);
+        body_expr := parse_statement(parser);
+        if is_for_of {
+            (cast(*Ast_For_Of_Statement) node).body = body_expr;
+        } else {
+            (cast(*Ast_For_In_Statement) node).body = body_expr;
+        }
 
         return xx node;
     }
@@ -2077,6 +2110,7 @@ Ast_Kind :: enum {
     EXPORT_STATEMENT;
     TRY_STATEMENT;
     FOR_OF_STATEMENT;
+    FOR_IN_STATEMENT;
     BREAK_STATEMENT;
     CONTINUE_STATEMENT;
     UPDATE_EXPRESSION;
@@ -2161,6 +2195,14 @@ Ast_For_Statement :: struct {
 }
 
 Ast_For_Of_Statement :: struct {
+    using base: Ast_Node;
+
+    left:  *Ast_Node;
+    right: *Ast_Node;
+    body:  *Ast_Node;
+}
+
+Ast_For_In_Statement :: struct {
     using base: Ast_Node;
 
     left:  *Ast_Node;

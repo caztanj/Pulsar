@@ -128,4 +128,29 @@ test_loops :: () {
         run_test(code);
         expect_global("x", .NUMBER, 3);
     });
+    test(() => {
+        code := #string JS
+            let keys = "";
+            let obj = { a: 1, b: 2 };
+            for (let k in obj) {
+                keys = keys + k;
+            }
+        JS
+
+        run_test(code);
+        expect_global("keys", .STRING, "ab");
+    });
+
+    test(() => {
+        code := #string JS
+            let keys = "";
+            let obj = [10, 20];
+            for (let k in obj) {
+                keys = keys + k;
+            }
+        JS
+
+        run_test(code);
+        expect_global("keys", .STRING, "01");
+    });
 }

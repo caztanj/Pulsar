@@ -1954,6 +1954,61 @@ execute_function_internal :: (vm: *Vm, initial_function: *Bytecode_Function, ini
                 case .POP_TRY_CONTEXT;
                     if try_stack.count > initial_try_count try_stack.count -= 1;
 
+                case .GET_KEYS;
+                    argument := registers_data[instruction.arg1];
+
+                    result := allocate_object(vm);
+                    result.kind      = .ARRAY;
+                    result.prototype = vm.array_prototype;
+
+                    if argument.type == .OBJECT || argument.type == .ARRAY || argument.type == .STRING {
+                        seen_keys: Table(string, bool);
+                        init(*seen_keys,, allocator = temp);
+
+                        if argument.type == .STRING {
+                            for 0..argument.s.count-1 {
+                                key := copy_string(tprint("%", it));
+                                value := Value.{ type = .STRING, s = key };
+                                array_add(*result.elements, value);
+                                table_add(*seen_keys, key, true);
+                            }
+                        }
+
+                        if argument.type == .OBJECT || argument.type == .ARRAY {
+                            object := argument.object;
+                            while object {
+                                for object.elements {
+                                    if it.type == .UNDEFINED continue;
+                                    key := copy_string(tprint("%", it_index));
+                                    if !table_contains(*seen_keys, key) {
+                                        value := Value.{ type = .STRING, s = key };
+                                        array_add(*result.elements, value);
+                                        table_add(*seen_keys, key, true);
+                                    }
+                                }
+
+                                if object.shape {
+                                    for object.shape.property_names {
+                                        offset_pointer := table_find_pointer(*object.shape.property_offsets, it);
+
+                                        if !offset_pointer || offset_pointer.* >= object.fields.count continue;
+                                        if object.fields[offset_pointer.*].type == .UNDEFINED         continue;
+
+                                        if !table_contains(*seen_keys, it) {
+                                            value := Value.{ type = .STRING, s = it };
+                                            array_add(*result.elements, value);
+                                            table_add(*seen_keys, it, true);
+                                        }
+                                    }
+                                }
+
+                                object = object.prototype;
+                            }
+                        }
+                    }
+
+                    registers_data[instruction.dest] = .{ type = .OBJECT, object = result };
+
                 case .ITERATOR_NEXT;
                     iterable := *registers_data[instruction.arg1];
 

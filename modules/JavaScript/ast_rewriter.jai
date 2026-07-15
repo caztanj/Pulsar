@@ -234,6 +234,13 @@ optimize_node :: (node: *Ast_Node) -> *Ast_Node {
             optimize_field(*for_of_statement.right);
             optimize_field(*for_of_statement.body);
 
+        case .FOR_IN_STATEMENT;
+            for_in_statement := cast(*Ast_For_In_Statement) node;
+
+            optimize_field(*for_in_statement.left);
+            optimize_field(*for_in_statement.right);
+            optimize_field(*for_in_statement.body);
+
         case .EXPORT_STATEMENT;
             export_statement := cast(*Ast_Export_Statement) node;
             optimize_field(*export_statement.declaration);
