@@ -351,6 +351,11 @@ collect_globals :: (generator: *Bytecode_Generator, node: *Ast_Node) {
 
 generate_bytecode :: (ast: *Ast_Program, program: *Bytecode_Program = null) -> *Bytecode_Program {
     generator: Bytecode_Generator;
+    generator.function_scope = New(Lexical_Scope,, temp);
+    generator.function_scope.variables.allocator = temp;
+    generator.function_scope.indices.allocator = temp;
+    generator.function_scope.is_const.allocator = temp;
+    generator.current_scope = generator.function_scope;
     generator.locals.allocator = temp;
     generator.loop_stack.allocator = temp;
 
@@ -417,8 +422,12 @@ generate_bytecode :: (ast: *Ast_Program, program: *Bytecode_Program = null) -> *
 
 generate_module_bytecode :: (ast: *Ast_Program, program: *Bytecode_Program, name: string) -> *Bytecode_Function {
     generator: Bytecode_Generator;
-
-    generator.program = program;
+    generator.function_scope = New(Lexical_Scope,, temp);
+    generator.function_scope.variables.allocator = temp;
+    generator.function_scope.indices.allocator = temp;
+    generator.function_scope.is_const.allocator = temp;
+    generator.current_scope = generator.function_scope;
+    generator.program          = program;
     generator.locals.allocator = temp;
     generator.loop_stack.allocator = temp;
 
@@ -470,14 +479,21 @@ get_local_index :: (generator: *Bytecode_Generator, name: string) -> int {
 resolve_variable :: (generator: *Bytecode_Generator, name: string) -> Variable_Location {
     index := -1;
     level := 0;
+    is_const := false;
 
     current := generator;
     while current {
-        for current.locals {
-            if it == name {
-                index = it_index;
-                break;
+        scope := current.current_scope;
+        while scope {
+            for < scope.variables {
+                if it == name {
+                    index = scope.indices[it_index];
+                    is_const = scope.is_const[it_index];
+                    break;
+                }
             }
+            if index != -1 break;
+            scope = scope.parent;
         }
 
         if index != -1 break;
@@ -487,23 +503,75 @@ resolve_variable :: (generator: *Bytecode_Generator, name: string) -> Variable_L
     }
 
     if index != -1 {
-        if level == 0 return .{ .LOCAL, index, 0 };
-        else          return .{ .UPVALUE, index, level };
+        if level == 0 return .{ .LOCAL, index, 0, is_const };
+        else          return .{ .UPVALUE, index, level, is_const };
     }
 
     for generator.program.globals {
-        if it == name return .{ .GLOBAL, it_index, 0 };
+        if it == name return .{ .GLOBAL, it_index, 0, false };
     }
 
-    return .{ .NOT_FOUND, -1, 0 };
+    return .{ .NOT_FOUND, -1, 0, false };
 }
 
-store_local_or_global :: (generator: *Bytecode_Generator, name: string, register: u8) {
-    location := resolve_variable(generator, name);
-
+store_local_or_global :: (generator: *Bytecode_Generator, name: string, register: u8, is_declaration: bool, is_const: bool, is_var: bool = false) {
     instruction := Instruction.{
         arg1 = register,
     };
+
+    if is_declaration {
+        target_scope := generator.current_scope;
+        if is_var && generator.function_scope {
+            target_scope = generator.function_scope;
+        }
+        if !target_scope target_scope = generator.function_scope;
+
+        is_global := generator.current_function && (generator.current_function.flags & .TOP_LEVEL) && (target_scope == generator.function_scope);
+        if is_global {
+            index := -1;
+            for generator.program.globals {
+                if it == name {
+                    index = it_index;
+                    break;
+                }
+            }
+            if index == -1 {
+                array_add(*generator.program.globals, name);
+                index = generator.program.globals.count - 1;
+            }
+
+            instruction.op_code = .STORE_GLOBAL;
+            instruction.imm = cast(s32) index;
+            if generator.current_function {
+                emit_instruction(generator, instruction);
+            }
+            return;
+        }
+
+        array_add(*generator.locals, name);
+        index := generator.locals.count - 1;
+        
+        array_add(*target_scope.variables, name);
+        array_add(*target_scope.indices, index);
+        array_add(*target_scope.is_const, is_const);
+
+        instruction.op_code = .STORE_LOCAL;
+        instruction.imm = cast(s32) index;
+
+        if generator.current_function {
+            emit_instruction(generator, instruction);
+            if index >= generator.current_function.locals_count generator.current_function.locals_count = index + 1;
+        }
+        return;
+    }
+
+    location := resolve_variable(generator, name);
+    
+    if location.is_const {
+        generator.has_error = true;
+        generator.error_message = "Assignment to constant variable.";
+        return;
+    }
 
     if location.type == {
         case .LOCAL;
@@ -533,6 +601,12 @@ store_local_or_global :: (generator: *Bytecode_Generator, name: string, register
             } else {
                 array_add(*generator.locals, name);
                 index := generator.locals.count - 1;
+                
+                if generator.function_scope {
+                    array_add(*generator.function_scope.variables, name);
+                    array_add(*generator.function_scope.indices, index);
+                    array_add(*generator.function_scope.is_const, false);
+                }
 
                 instruction.op_code = .STORE_LOCAL;
                 instruction.imm = cast(s32) index;
@@ -559,11 +633,11 @@ load_const :: (generator: *Bytecode_Generator, register: u8, value: Value) {
     emit_instruction(generator, instruction);
 }
 
-emit_store :: (generator: *Bytecode_Generator, left: *Ast_Node, value_register: u8) {
+emit_store :: (generator: *Bytecode_Generator, left: *Ast_Node, value_register: u8, is_declaration := false, is_const := false, is_var := false) {
     if left.kind == {
         case .IDENTIFIER;
             identifier := cast(*Ast_Identifier) left;
-            store_local_or_global(generator, identifier.name, value_register);
+            store_local_or_global(generator, identifier.name, value_register, is_declaration, is_const, is_var);
 
         case .MEMBER_EXPRESSION;
             member_expression := cast(*Ast_Member_Expression) left;
@@ -692,7 +766,9 @@ emit_statement :: (generator: *Bytecode_Generator, node: *Ast_Node) {
                     load_const(generator, register, .{ type = .UNDEFINED });
                 }
 
-                emit_store(generator, it.identifier, register);
+                is_const := variable_declaration.declaration_type == "const";
+                is_var := variable_declaration.declaration_type == "var";
+                emit_store(generator, it.identifier, register, is_declaration = true, is_const = is_const, is_var = is_var);
             }
 
         case .FUNCTION_DECLARATION;
@@ -712,6 +788,9 @@ emit_statement :: (generator: *Bytecode_Generator, node: *Ast_Node) {
 
                 if !found {
                     array_add(*generator.locals, function_declaration.identifier.name);
+                    array_add(*generator.current_scope.variables, function_declaration.identifier.name);
+                    array_add(*generator.current_scope.indices, generator.locals.count - 1);
+                    array_add(*generator.current_scope.is_const, false);
 
                     if generator.locals.count > generator.current_function.locals_count {
                         generator.current_function.locals_count = generator.locals.count;
@@ -720,7 +799,14 @@ emit_statement :: (generator: *Bytecode_Generator, node: *Ast_Node) {
                 }
             }
 
+            
+            new_function_scope := New(Lexical_Scope,, temp);
+                new_function_scope.variables.allocator = temp;
+                new_function_scope.indices.allocator = temp;
+                new_function_scope.is_const.allocator = temp;
             nested_generator := Bytecode_Generator.{
+                current_scope = new_function_scope,
+                function_scope = new_function_scope,
                 program              = generator.program,
                 parent               = generator,
                 next_register        = cast(u8) function_declaration.parameters.count,
@@ -741,11 +827,17 @@ emit_statement :: (generator: *Bytecode_Generator, node: *Ast_Node) {
                     identifier := cast(*Ast_Identifier) spread.argument;
 
                     array_add(*nested_generator.locals, identifier.name);
+                    array_add(*nested_generator.function_scope.variables, identifier.name);
+                    array_add(*nested_generator.function_scope.indices, nested_generator.locals.count - 1);
+                    array_add(*nested_generator.function_scope.is_const, false);
 
                     bytecode_function.flags |= .REST_PARAMETER;
                 } else {
                     identifier := cast(*Ast_Identifier) it;
                     array_add(*nested_generator.locals, identifier.name);
+                    array_add(*nested_generator.function_scope.variables, identifier.name);
+                    array_add(*nested_generator.function_scope.indices, nested_generator.locals.count - 1);
+                    array_add(*nested_generator.function_scope.is_const, false);
                 }
             }
 
@@ -773,7 +865,7 @@ emit_statement :: (generator: *Bytecode_Generator, node: *Ast_Node) {
 
             emit_instruction(generator, instruction);
 
-            store_local_or_global(generator, function_declaration.identifier.name, register);
+            store_local_or_global(generator, function_declaration.identifier.name, register, is_global, false, false);
 
         case .RETURN_STATEMENT;
             return_statement := cast(*Ast_Return_Statement) node;
@@ -795,7 +887,17 @@ emit_statement :: (generator: *Bytecode_Generator, node: *Ast_Node) {
 
         case .BLOCK_STATEMENT;
             block_statement := cast(*Ast_Block_Statement) node;
+            
+            new_scope := New(Lexical_Scope,, temp);
+                new_scope.variables.allocator = temp;
+                new_scope.indices.allocator = temp;
+                new_scope.is_const.allocator = temp;
+            new_scope.parent = generator.current_scope;
+            generator.current_scope = new_scope;
+            
             for block_statement.body emit_statement(generator, it);
+            
+            generator.current_scope = new_scope.parent;
 
         case .IF_STATEMENT;
             if_statement := cast(*Ast_If_Statement) node;
@@ -1218,7 +1320,7 @@ emit_statement :: (generator: *Bytecode_Generator, node: *Ast_Node) {
             };
 
             if generator.current_function        array_add(*generator.current_function.instructions, instruction);
-            if import_statement.namespace_import store_local_or_global(generator, import_statement.namespace_import.name, module_register);
+            if import_statement.namespace_import store_local_or_global(generator, import_statement.namespace_import.name, module_register, true, false);
 
             if import_statement.default_import {
                 property_index := get_property_index(generator, "default");
@@ -1236,7 +1338,7 @@ emit_statement :: (generator: *Bytecode_Generator, node: *Ast_Node) {
 
                 emit_instruction(generator, get_field_instruction);
 
-                store_local_or_global(generator, import_statement.default_import.name, default_register);
+                store_local_or_global(generator, import_statement.default_import.name, default_register, true, false);
             }
 
             for import_statement.specifiers {
@@ -1255,7 +1357,7 @@ emit_statement :: (generator: *Bytecode_Generator, node: *Ast_Node) {
 
                 emit_instruction(generator, get_field_instruction);
 
-                store_local_or_global(generator, it.local.name, value_register);
+                store_local_or_global(generator, it.local.name, value_register, true, false);
             }
 
         case .EXPORT_STATEMENT;
@@ -1429,9 +1531,6 @@ emit_statement :: (generator: *Bytecode_Generator, node: *Ast_Node) {
                 if try_statement.catch_parameter {
                     catch_register = generator.next_register;
                     generator.next_register += 1;
-
-                    array_add(*generator.locals, try_statement.catch_parameter.name);
-                    if generator.locals.count > generator.current_function.locals_count generator.current_function.locals_count = generator.locals.count;
                 }
 
                 emit_statement(generator, cast(*Ast_Node) try_statement.try_block);
@@ -1448,10 +1547,32 @@ emit_statement :: (generator: *Bytecode_Generator, node: *Ast_Node) {
                 catch_pc = generator.current_function.instructions.count;
                 generator.current_function.instructions[try_context_index].imm = cast(s32) catch_pc;
                 generator.current_function.instructions[try_context_index].arg1 = catch_register;
+                
+                catch_scope := New(Lexical_Scope,, temp);
+                catch_scope.variables.allocator = temp;
+                catch_scope.indices.allocator = temp;
+                catch_scope.is_const.allocator = temp;
+                catch_scope.variables.allocator = temp;
+                catch_scope.indices.allocator = temp;
+                catch_scope.is_const.allocator = temp;
+                catch_scope.parent = generator.current_scope;
+                generator.current_scope = catch_scope;
 
-                if try_statement.catch_parameter store_local_or_global(generator, try_statement.catch_parameter.name, catch_register);
+                if try_statement.catch_parameter {
+                    array_add(*generator.locals, try_statement.catch_parameter.name);
+                    local_index := generator.locals.count - 1;
+                    array_add(*catch_scope.variables, try_statement.catch_parameter.name);
+                    array_add(*catch_scope.indices, local_index);
+                    array_add(*catch_scope.is_const, false);
+                    if generator.locals.count > generator.current_function.locals_count generator.current_function.locals_count = generator.locals.count;
+                    
+                    instruction := Instruction.{ op_code = .STORE_LOCAL, arg1 = catch_register, imm = cast(s32) local_index };
+                    emit_instruction(generator, instruction);
+                }
 
                 emit_statement(generator, cast(*Ast_Node) try_statement.catch_block);
+                
+                generator.current_scope = catch_scope.parent;
 
                 generator.current_function.instructions[jump_over_catch_index].imm = cast(s32) generator.current_function.instructions.count;
             } else {
@@ -2143,7 +2264,14 @@ emit_expression :: (generator: *Bytecode_Generator, node: *Ast_Node, force_new_r
         case .FUNCTION_EXPRESSION;
             function_expression := cast(*Ast_Function_Expression) node;
 
+            
+            new_function_scope := New(Lexical_Scope,, temp);
+                new_function_scope.variables.allocator = temp;
+                new_function_scope.indices.allocator = temp;
+                new_function_scope.is_const.allocator = temp;
             nested_generator := Bytecode_Generator.{
+                current_scope = new_function_scope,
+                function_scope = new_function_scope,
                 program              = generator.program,
                 parent               = generator,
                 next_register        = cast(u8) function_expression.parameters.count,
@@ -2164,11 +2292,17 @@ emit_expression :: (generator: *Bytecode_Generator, node: *Ast_Node, force_new_r
                     identifier     := cast(*Ast_Identifier) spread_element.argument;
 
                     array_add(*nested_generator.locals, identifier.name);
+                    array_add(*nested_generator.function_scope.variables, identifier.name);
+                    array_add(*nested_generator.function_scope.indices, nested_generator.locals.count - 1);
+                    array_add(*nested_generator.function_scope.is_const, false);
 
                     bytecode_function.flags |= .REST_PARAMETER;
                 } else {
                     identifier := cast(*Ast_Identifier) it;
                     array_add(*nested_generator.locals, identifier.name);
+                    array_add(*nested_generator.function_scope.variables, identifier.name);
+                    array_add(*nested_generator.function_scope.indices, nested_generator.locals.count - 1);
+                    array_add(*nested_generator.function_scope.is_const, false);
                 }
             }
 
@@ -2199,7 +2333,14 @@ emit_expression :: (generator: *Bytecode_Generator, node: *Ast_Node, force_new_r
         case .ARROW_FUNCTION_EXPRESSION;
             arrow_expression := cast(*Ast_Arrow_Function_Expression) node;
 
+            
+            new_function_scope := New(Lexical_Scope,, temp);
+                new_function_scope.variables.allocator = temp;
+                new_function_scope.indices.allocator = temp;
+                new_function_scope.is_const.allocator = temp;
             nested_generator := Bytecode_Generator.{
+                current_scope = new_function_scope,
+                function_scope = new_function_scope,
                 program              = generator.program,
                 parent               = generator,
                 next_register        = cast(u8) arrow_expression.parameters.count,
@@ -2220,11 +2361,17 @@ emit_expression :: (generator: *Bytecode_Generator, node: *Ast_Node, force_new_r
                     identifier     := cast(*Ast_Identifier) spread_element.argument;
 
                     array_add(*nested_generator.locals, identifier.name);
+                    array_add(*nested_generator.function_scope.variables, identifier.name);
+                    array_add(*nested_generator.function_scope.indices, nested_generator.locals.count - 1);
+                    array_add(*nested_generator.function_scope.is_const, false);
 
                     bytecode_function.flags |= .REST_PARAMETER;
                 } else {
                     identifier := cast(*Ast_Identifier) it;
                     array_add(*nested_generator.locals, identifier.name);
+                    array_add(*nested_generator.function_scope.variables, identifier.name);
+                    array_add(*nested_generator.function_scope.indices, nested_generator.locals.count - 1);
+                    array_add(*nested_generator.function_scope.is_const, false);
                 }
             }
 
@@ -3264,12 +3411,25 @@ Bytecode_Program :: struct {
     error_message: string;
 }
 
+
+Lexical_Scope :: struct {
+    parent: *Lexical_Scope;
+    variables: [..] string;
+    indices:   [..] int;
+    is_const:  [..] bool;
+}
+
 Bytecode_Generator :: struct {
+
     program:          *Bytecode_Program;
     current_function: *Bytecode_Function;
     parent:           *Bytecode_Generator;
 
+
     current_line:     u32;
+
+    current_scope:    *Lexical_Scope;
+    function_scope:   *Lexical_Scope;
 
     next_register: u8;
 
@@ -3330,6 +3490,7 @@ Variable_Location :: struct {
     type: Variable_Location_Type;
     index: int;
     level: int;
+    is_const: bool;
 }
 
 PIC_SIZE :: 4;

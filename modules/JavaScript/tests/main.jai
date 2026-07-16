@@ -92,7 +92,7 @@ expect_global :: (name: string, $type: Value_Type, to_be: $T, loc := #caller_loc
 
     if !values_strict_equal(global, value) {
         has_error = true;
-        log_error("[%]: expect_global(%, .%, %) %", context.test_name, name, type, to_be, loc);
+        log_error("[%]: expect_global(%, .%, %) - got type .%, number: % %", context.test_name, name, type, to_be, global.type, global.number, loc);
     }
 }
 
