@@ -1,0 +1,46 @@
+build :: () {
+    set_build_options_dc(.{do_output=false});
+
+    w := compiler_create_workspace("Pulsar");
+    if !w {
+        print("Workspace creation failed.\n");
+        return;
+    }
+
+    options := get_build_options(w);
+    options.output_executable_name = "pulsar";
+
+    args := options.compile_time_command_line;
+    is_release := false;
+
+    for args {
+        if it == "release" {
+            is_release = true;
+        }
+    }
+
+    if is_release {
+        set_optimization(*options, .OPTIMIZED);
+    } else {
+        set_optimization(*options, .DEBUG);
+    }
+
+    set_build_options(options, w);
+
+    compiler_begin_intercept(w);
+    add_build_file("main.jai", w);
+
+    while true {
+        message := compiler_wait_for_message();
+        if !message break;
+        if message.kind == .COMPLETE break;
+    }
+
+    compiler_end_intercept(w);
+}
+
+#run build();
+
+#import "Basic";
+#import "Compiler";
+#import "String";
