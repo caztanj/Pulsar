@@ -1,58 +1,70 @@
 main :: () {
     #if DEBUG_MEMORY defer report_memory_leaks();
 
-    test_procs := Test_Proc.[
-        test_array,
-        test_arrow_functions,
-        test_async_await,
-        test_automatic_semicolon_insertion,
-        test_boolean,
-        test_classes,
-        test_closures,
-        test_console,
-        test_date,
-        test_destructuring,
-        test_error,
-        test_exceptions,
-        test_fetch,
-        test_file,
-        test_gc,
-        test_generators,
-        test_global_this,
-        test_http,
-        test_json,
-        test_loops,
-        test_map,
-        test_math,
-        test_modules,
-        test_number,
-        test_object,
-        test_object_extra,
-        test_operators,
-        test_parser,
-        test_print,
-        test_promise,
-        test_realms,
-        test_recursion,
-        test_router,
-        test_set,
-        test_spread,
-        test_string,
-        test_switch,
-        test_regexp,
-        test_symbol,
-        test_template_literals,
-        test_timer,
-        test_typed_array,
-        test_vm_basic,
+    Test_Suite :: struct { name: string; proc: Test_Proc; }
+    test_procs := Test_Suite.[
+        .{ "test_array", test_array },
+        .{ "test_arrow_functions", test_arrow_functions },
+        .{ "test_async_await", test_async_await },
+        .{ "test_automatic_semicolon_insertion", test_automatic_semicolon_insertion },
+        .{ "test_boolean", test_boolean },
+        .{ "test_classes", test_classes },
+        .{ "test_closures", test_closures },
+        .{ "test_console", test_console },
+        .{ "test_date", test_date },
+        .{ "test_destructuring", test_destructuring },
+        .{ "test_error", test_error },
+        .{ "test_exceptions", test_exceptions },
+        .{ "test_fetch", test_fetch },
+        .{ "test_file", test_file },
+        .{ "test_gc", test_gc },
+        .{ "test_generators", test_generators },
+        .{ "test_global_this", test_global_this },
+        .{ "test_http", test_http },
+        .{ "test_json", test_json },
+        .{ "test_loops", test_loops },
+        .{ "test_map", test_map },
+        .{ "test_math", test_math },
+        .{ "test_modules", test_modules },
+        .{ "test_number", test_number },
+        .{ "test_object", test_object },
+        .{ "test_object_extra", test_object_extra },
+        .{ "test_operators", test_operators },
+        .{ "test_parser", test_parser },
+        .{ "test_print", test_print },
+        .{ "test_promise", test_promise },
+        .{ "test_realms", test_realms },
+        .{ "test_recursion", test_recursion },
+        .{ "test_router", test_router },
+        .{ "test_set", test_set },
+        .{ "test_spread", test_spread },
+        .{ "test_string", test_string },
+        .{ "test_switch", test_switch },
+        .{ "test_regexp", test_regexp },
+        .{ "test_symbol", test_symbol },
+        .{ "test_template_literals", test_template_literals },
+        .{ "test_timer", test_timer },
+        .{ "test_typed_array", test_typed_array },
+        .{ "test_vm_basic", test_vm_basic },
     ];
 
     for test_procs {
-        it();
+        start_time := seconds_since_init();
+        it.proc();
+        elapsed_ms := (seconds_since_init() - start_time) * 1000.0;
+        
+        print("[ PASS ] %", it.name);
+        
+        padding := 30 - it.name.count;
+        if padding < 0 then padding = 0;
+        for 0..padding-1 print(" ");
+        
+        print("(% ms)\n", formatFloat(elapsed_ms, trailing_width=2, zero_removal=.NO));
+        
         reset_temporary_storage();
     }
 
-    if !has_error print("All tests passed!\n");
+    if !has_error print("\nAll tests passed! (%/%)\n", test_procs.count, test_procs.count);
 }
 
 test :: (name: string, proc: Test_Proc) {

@@ -86,6 +86,7 @@ Permission :: enum_flags {
 #load "bytecode_rewriter.jai";
 #load "bytecode_runner.jai";
 #load "gc.jai";
+#load "object.jai";
 #load "tokenizer.jai";
 
 #load "extensions/array.jai";
