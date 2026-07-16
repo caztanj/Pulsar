@@ -317,6 +317,7 @@ to_value :: ($type: Value_Type, value: $T) -> Value
 
 run_test :: (code: string, permissions: Permission = 0) #expand {
     vm_to_free := run(code, permissions = permissions);
+    vm_to_free.silence_console_output = true;
     context.vm = vm_to_free;
 
     `defer {

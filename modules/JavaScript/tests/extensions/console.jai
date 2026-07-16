@@ -11,6 +11,16 @@ test_console :: () {
             let hasAssert = typeof console.assert === "function";
             let hasClear = typeof console.clear === "function";
 
+            // Overwrite methods to avoid polluting test output
+            let _log = console.log, _warn = console.warn, _error = console.error, _info = console.info, _debug = console.debug, _timeEnd = console.timeEnd, _assert = console.assert;
+            console.log = function() {};
+            console.warn = function() {};
+            console.error = function() {};
+            console.info = function() {};
+            console.debug = function() {};
+            console.timeEnd = function() {};
+            console.assert = function() {};
+
             // We just call them to ensure no crashes
             console.log("test console.log", 123, {a: 1});
             console.warn("test console.warn", [1, 2, 3]);
@@ -23,6 +33,9 @@ test_console :: () {
 
             console.assert(true, "this should not print");
             console.assert(false, "this should print assertion failed");
+
+            // Restore
+            console.log = _log; console.warn = _warn; console.error = _error; console.info = _info; console.debug = _debug; console.timeEnd = _timeEnd; console.assert = _assert;
 
             // clear might clear the screen, so maybe skip or just call it
             // console.clear(); 

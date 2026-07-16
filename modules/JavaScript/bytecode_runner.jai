@@ -3334,6 +3334,8 @@ Vm :: struct {
     has_stack_trace: bool;
     stack_trace: string;
 
+    silence_console_output: bool;
+
     allocated_strings: Table(*u8, Allocated_String);
 
     loaded_modules:  [..] Module_Entry;

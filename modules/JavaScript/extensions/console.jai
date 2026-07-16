@@ -105,6 +105,8 @@ console_stringify :: (vm: *Vm, builder: *String_Builder, value: Value, depth: in
 }
 
 console_print_args :: (vm: *Vm, arguments: [] Value, to_stderr: bool) {
+    if vm.silence_console_output return;
+
     builder: String_Builder;
     builder.allocator = temp;
 
@@ -143,6 +145,8 @@ console_assert :: (vm: *Vm, this: Value, arguments: [] Value, is_new: bool = fal
 
     condition := is_truthy(arguments[0]);
     if !condition {
+        if vm.silence_console_output return .{};
+        
         builder: String_Builder;
         builder.allocator = temp;
         append(*builder, "Assertion failed");
@@ -190,18 +194,20 @@ console_timeEnd :: (vm: *Vm, this: Value, arguments: [] Value, is_new: bool = fa
         end_time := seconds_since_init();
         elapsed := (end_time - start_time) * 1000.0;
 
-        builder: String_Builder;
-        builder.allocator = temp;
-        append(*builder, label);
-        append(*builder, ": ");
-        print_item_to_builder(*builder, elapsed);
-        append(*builder, " ms\n");
+        if !vm.silence_console_output {
+            builder: String_Builder;
+            builder.allocator = temp;
+            append(*builder, label);
+            append(*builder, ": ");
+            print_item_to_builder(*builder, elapsed);
+            append(*builder, " ms\n");
 
-        write_string(builder_to_string(*builder,, temp));
+            write_string(builder_to_string(*builder,, temp));
+        }
 
         table_remove(*global_console_timers, label);
     } else {
-        print("Timer '%' does not exist\n", label);
+        if !vm.silence_console_output print("Timer '%' does not exist\n", label);
     }
 
     return .{};
