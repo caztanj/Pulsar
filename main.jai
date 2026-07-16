@@ -84,7 +84,7 @@ EXIT_CODE_INVALID_ARGUMENTS  :: 1;
 EXIT_CODE_FILE_NOT_FOUND     :: 2;
 EXIT_CODE_JS_ERROR           :: 3;
 
-DEBUG_MEMORY :: false;
+
 
 #if OS == .WINDOWS {
     Windows :: #import "Windows";

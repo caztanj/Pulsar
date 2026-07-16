@@ -20,8 +20,12 @@ build :: () {
     }
 
     if is_release {
+        options.output_path = "build_release";
+        options.intermediate_path = "build_release";
         set_optimization(*options, .OPTIMIZED);
     } else {
+        options.output_path = "build_debug";
+        options.intermediate_path = "build_debug";
         set_optimization(*options, .DEBUG);
     }
 
@@ -29,6 +33,12 @@ build :: () {
 
     compiler_begin_intercept(w);
     add_build_file("main.jai", w);
+
+    if is_release {
+        add_build_string("DEBUG_MEMORY :: false;", w);
+    } else {
+        add_build_string("DEBUG_MEMORY :: true;", w);
+    }
 
     while true {
         message := compiler_wait_for_message();
@@ -44,3 +54,4 @@ build :: () {
 #import "Basic";
 #import "Compiler";
 #import "String";
+#import "File";
