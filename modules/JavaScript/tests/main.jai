@@ -1,5 +1,5 @@
 main :: () {
-    #if DEBUG_MEMORY report_memory_leaks();
+    #if DEBUG_MEMORY defer report_memory_leaks();
 
     test_procs := Test_Proc.[
         test_array,

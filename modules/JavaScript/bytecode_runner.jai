@@ -2676,7 +2676,20 @@ value_to_string :: (vm: *Vm, value: Value) -> string {
     }
 }
 
-values_addition :: inline (vm: *Vm, a: Value, b: Value) -> Value {
+allocate_string :: (vm: *Vm, s: string) -> string {
+    if !s return "";
+
+    if vm.allocated_strings.count > 10000 {
+        collect_garbage_major(vm);
+    }
+
+    result := copy_string(s);
+    table_set(*vm.allocated_strings, result.data, .{ s = result, marked = false });
+
+    return result;
+}
+
+values_addition :: (vm: *Vm, a: Value, b: Value) -> Value {
     if a.type == .NUMBER && b.type == .NUMBER {
         return .{ type = .NUMBER, number = a.number + b.number };
     }

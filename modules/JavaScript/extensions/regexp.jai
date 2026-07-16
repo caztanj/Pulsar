@@ -36,7 +36,7 @@ regexp_constructor :: (vm: *Vm, this: Value, arguments: [] Value, is_new: bool) 
         if arguments[0].type == .OBJECT && arguments[0].object && arguments[0].object.kind == .REGEXP {
             found_source, source_val := lookup_property(vm, arguments[0].object, "source");
             if found_source && source_val.type == .STRING {
-                pattern = copy_string(source_val.s);
+                pattern = allocate_string(vm, source_val.s);
             }
         } else if arguments[0].type != .UNDEFINED {
             pattern = value_to_string(vm, arguments[0]);
@@ -60,8 +60,8 @@ regexp_constructor :: (vm: *Vm, this: Value, arguments: [] Value, is_new: bool) 
     
     regexp_object.regexp = regexp;
     
-    set_object_property(vm, regexp_object, "source", .{ type = .STRING, s = copy_string(pattern) });
-    set_object_property(vm, regexp_object, "flags",  .{ type = .STRING, s = copy_string(flags) });
+    set_object_property(vm, regexp_object, "source", .{ type = .STRING, s = allocate_string(vm, pattern) });
+    set_object_property(vm, regexp_object, "flags",  .{ type = .STRING, s = allocate_string(vm, flags) });
     
     return .{ type = .OBJECT, object = regexp_object };
 }
@@ -104,12 +104,12 @@ regexp_exec :: (vm: *Vm, this: Value, arguments: [] Value, is_new: bool) -> Valu
     array_object.prototype = vm.array_prototype;
     
     for captures {
-        array_add(*array_object.elements, .{ type = .STRING, s = copy_string(it) });
+        array_add(*array_object.elements, .{ type = .STRING, s = allocate_string(vm, it) });
     }
     
     set_object_property(vm, array_object, "length", .{ type = .NUMBER, number = cast(float64) captures.count });
     set_object_property(vm, array_object, "index",  .{ type = .NUMBER, number = 0.0 });
-    set_object_property(vm, array_object, "input",  .{ type = .STRING, s = copy_string(str) });
+    set_object_property(vm, array_object, "input",  .{ type = .STRING, s = allocate_string(vm, str) });
     
     return .{ type = .OBJECT, object = array_object };
 }
