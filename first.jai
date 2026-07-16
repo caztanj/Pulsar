@@ -8,15 +8,22 @@ build :: () {
     }
 
     options := get_build_options(w);
-    options.output_executable_name = "pulsar";
-
     args := options.compile_time_command_line;
+
+    success, plugins_to_create, remaining_args := parse_plugin_arguments(args);
+    if !success exit(1);
+
+    is_test := array_find(remaining_args, "test");
+
+    if is_test {
+        options.output_executable_name = "pulsar_tests";
+    } else {
+        options.output_executable_name = "pulsar";
+    }
 
     plugins: [..] *Metaprogram_Plugin;
     intercept_flags: Intercept_Flags;
 
-    success, plugins_to_create, remaining_args := parse_plugin_arguments(args);
-    if !success exit(1);
 
     is_release := array_find(remaining_args, "release");
 
@@ -40,7 +47,12 @@ build :: () {
     compiler_begin_intercept(w, intercept_flags);
 
     for plugins if it.add_source it.add_source(it);
-    add_build_file("main.jai", w);
+    
+    if is_test {
+        add_build_file("modules/JavaScript/tests/main.jai", w);
+    } else {
+        add_build_file("main.jai", w);
+    }
 
     if is_release {
         add_build_string("DEBUG_MEMORY :: false;", w);
@@ -61,6 +73,18 @@ build :: () {
 
     for plugins if it.finish   it.finish  (it);
     for plugins if it.shutdown it.shutdown(it);
+
+    if is_test {
+        exe_path := tprint("%/%", options.output_path, options.output_executable_name);
+        #if OS == .WINDOWS { exe_path = tprint("%.exe", exe_path); }
+
+        print("\n=== Running Tests (%) ===\n", exe_path);
+        result := run_command(exe_path);
+        if result.exit_code != 0 {
+            print("Tests failed with exit code %\n", result.exit_code);
+            exit(1);
+        }
+    }
 }
 
 #run build();
@@ -70,3 +94,4 @@ build :: () {
 #import "String";
 #import "File";
 #import "Metaprogram_Plugins";
+#import "Process";

@@ -327,8 +327,6 @@ run_test :: (code: string, permissions: Permission = 0) #expand {
 
 Test_Proc :: #type () -> ();
 
-DEBUG_MEMORY :: true;
-
 has_error := false;
 
 #add_context test_name: string;
