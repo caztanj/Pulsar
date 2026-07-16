@@ -2022,33 +2022,29 @@ execute_function_internal :: (vm: *Vm, initial_function: *Bytecode_Function, ini
 
                         if argument.type == .OBJECT || argument.type == .ARRAY {
                             object := argument.object;
-                            while object {
-                                for object.elements {
-                                    if it.type == .UNDEFINED continue;
-                                    key := allocate_string(vm, tprint("%", it_index));
-                                    if !table_contains(*seen_keys, key) {
-                                        value := Value.{ type = .STRING, s = key };
+                            for object.elements {
+                                if it.type == .UNDEFINED continue;
+                                key := allocate_string(vm, tprint("%", it_index));
+                                if !table_contains(*seen_keys, key) {
+                                    value := Value.{ type = .STRING, s = key };
+                                    array_add(*result.elements, value);
+                                    table_add(*seen_keys, key, true);
+                                }
+                            }
+
+                            if object.shape {
+                                for object.shape.property_names {
+                                    offset_pointer := table_find_pointer(*object.shape.property_offsets, it);
+
+                                    if !offset_pointer || offset_pointer.* >= object.fields.count continue;
+                                    if object.fields[offset_pointer.*].type == .UNDEFINED         continue;
+
+                                    if !table_contains(*seen_keys, it) {
+                                        value := Value.{ type = .STRING, s = it };
                                         array_add(*result.elements, value);
-                                        table_add(*seen_keys, key, true);
+                                        table_add(*seen_keys, it, true);
                                     }
                                 }
-
-                                if object.shape {
-                                    for object.shape.property_names {
-                                        offset_pointer := table_find_pointer(*object.shape.property_offsets, it);
-
-                                        if !offset_pointer || offset_pointer.* >= object.fields.count continue;
-                                        if object.fields[offset_pointer.*].type == .UNDEFINED         continue;
-
-                                        if !table_contains(*seen_keys, it) {
-                                            value := Value.{ type = .STRING, s = it };
-                                            array_add(*result.elements, value);
-                                            table_add(*seen_keys, it, true);
-                                        }
-                                    }
-                                }
-
-                                object = object.prototype;
                             }
                         }
                     }
