@@ -9,6 +9,7 @@ main :: () {
         test_boolean,
         test_classes,
         test_closures,
+        test_console,
         test_date,
         test_destructuring,
         test_error,
@@ -39,8 +40,10 @@ main :: () {
         test_string,
         test_switch,
         test_regexp,
+        test_symbol,
         test_template_literals,
-        test_uint8_array,
+        test_timer,
+        test_typed_array,
         test_vm_basic,
     ];
 
@@ -369,7 +372,10 @@ has_error := false;
 #load "extensions/promise.jai";
 #load "extensions/set.jai";
 #load "extensions/string.jai";
-#load "extensions/uint8_array.jai";
+#load "extensions/typed_array.jai";
+#load "extensions/symbol.jai";
+#load "extensions/console.jai";
+#load "extensions/timer.jai";
 #load "extensions/regexp.jai";
 
 #import "Basic" () (MEMORY_DEBUGGER = DEBUG_MEMORY, TEMP_ALLOCATOR_OVERWRITE_MEMORY = false);

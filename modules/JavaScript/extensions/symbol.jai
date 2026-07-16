@@ -45,7 +45,7 @@ symbol_constructor :: (vm: *Vm, this: Value, arguments: [] Value, is_new: bool) 
     object.primitive_value  = description_value;
     object.prototype        = vm.symbol_prototype;
 
-    return .{ type = .SYMBOL, symbol_object = object };
+    return .{ type = .SYMBOL, object = object, symbol_object = object };
 }
 
 symbol_to_string :: (vm: *Vm, this: Value, arguments: [] Value, is_new: bool) -> Value {
@@ -70,7 +70,7 @@ symbol_to_string :: (vm: *Vm, this: Value, arguments: [] Value, is_new: bool) ->
 symbol_value_of :: (vm: *Vm, this: Value, arguments: [] Value, is_new: bool) -> Value {
     if this.type == .SYMBOL return this;
     if this.type == .OBJECT && this.object.kind == .SYMBOL {
-        return .{ type = .SYMBOL, symbol_object = this.object };
+        return .{ type = .SYMBOL, object = this.object, symbol_object = this.object };
     }
 
     throw_exception(vm, "Symbol.prototype.valueOf requires that 'this' be a Symbol");

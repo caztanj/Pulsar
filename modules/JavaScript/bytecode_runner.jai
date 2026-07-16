@@ -1134,7 +1134,7 @@ execute_function_internal :: (vm: *Vm, initial_function: *Bytecode_Function, ini
                         } else {
                             registers_data[instruction.dest] = get_property_or_undefined(vm, vm.string_prototype, property_name, instruction.imm);
                         }
-                    } else if value.type == .OBJECT || value.type == .ARRAY || value.type == .GENERATOR || value.type == .FUNCTION || value.type == .NATIVE_FUNCTION {
+                    } else if value.type == .OBJECT || value.type == .ARRAY || value.type == .GENERATOR || value.type == .FUNCTION || value.type == .NATIVE_FUNCTION || value.type == .SYMBOL {
                         current := ifx value.type == .GENERATOR value.generator_object else value.object;
 
                         if current && current.kind == .GLOBAL_PROXY {
@@ -1179,7 +1179,7 @@ execute_function_internal :: (vm: *Vm, initial_function: *Bytecode_Function, ini
                     value    := *registers_data[instruction.arg1];
                     property := *registers_data[instruction.arg2];
 
-                    if value.type == .OBJECT || value.type == .ARRAY {
+                    if value.type == .OBJECT || value.type == .ARRAY || value.type == .SYMBOL || value.type == .FUNCTION || value.type == .NATIVE_FUNCTION || value.type == .GENERATOR {
                         object := value.object;
 
                         if property.type == .NUMBER {
@@ -1968,7 +1968,7 @@ execute_function_internal :: (vm: *Vm, initial_function: *Bytecode_Function, ini
 
                     if argument.type == .OBJECT || argument.type == .ARRAY || argument.type == .STRING {
                         seen_keys: Table(string, bool);
-                        init(*seen_keys,, allocator = temp);
+                        seen_keys.allocator = temp;
 
                         if argument.type == .STRING {
                             for 0..argument.s.count-1 {

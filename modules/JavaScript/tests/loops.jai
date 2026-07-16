@@ -133,7 +133,7 @@ test_loops :: () {
             let keys = "";
             let obj = { a: 1, b: 2 };
             for (let k in obj) {
-                keys = keys + k;
+                if (obj.hasOwnProperty(k)) keys = keys + k;
             }
         JS
 
@@ -146,7 +146,7 @@ test_loops :: () {
             let keys = "";
             let obj = [10, 20];
             for (let k in obj) {
-                keys = keys + k;
+                if (obj.hasOwnProperty(k)) keys = keys + k;
             }
         JS
 
