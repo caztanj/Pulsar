@@ -1,6 +1,6 @@
 #module_parameters () (TRACE_ALLOCATIONS := false, TRACE_GARBAGE_COLLECTION := false);
 
-run :: (code: string, optimize := true, permissions: Permission = 0) -> *Vm {
+run :: (code: string, optimize := true, permissions: Permission = 0, silence_console_output := false) -> *Vm {
     tokens: [] Token;
     ast:    *Ast_Program;
     has_error: bool;
@@ -34,7 +34,9 @@ run :: (code: string, optimize := true, permissions: Permission = 0) -> *Vm {
 
     if optimize optimize_bytecode(bytecode);
 
-    vm := run_bytecode(bytecode, permissions = permissions);
+    vm := run_bytecode(bytecode, permissions = permissions, execute_main_function = false);
+    vm.silence_console_output = silence_console_output;
+    execute_main(vm, bytecode);
     collect_garbage_major(vm);
 
     return vm;

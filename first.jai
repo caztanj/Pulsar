@@ -79,7 +79,10 @@ build :: () {
         #if OS == .WINDOWS { exe_path = tprint("%.exe", exe_path); }
 
         print("\n=== Running Tests (%) ===\n", exe_path);
-        result := run_command(exe_path);
+        result, output, error := run_command(exe_path, capture_and_return_output = true);
+        print("%", output);
+        if error print("%", error);
+
         if result.exit_code != 0 {
             print("Tests failed with exit code %\n", result.exit_code);
             exit(1);
