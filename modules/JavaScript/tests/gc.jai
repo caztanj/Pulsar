@@ -3,6 +3,7 @@ test_gc :: () {
         new_globals := NewArray(context.vm.current_realm.globals.count + 1, Value);
         for context.vm.current_realm.globals new_globals[it_index] = it;
         new_globals[new_globals.count - 1] = val;
+        if context.vm.current_realm.globals.data free(context.vm.current_realm.globals.data);
         context.vm.current_realm.globals = new_globals;
     }
 

@@ -112,7 +112,12 @@ http_server_shutdown_js :: (vm: *Vm, this: Value, arguments: [] Value, is_new: b
     wrapper.shutdown_requested = true;
     wakeup_event_loop(*wrapper.server);
 
+    while !wrapper.thread_is_done {
+        sleep_milliseconds(1);
+    }
+
     shutdown(*wrapper.server);
+    thread_deinit(*wrapper.thread);
 
     destroy(*wrapper.response_mutex);
 
@@ -120,6 +125,7 @@ http_server_shutdown_js :: (vm: *Vm, this: Value, arguments: [] Value, is_new: b
     wrapper.vm.active_background_tasks -= 1;
 
     this.object.primitive_value.object = null;
+    free(wrapper);
 
     return .{ type = .BOOLEAN, boolean = true };
 }
@@ -214,6 +220,8 @@ http_server_thread_proc :: (thread: *Thread) -> s64 {
 
         reset_temporary_storage();
     }
+
+    wrapper.thread_is_done = true;
 
     return 0;
 }
@@ -334,6 +342,7 @@ Http_Server_Wrapper :: struct {
 
     thread:             Thread;
     shutdown_requested: bool;
+    thread_is_done:     bool;
     vm:                 *Vm;
 
     request_callback: Value;

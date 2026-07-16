@@ -315,7 +315,7 @@ typed_array_filter :: (vm: *Vm, this: Value, arguments: [] Value, is_new: bool) 
         defer free(temp_buffer);
         
         // We will construct a temporary typed array wrapping temp_buffer to easily set elements
-        temp_obj := allocate_object(vm);
+        temp_obj: Gc_Object;
         temp_obj.kind = this.object.kind;
         temp_obj.primitive_value = .{ type = .STRING, s = string.{ length * element_size, temp_buffer } };
 
@@ -327,7 +327,7 @@ typed_array_filter :: (vm: *Vm, this: Value, arguments: [] Value, is_new: bool) 
 
             result := call_value(vm, this_argument, func, args);
             if is_truthy(result) {
-                set_typed_array_element(temp_obj, filtered_length, get_typed_array_element(this.object, i));
+                set_typed_array_element(*temp_obj, filtered_length, get_typed_array_element(this.object, i));
                 filtered_length += 1;
             }
         }

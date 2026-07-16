@@ -100,13 +100,8 @@ error_to_string :: (vm: *Vm, this: Value, arguments: [] Value, is_new: bool) -> 
     name := ifx name_value.type == .STRING then name_value.s else "Error";
     message := ifx message_value.type == .STRING then message_value.s else "";
 
-    result := ifx message.count > 0 then sprint("%: %", name, message) else name;
-
     if message.count > 0 {
-        allocated_string := string.{ data = alloc(result.count), count = result.count };
-        memcpy(allocated_string.data, result.data, result.count);
-        table_set(*vm.allocated_strings, allocated_string.data, .{ s = allocated_string, marked = false });
-        return .{ type = .STRING, s = allocated_string };
+        return .{ type = .STRING, s = allocate_string(vm, tprint("%: %", name, message)) };
     }
 
     return .{ type = .STRING, s = name };

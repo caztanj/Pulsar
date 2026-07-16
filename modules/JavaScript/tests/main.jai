@@ -316,11 +316,12 @@ to_value :: ($type: Value_Type, value: $T) -> Value
 };
 
 run_test :: (code: string, permissions: Permission = 0) #expand {
-    context.vm = run(code, permissions = permissions);
+    vm_to_free := run(code, permissions = permissions);
+    context.vm = vm_to_free;
 
     `defer {
-        deinit(context.vm.program);
-        deinit(context.vm);
+        deinit(vm_to_free.program);
+        deinit(vm_to_free);
     }
 }
 

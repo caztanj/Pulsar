@@ -114,7 +114,7 @@ console_print_args :: (vm: *Vm, arguments: [] Value, to_stderr: bool) {
     }
 
     append(*builder, "\n");
-    s := builder_to_string(*builder);
+    s := builder_to_string(*builder,, temp);
     write_string(s, to_standard_error = to_stderr);
 }
 
@@ -155,7 +155,7 @@ console_assert :: (vm: *Vm, this: Value, arguments: [] Value, is_new: bool = fal
             }
         }
         append(*builder, "\n");
-        write_string(builder_to_string(*builder), to_standard_error = true);
+        write_string(builder_to_string(*builder,, temp), to_standard_error = true);
     }
 
     return .{};
@@ -197,7 +197,7 @@ console_timeEnd :: (vm: *Vm, this: Value, arguments: [] Value, is_new: bool = fa
         print_item_to_builder(*builder, elapsed);
         append(*builder, " ms\n");
 
-        write_string(builder_to_string(*builder));
+        write_string(builder_to_string(*builder,, temp));
 
         table_remove(*global_console_timers, label);
     } else {

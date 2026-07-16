@@ -481,6 +481,10 @@ collect_garbage_minor :: (vm: *Vm) {
                 gc_array_reset(*unreachable.promise_then_callbacks);
             } else if unreachable.kind == .GENERATOR || unreachable.kind == .ASYNC_EXECUTION {
                 gc_array_reset(*unreachable.generator_registers);
+            } else if unreachable.kind == .REGEXP {
+                Uniform.uninit(*unreachable.regexp);
+            } else if is_typed_array(unreachable.kind) {
+                if unreachable.primitive_value.s.data free(unreachable.primitive_value.s.data);
             }
 
             unreachable.next = vm.gc.object_pool;
@@ -559,6 +563,8 @@ collect_garbage_major :: (vm: *Vm) {
                     gc_array_reset(*unreachable.generator_registers);
                 } else if unreachable.kind == .REGEXP {
                     Uniform.uninit(*unreachable.regexp);
+                } else if is_typed_array(unreachable.kind) {
+                    if unreachable.primitive_value.s.data free(unreachable.primitive_value.s.data);
                 }
 
                 unreachable.next   = vm.gc.object_pool;
@@ -1692,6 +1698,19 @@ execute_function_internal :: (vm: *Vm, initial_function: *Bytecode_Function, ini
                 case .YIELD;
                     if generator {
                         generator.generator_pc = cast(int)(pc_pointer - instructions_pointer);
+                        
+                        vm.call_stack.count -= 1;
+                        if env.is_captured {
+                            env.next = vm.gc.environments;
+                            if vm.gc.environments vm.gc.environments.previous = env;
+                            env.previous = null;
+                            vm.gc.environments       = env;
+                            vm.gc.environment_count += 1;
+                        } else {
+                            env.next               = vm.gc.environment_pool;
+                            vm.gc.environment_pool = env;
+                        }
+                        
                         return registers_data[instruction.arg1];
                     }
 
@@ -1730,9 +1749,31 @@ execute_function_internal :: (vm: *Vm, initial_function: *Bytecode_Function, ini
 
                         promise_then(vm, awaited_promise, .[resumer_value], false);
 
+                        vm.call_stack.count -= 1;
+                        if env.is_captured {
+                            env.next = vm.gc.environments;
+                            if vm.gc.environments vm.gc.environments.previous = env;
+                            env.previous = null;
+                            vm.gc.environments       = env;
+                            vm.gc.environment_count += 1;
+                        } else {
+                            env.next               = vm.gc.environment_pool;
+                            vm.gc.environment_pool = env;
+                        }
                         return .{};
                     }
 
+                    vm.call_stack.count -= 1;
+                    if env.is_captured {
+                        env.next = vm.gc.environments;
+                        if vm.gc.environments vm.gc.environments.previous = env;
+                        env.previous = null;
+                        vm.gc.environments       = env;
+                        vm.gc.environment_count += 1;
+                    } else {
+                        env.next               = vm.gc.environment_pool;
+                        vm.gc.environment_pool = env;
+                    }
                     return .{};
 
                 case .IMPORT;
@@ -1761,7 +1802,7 @@ execute_function_internal :: (vm: *Vm, initial_function: *Bytecode_Function, ini
                                 error, error_message, tokens := tokenize(content);
 
                                 if error {
-                                    throw_exception(vm, copy_string(error_message));
+                                    throw_exception(vm, allocate_string(vm, error_message));
 
                                     return .{};
                                 }
@@ -1769,7 +1810,7 @@ execute_function_internal :: (vm: *Vm, initial_function: *Bytecode_Function, ini
                                 ast := build_ast(content, tokens);
 
                                 if ast.has_error {
-                                    throw_exception(vm, copy_string(ast.error_message));
+                                    throw_exception(vm, allocate_string(vm, ast.error_message));
 
                                     return .{};
                                 }
@@ -1780,7 +1821,7 @@ execute_function_internal :: (vm: *Vm, initial_function: *Bytecode_Function, ini
                                 }
 
                                 if vm.program.has_error {
-                                    throw_exception(vm, copy_string(vm.program.error_message));
+                                    throw_exception(vm, allocate_string(vm, vm.program.error_message));
 
                                     return .{};
                                 }
@@ -1848,7 +1889,7 @@ execute_function_internal :: (vm: *Vm, initial_function: *Bytecode_Function, ini
                         content, success := read_entire_file(source_path);
 
                         if !success {
-                            promise_reject_inner(vm, import_promise, .{ type = .STRING, s = copy_string(sprint("Could not load module: %", source_path)) });
+                            promise_reject_inner(vm, import_promise, .{ type = .STRING, s = allocate_string(vm, tprint("Could not load module: %", source_path)) });
                         } else {
                             defer free(content);
 
@@ -1857,13 +1898,13 @@ execute_function_internal :: (vm: *Vm, initial_function: *Bytecode_Function, ini
                                 push_allocator(temp);
                                 error, error_message, tokens := tokenize(content);
                                 if error {
-                                    promise_reject_inner(vm, import_promise, .{ type = .STRING, s = copy_string(error_message) });
+                                    promise_reject_inner(vm, import_promise, .{ type = .STRING, s = allocate_string(vm, error_message) });
                                     continue;
                                 }
 
                                 ast := build_ast(content, tokens);
                                 if ast.has_error {
-                                    promise_reject_inner(vm, import_promise, .{ type = .STRING, s = copy_string(ast.error_message) });
+                                    promise_reject_inner(vm, import_promise, .{ type = .STRING, s = allocate_string(vm, ast.error_message) });
                                     continue;
                                 }
 
@@ -1873,7 +1914,7 @@ execute_function_internal :: (vm: *Vm, initial_function: *Bytecode_Function, ini
                                 }
 
                                 if vm.program.has_error {
-                                    promise_reject_inner(vm, import_promise, .{ type = .STRING, s = copy_string(vm.program.error_message) });
+                                    promise_reject_inner(vm, import_promise, .{ type = .STRING, s = allocate_string(vm, vm.program.error_message) });
                                     continue;
                                 }
                             }
@@ -1972,7 +2013,7 @@ execute_function_internal :: (vm: *Vm, initial_function: *Bytecode_Function, ini
 
                         if argument.type == .STRING {
                             for 0..argument.s.count-1 {
-                                key := copy_string(tprint("%", it));
+                                key := allocate_string(vm, tprint("%", it));
                                 value := Value.{ type = .STRING, s = key };
                                 array_add(*result.elements, value);
                                 table_add(*seen_keys, key, true);
@@ -1984,7 +2025,7 @@ execute_function_internal :: (vm: *Vm, initial_function: *Bytecode_Function, ini
                             while object {
                                 for object.elements {
                                     if it.type == .UNDEFINED continue;
-                                    key := copy_string(tprint("%", it_index));
+                                    key := allocate_string(vm, tprint("%", it_index));
                                     if !table_contains(*seen_keys, key) {
                                         value := Value.{ type = .STRING, s = key };
                                         array_add(*result.elements, value);
@@ -2176,10 +2217,7 @@ execute_function_internal :: (vm: *Vm, initial_function: *Bytecode_Function, ini
                 if ctx.catch_reg != 255 registers_data[ctx.catch_reg] = vm.exception;
                 vm.has_exception = false;
                 vm.has_stack_trace = false;
-                if vm.stack_trace.data {
-                    free(vm.stack_trace.data);
-                    vm.stack_trace = "";
-                }
+                vm.stack_trace = "";
                 vm.exception     = .{};
                 continue;
             } else {
@@ -2689,6 +2727,19 @@ allocate_string :: (vm: *Vm, s: string) -> string {
     return result;
 }
 
+allocate_string_from_builder :: (vm: *Vm, builder: *String_Builder) -> string {
+    if vm.allocated_strings.count > 10000 {
+        collect_garbage_major(vm);
+    }
+
+    result := builder_to_string(builder);
+    if !result return "";
+    
+    table_set(*vm.allocated_strings, result.data, .{ s = result, marked = false });
+
+    return result;
+}
+
 values_addition :: (vm: *Vm, a: Value, b: Value) -> Value {
     if a.type == .NUMBER && b.type == .NUMBER {
         return .{ type = .NUMBER, number = a.number + b.number };
@@ -2882,6 +2933,8 @@ deinit :: (vm: *Vm) {
 
     vm.current_realm = null;
 
+    array_free(vm.call_frames);
+
     array_free(vm.microtask_queue);
 
     for vm.timer_queue array_free(it.arguments);
@@ -2925,6 +2978,8 @@ deinit :: (vm: *Vm) {
                 array_free(current_object.promise_then_callbacks);
             } else if current_object.kind == .GENERATOR || current_object.kind == .ASYNC_EXECUTION {
                 array_free(current_object.generator_registers);
+            } else if current_object.kind == .REGEXP {
+                Uniform.uninit(*current_object.regexp);
             } else if is_typed_array(current_object.kind) {
                 if current_object.primitive_value.s.data free(current_object.primitive_value.s.data);
             }
@@ -3085,7 +3140,7 @@ generate_stack_trace :: (vm: *Vm, current_function: *Bytecode_Function, current_
         append_stack_frame(vm, *builder, frame.function, frame.pc_pointer);
     }
 
-    vm.stack_trace = builder_to_string(*builder);
+    vm.stack_trace = allocate_string_from_builder(vm, *builder);
 }
 
 get_stack_trace_string :: (vm: *Vm) -> string {
@@ -3102,7 +3157,7 @@ get_stack_trace_string :: (vm: *Vm) -> string {
         append_stack_frame(vm, *builder, frame.function, frame.pc_pointer);
     }
 
-    return builder_to_string(*builder);
+    return allocate_string_from_builder(vm, *builder);
 }
 
 append_stack_frame :: (vm: *Vm, builder: *String_Builder, function: *Bytecode_Function, pc: *Instruction) {

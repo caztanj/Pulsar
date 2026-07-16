@@ -58,7 +58,9 @@ file_read_entire_file :: (vm: *Vm, this: Value, arguments: [] Value, is_new: boo
         return .{ type = .OBJECT, object = object };
     }
 
-    return .{ type = .STRING, s = file_content };
+    result := allocate_string(vm, file_content);
+    free(file_content.data);
+    return .{ type = .STRING, s = result };
 }
 
 file_write_entire_file :: (vm: *Vm, this: Value, arguments: [] Value, is_new: bool = false) -> Value {

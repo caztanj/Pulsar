@@ -60,16 +60,16 @@ fetch :: (vm: *Vm, this: Value, arguments: [] Value, is_new: bool) -> Value {
 
     if error {
         promise_object.promise_status = .REJECTED;
-        promise_object.promise_result = .{ type = .STRING, s = copy_string("Network Error") };
+        promise_object.promise_result = .{ type = .STRING, s = allocate_string(vm, "Network Error") };
     } else {
         response_object := allocate_object(vm);
 
         set_object_property(vm, response_object, "status", .{ type = .NUMBER,  number  = cast(float64) response.code });
         set_object_property(vm, response_object, "ok",     .{ type = .BOOLEAN, boolean = (response.code >= 200 && response.code < 300) });
-        set_object_property(vm, response_object, "url",    .{ type = .STRING,  s       = copy_string(url) });
+        set_object_property(vm, response_object, "url",    .{ type = .STRING,  s       = allocate_string(vm, url) });
 
         body_str := ifx response.body else "";
-        set_object_property(vm, response_object, "__body", .{ type = .STRING, s = copy_string(body_str) });
+        set_object_property(vm, response_object, "__body", .{ type = .STRING, s = allocate_string(vm, body_str) });
 
         add_instance_method(vm, response_object, "text", response_text);
         add_instance_method(vm, response_object, "json", response_json);
