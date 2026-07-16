@@ -103,7 +103,7 @@ Permission :: enum_flags {
 #load "extensions/router.jai";
 #load "extensions/set.jai";
 #load "extensions/string.jai";
-#load "extensions/uint8_array.jai";
+#load "extensions/typed_array.jai";
 #load "extensions/timer.jai";
 #load "extensions/error.jai";
 #load "extensions/regexp.jai";

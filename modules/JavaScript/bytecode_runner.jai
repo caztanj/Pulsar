@@ -72,9 +72,10 @@ lookup_property :: (vm: *Vm, object: *Gc_Object, name: string, imm: int = -1) ->
     current := object;
     while current {
         if is_all_digits {
-            if current.kind == .UINT8_ARRAY {
-                if parsed_index < current.primitive_value.s.count {
-                    return true, .{ type = .NUMBER, number = cast(float64) current.primitive_value.s[parsed_index] };
+            if is_typed_array(current.kind) {
+                len := get_typed_array_length(current);
+                if parsed_index < len {
+                    return true, .{ type = .NUMBER, number = get_typed_array_element(current, parsed_index) };
                 }
             } else if parsed_index < current.elements.count {
                 if current.elements[parsed_index].type != .UNDEFINED return true, current.elements[parsed_index];
@@ -82,7 +83,7 @@ lookup_property :: (vm: *Vm, object: *Gc_Object, name: string, imm: int = -1) ->
         } else {
             if name == "length" {
                 if current.kind == .ARRAY return true, .{ type = .NUMBER, number = cast(float64) current.elements.count };
-                if current.kind == .UINT8_ARRAY return true, .{ type = .NUMBER, number = cast(float64) current.primitive_value.s.count };
+                if is_typed_array(current.kind) return true, .{ type = .NUMBER, number = cast(float64) get_typed_array_length(current) };
             }
 
             if current.shape {
@@ -119,9 +120,10 @@ set_object_property :: (vm: *Vm, object: *Gc_Object, name: string, value: Value,
         parsed, success := parse_int(*name_copy);
 
         if success {
-            if object.kind == .UINT8_ARRAY {
-                if parsed >= 0 && parsed < object.primitive_value.s.count {
-                    object.primitive_value.s[parsed] = cast(u8) value_to_number(value);
+            if is_typed_array(object.kind) {
+                len := get_typed_array_length(object);
+                if parsed >= 0 && parsed < len {
+                    set_typed_array_element(object, parsed, value_to_number(value));
                     return;
                 }
             }
@@ -1183,9 +1185,10 @@ execute_function_internal :: (vm: *Vm, initial_function: *Bytecode_Function, ini
                         if property.type == .NUMBER {
                             index  := cast(int) property.number;
                             if object {
-                                if object.kind == .UINT8_ARRAY {
-                                    if index >= 0 && index < object.primitive_value.s.count {
-                                        registers_data[instruction.dest] = .{ type = .NUMBER, number = cast(float64) object.primitive_value.s[index] };
+                                if is_typed_array(object.kind) {
+                                    len := get_typed_array_length(object);
+                                    if index >= 0 && index < len {
+                                        registers_data[instruction.dest] = .{ type = .NUMBER, number = get_typed_array_element(object, index) };
                                     } else {
                                         registers_data[instruction.dest] = .{ type = .UNDEFINED };
                                     }
@@ -1255,9 +1258,10 @@ execute_function_internal :: (vm: *Vm, initial_function: *Bytecode_Function, ini
                             index := cast(int) property.number;
 
                             if index >= 0 {
-                                if object.kind == .UINT8_ARRAY {
-                                    if index < object.primitive_value.s.count {
-                                        object.primitive_value.s[index] = cast(u8) value_to_number(value);
+                                if is_typed_array(object.kind) {
+                                    len := get_typed_array_length(object);
+                                    if index < len {
+                                        set_typed_array_element(object, index, value_to_number(value));
                                     }
                                 } else {
                                     while object.elements.count <= index array_add(*object.elements, .{});
@@ -2480,7 +2484,7 @@ init_common_vm_globals :: (vm: *Vm) {
     init_vm_router(vm);
     init_vm_fetch(vm);
     init_vm_global_this(vm);
-    init_vm_uint8_array(vm);
+    init_vm_typed_arrays(vm);
     init_vm_timer(vm);
     init_vm_error(vm);
     init_vm_regexp(vm);
@@ -2908,6 +2912,8 @@ deinit :: (vm: *Vm) {
                 array_free(current_object.promise_then_callbacks);
             } else if current_object.kind == .GENERATOR || current_object.kind == .ASYNC_EXECUTION {
                 array_free(current_object.generator_registers);
+            } else if is_typed_array(current_object.kind) {
+                if current_object.primitive_value.s.data free(current_object.primitive_value.s.data);
             }
 
             free(current_object);
@@ -3099,6 +3105,72 @@ append_stack_frame :: (vm: *Vm, builder: *String_Builder, function: *Bytecode_Fu
     print_to_builder(builder, "    at % (line %)\n", name, line);
 }
 
+throw_exception :: (vm: *Vm, value: Value) {
+    vm.exception = value;
+    vm.has_exception = true;
+}
+
+throw_exception :: (vm: *Vm, message: string) {
+    stack_trace := get_stack_trace_string(vm);
+
+    error_object := allocate_object(vm);
+    error_object.prototype = vm.error_prototype;
+
+    message_value := Value.{ type = .STRING, s = message };
+    set_object_property(vm, error_object, "message", message_value);
+
+    stack_value := Value.{ type = .STRING, s = stack_trace };
+    set_object_property(vm, error_object, "stack", stack_value);
+
+    vm.exception = .{ type = .OBJECT, object = error_object };
+    vm.has_exception = true;
+    vm.has_stack_trace = true;
+    vm.stack_trace = stack_trace;
+}
+
+is_typed_array :: inline (kind: Gc_Object_Kind) -> bool {
+    return kind == .UINT8_ARRAY || kind == .INT8_ARRAY || kind == .UINT16_ARRAY || kind == .INT16_ARRAY ||
+           kind == .UINT32_ARRAY || kind == .INT32_ARRAY || kind == .FLOAT32_ARRAY || kind == .FLOAT64_ARRAY ||
+           kind == .UINT8_CLAMPED_ARRAY;
+}
+
+get_typed_array_length :: inline (object: *Gc_Object) -> int {
+    length := object.primitive_value.s.count;
+    if object.kind == .UINT16_ARRAY || object.kind == .INT16_ARRAY return length / 2;
+    if object.kind == .UINT32_ARRAY || object.kind == .INT32_ARRAY || object.kind == .FLOAT32_ARRAY return length / 4;
+    if object.kind == .FLOAT64_ARRAY return length / 8;
+    return length;
+}
+
+get_typed_array_element :: inline (object: *Gc_Object, index: int) -> float64 {
+    if object.kind == {
+        case .UINT8_ARRAY;         return cast(float64) object.primitive_value.s[index];
+        case .INT8_ARRAY;          return cast(float64) (cast(*s8) object.primitive_value.s.data)[index];
+        case .UINT8_CLAMPED_ARRAY; return cast(float64) object.primitive_value.s[index];
+        case .UINT16_ARRAY;        return cast(float64) (cast(*u16) object.primitive_value.s.data)[index];
+        case .INT16_ARRAY;         return cast(float64) (cast(*s16) object.primitive_value.s.data)[index];
+        case .UINT32_ARRAY;        return cast(float64) (cast(*u32) object.primitive_value.s.data)[index];
+        case .INT32_ARRAY;         return cast(float64) (cast(*s32) object.primitive_value.s.data)[index];
+        case .FLOAT32_ARRAY;       return cast(float64) (cast(*float32) object.primitive_value.s.data)[index];
+        case .FLOAT64_ARRAY;       return cast(float64) (cast(*float64) object.primitive_value.s.data)[index];
+    }
+    return 0.0;
+}
+
+set_typed_array_element :: inline (object: *Gc_Object, index: int, val: float64) {
+    if object.kind == {
+        case .UINT8_ARRAY;         object.primitive_value.s[index] = cast(u8) val;
+        case .INT8_ARRAY;          (cast(*s8) object.primitive_value.s.data)[index] = cast(s8) val;
+        case .UINT8_CLAMPED_ARRAY; object.primitive_value.s[index] = cast(u8) max(cast(float64) 0.0, min(cast(float64) 255.0, val));
+        case .UINT16_ARRAY;        (cast(*u16) object.primitive_value.s.data)[index] = cast(u16) val;
+        case .INT16_ARRAY;         (cast(*s16) object.primitive_value.s.data)[index] = cast(s16) val;
+        case .UINT32_ARRAY;        (cast(*u32) object.primitive_value.s.data)[index] = cast(u32) val;
+        case .INT32_ARRAY;         (cast(*s32) object.primitive_value.s.data)[index] = cast(s32) val;
+        case .FLOAT32_ARRAY;       (cast(*float32) object.primitive_value.s.data)[index] = cast(float32) val;
+        case .FLOAT64_ARRAY;       (cast(*float64) object.primitive_value.s.data)[index] = cast(float64) val;
+    }
+}
+
 Microtask :: struct {
     callback: Value;
     arg:      Value;
@@ -3157,7 +3229,7 @@ Vm :: struct {
     root_shape:    *Shape;
 
     union {
-        builtin_prototypes: [10] *Gc_Object;
+        builtin_prototypes: [18] *Gc_Object;
         struct {
             object_prototype:  *Gc_Object;
             number_prototype:  *Gc_Object;
@@ -3166,6 +3238,14 @@ Vm :: struct {
             boolean_prototype: *Gc_Object;
             date_prototype:    *Gc_Object;
             uint8_array_prototype: *Gc_Object;
+            int8_array_prototype: *Gc_Object;
+            uint16_array_prototype: *Gc_Object;
+            int16_array_prototype: *Gc_Object;
+            uint32_array_prototype: *Gc_Object;
+            int32_array_prototype: *Gc_Object;
+            float32_array_prototype: *Gc_Object;
+            float64_array_prototype: *Gc_Object;
+            uint8_clamped_array_prototype: *Gc_Object;
             error_prototype:   *Gc_Object;
             regexp_prototype:  *Gc_Object;
             symbol_prototype:  *Gc_Object;
@@ -3204,29 +3284,6 @@ Vm :: struct {
 
     current_function: *Bytecode_Function;
     current_pc:       *Instruction;
-}
-
-throw_exception :: (vm: *Vm, value: Value) {
-    vm.exception = value;
-    vm.has_exception = true;
-}
-
-throw_exception :: (vm: *Vm, message: string) {
-    stack_trace := get_stack_trace_string(vm);
-
-    error_object := allocate_object(vm);
-    error_object.prototype = vm.error_prototype;
-
-    message_value := Value.{ type = .STRING, s = message };
-    set_object_property(vm, error_object, "message", message_value);
-
-    stack_value := Value.{ type = .STRING, s = stack_trace };
-    set_object_property(vm, error_object, "stack", stack_value);
-
-    vm.exception = .{ type = .OBJECT, object = error_object };
-    vm.has_exception = true;
-    vm.has_stack_trace = true;
-    vm.stack_trace = stack_trace;
 }
 
 Profiler :: struct {
@@ -3272,6 +3329,14 @@ Gc_Object_Kind :: enum u8 {
     NUMBER_WRAPPER;
     STRING_WRAPPER;
     UINT8_ARRAY;
+    INT8_ARRAY;
+    UINT16_ARRAY;
+    INT16_ARRAY;
+    UINT32_ARRAY;
+    INT32_ARRAY;
+    FLOAT32_ARRAY;
+    FLOAT64_ARRAY;
+    UINT8_CLAMPED_ARRAY;
     REGEXP;
     SYMBOL;
 }

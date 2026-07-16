@@ -84,10 +84,10 @@ file_write_entire_file :: (vm: *Vm, this: Value, arguments: [] Value, is_new: bo
 
     if data.type == .STRING {
         content = data.s;
-    } else if data.type == .OBJECT && data.object.kind == .UINT8_ARRAY {
+    } else if data.type == .OBJECT && is_typed_array(data.object.kind) {
         content = data.object.primitive_value.s;
     } else {
-        throw_exception(vm, "write_entire_file data must be a string or Uint8Array");
+        throw_exception(vm, "write_entire_file data must be a string or TypedArray");
         return .{};
     }
 
@@ -123,10 +123,10 @@ file_append_to_file :: (vm: *Vm, this: Value, arguments: [] Value, is_new: bool 
 
     if data.type == .STRING {
         content = data.s;
-    } else if data.type == .OBJECT && data.object.kind == .UINT8_ARRAY {
+    } else if data.type == .OBJECT && is_typed_array(data.object.kind) {
         content = data.object.primitive_value.s;
     } else {
-        throw_exception(vm, "append_to_file data must be a string or Uint8Array");
+        throw_exception(vm, "append_to_file data must be a string or TypedArray");
         return .{};
     }
 
