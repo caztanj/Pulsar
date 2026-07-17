@@ -48,12 +48,20 @@ main :: () {
         .{ "test_vm_basic", test_vm_basic },
     ];
 
+    has_error_global := false;
     for test_procs {
+        has_error = false;
+
         start_time := seconds_since_init();
         it.proc();
         elapsed_ms := (seconds_since_init() - start_time) * 1000.0;
         
-        print("[ PASS ] %", it.name);
+        if has_error {
+            print("[ FAIL ] %", it.name);
+            has_error_global = true;
+        } else {
+            print("[ PASS ] %", it.name);
+        }
         
         padding := 30 - it.name.count;
         if padding < 0 then padding = 0;
@@ -64,7 +72,12 @@ main :: () {
         reset_temporary_storage();
     }
 
-    if !has_error print("\nAll tests passed! (%/%)\n", test_procs.count, test_procs.count);
+    if !has_error_global {
+        print("\nAll tests passed! (%/%)\n", test_procs.count, test_procs.count);
+    } else {
+        print("\nSome tests failed!\n");
+        exit(1);
+    }
 }
 
 test :: (name: string, proc: Test_Proc) {
