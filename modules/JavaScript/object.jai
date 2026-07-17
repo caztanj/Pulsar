@@ -48,7 +48,7 @@ lookup_property :: (vm: *Vm, object: *Gc_Object, name: string, imm: int = -1) ->
                     return true, .{ type = .NUMBER, number = get_typed_array_element(current, parsed_index) };
                 }
             } else if parsed_index < current.elements.count {
-                if current.elements[parsed_index].type != .UNDEFINED return true, current.elements[parsed_index];
+                if current.elements[parsed_index].type != .EMPTY return true, current.elements[parsed_index];
             }
         } else {
             if name == "length" {
@@ -76,7 +76,7 @@ lookup_property :: (vm: *Vm, object: *Gc_Object, name: string, imm: int = -1) ->
 
             if current.shape {
                 offset, found := shape_lookup_property(current.shape, name, imm);
-                if found && offset < current.fields.count && current.fields[offset].type != .UNDEFINED return true, current.fields[offset];
+                if found && offset < current.fields.count && current.fields[offset].type != .EMPTY return true, current.fields[offset];
             }
         }
 

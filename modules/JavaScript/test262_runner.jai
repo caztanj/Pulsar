@@ -65,9 +65,39 @@ visitor :: (info: *File_Visit_Info, user_data: *void) {
 
     expected_to_fail := contains(test_code, "negative:");
 
-    full_code := tprint("%\n%\n", harness_code_global, test_code);
+    includes_code: String_Builder;
+    init_string_builder(*includes_code);
+
+    header_start := find_index_from_left(test_code, "/*---");
+    header_end   := find_index_from_left(test_code, "---*/");
+    if header_start >= 0 && header_end > header_start {
+        header := slice(test_code, header_start, header_end - header_start);
+        includes_index := find_index_from_left(header, "includes: [");
+        if includes_index >= 0 {
+            start := includes_index + 11;
+            end := find_index_from_left(header, "]", start);
+            if end > start {
+                includes_str := slice(header, start, end - start);
+                includes := split(includes_str, ",");
+                for includes {
+                    include_file := trim(it);
+                    if include_file.count > 0 {
+                        path := tprint("%/harness/%", "modules/JavaScript/test262", include_file);
+                        include_content, success := read_entire_file(path);
+                        if success {
+                            append(*includes_code, include_content);
+                            append(*includes_code, "\n");
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    full_code := tprint("%\n%\n%\n", harness_code_global, builder_to_string(*includes_code), test_code);
 
     print("RUN: %\n", info.short_name);
+    write_entire_file("debug_test262.js", full_code);
     vm := run(full_code, permissions = 0, silence_console_output = true);
     defer {
         if vm.program deinit(vm.program);

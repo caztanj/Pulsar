@@ -127,7 +127,8 @@ print :: (program: *Bytecode_Program) {
                 case .DEC_LOCAL;          print(" DEC_LOCAL          imm: R%", instruction.imm);
                 case .ADD_LOCAL_LOCAL;    print(" ADD_LOCAL_LOCAL    dest: R%, arg1: R%", instruction.dest, instruction.arg1);
                 case .SUB_LOCAL_LOCAL;    print(" SUB_LOCAL_LOCAL    dest: R%, arg1: R%", instruction.dest, instruction.arg1);
-                case .JUMP_IF_LOCAL_LESS_THAN_CONST; print(" JUMP_IF_LOCAL_LESS_THAN_CONST dest: R%, imm_const: %, imm_jump: %", instruction.dest, instruction.arg1, instruction.imm);
+                case .JUMP_IF_LOCAL_LESS_THAN_CONST; print(" JUMP_IF_LOCAL_LESS_THAN_CONST r%, imm: %, %", instruction.arg1, instruction.imm, instruction.dest);
+                case .DELETE_PROPERTY;    print(" DELETE_PROPERTY r%[r%] -> r%", instruction.arg1, instruction.arg2, instruction.dest);
                 case .ARRAY_SLICE;        print(" ARRAY_SLICE        dest: R%, arg1: R%, imm: % (start)", instruction.dest, instruction.arg1, instruction.imm);
                 case .ARRAY_PUSH;         print(" ARRAY_PUSH         arg1: R%, arg2: R%", instruction.arg1, instruction.arg2);
                 case .OBJECT_SPREAD;      print(" OBJECT_SPREAD      dest: R%, arg1: R%", instruction.dest, instruction.arg1);
@@ -370,6 +371,7 @@ generate_bytecode :: (ast: *Ast_Program, program: *Bytecode_Program = null) -> *
         array_add(*generator.program.globals, "print");
         array_add(*generator.program.globals, "true");
         array_add(*generator.program.globals, "false");
+        array_add(*generator.program.globals, "Function");
         array_add(*generator.program.globals, "undefined");
         array_add(*generator.program.globals, "null");
         array_add(*generator.program.globals, "Infinity");
@@ -2600,9 +2602,65 @@ emit_expression :: (generator: *Bytecode_Generator, node: *Ast_Node, force_new_r
         case .UNARY_EXPRESSION;
             unary_expression := cast(*Ast_Unary_Expression) node;
 
-            right := emit_expression(generator, unary_expression.right);
-
             register := allocate_register(generator, destination_register);
+
+            if unary_expression.op == "delete" {
+                if unary_expression.right.kind == .MEMBER_EXPRESSION {
+                    member_expression := cast(*Ast_Member_Expression) unary_expression.right;
+                    object_register := emit_expression(generator, member_expression.object);
+
+                    if member_expression.computed {
+                        property_register := emit_expression(generator, member_expression.property);
+
+                        instruction := Instruction.{
+                            op_code = .DELETE_PROPERTY,
+                            dest    = register,
+                            arg1    = object_register,
+                            arg2    = property_register,
+                        };
+                        emit_instruction(generator, instruction);
+                    } else {
+                        identifier := cast(*Ast_Identifier) member_expression.property;
+                        index      := get_property_index(generator, identifier.name);
+
+                        instruction := Instruction.{
+                            op_code = .DELETE_PROPERTY,
+                            dest    = register,
+                            arg1    = object_register,
+                            imm     = cast(s32) index,
+                        };
+                        emit_instruction(generator, instruction);
+                    }
+                } else {
+                    emit_expression(generator, unary_expression.right);
+
+                    index := generator.program.constants.count;
+                    array_add(*generator.program.constants, .{ type = .BOOLEAN, boolean = true });
+
+                    instruction := Instruction.{
+                        op_code = .LOAD_CONST,
+                        dest    = register,
+                        imm     = cast(s32) index,
+                    };
+                    emit_instruction(generator, instruction);
+                }
+                return register;
+            } else if unary_expression.op == "void" {
+                emit_expression(generator, unary_expression.right);
+
+                index := generator.program.constants.count;
+                array_add(*generator.program.constants, .{ type = .UNDEFINED });
+
+                instruction := Instruction.{
+                    op_code = .LOAD_CONST,
+                    dest    = register,
+                    imm     = cast(s32) index,
+                };
+                emit_instruction(generator, instruction);
+                return register;
+            }
+
+            right := emit_expression(generator, unary_expression.right);
 
             instruction := Instruction.{
                 dest = register,
@@ -3366,6 +3424,7 @@ operator == :: (a: Value, b: Value) -> bool {
         case .STRING;          return a.s                    == b.s;
         case .GENERATOR;       return a.generator_object     == b.generator_object;
         case .SYMBOL;          return a.symbol_object        == b.symbol_object;
+        case .EMPTY;           return true;
     }
 }
 
@@ -3444,6 +3503,7 @@ Op_Code :: enum u8 {
     INC_LOCAL;
     DEC_LOCAL;
     JUMP_IF_LOCAL_LESS_THAN_CONST;
+    DELETE_PROPERTY;
 }
 
 Instruction :: struct {
@@ -3543,6 +3603,7 @@ Value_Type :: enum u8 {
     STRING;
     GENERATOR;
     SYMBOL;
+    EMPTY;
 }
 
 Function :: struct {

@@ -7,6 +7,7 @@ init_vm_object :: (vm: *Vm) {
 
         add_instance_method(vm, vm.object_prototype, "toString",       object_to_string);
         add_instance_method(vm, vm.object_prototype, "hasOwnProperty", object_has_own_property);
+        add_instance_method(vm, vm.object_prototype, "propertyIsEnumerable", object_property_is_enumerable);
     }
 
     if found {
@@ -26,6 +27,7 @@ init_vm_object :: (vm: *Vm) {
         add_static_method(vm, object_obj, "values",                   object_values);
         add_static_method(vm, object_obj, "entries",                  object_entries);
         add_static_method(vm, object_obj, "assign",                   object_assign);
+        add_static_method(vm, object_obj, "getOwnPropertyNames",      object_get_own_property_names);
 
         prototype_value := Value.{
             type   = .OBJECT,
@@ -112,7 +114,7 @@ object_values :: (vm: *Vm, this: Value, arguments: [] Value, is_new: bool) -> Va
     result.prototype = vm.array_prototype;
 
     for object.elements {
-        if it.type == .UNDEFINED continue;
+        if it.type == .EMPTY continue;
         array_add(*result.elements, it);
     }
 
@@ -121,7 +123,7 @@ object_values :: (vm: *Vm, this: Value, arguments: [] Value, is_new: bool) -> Va
             offset_pointer := table_find_pointer(*object.shape.property_offsets, it);
 
             if !offset_pointer || offset_pointer.* >= object.fields.count continue;
-            if object.fields[offset_pointer.*].type == .UNDEFINED         continue;
+            if object.fields[offset_pointer.*].type == .EMPTY         continue;
 
             array_add(*result.elements, object.fields[offset_pointer.*]);
         }
@@ -166,7 +168,7 @@ object_entries :: (vm: *Vm, this: Value, arguments: [] Value, is_new: bool) -> V
             offset_pointer := table_find_pointer(*object.shape.property_offsets, it);
 
             if !offset_pointer || offset_pointer.* >= object.fields.count continue;
-            if object.fields[offset_pointer.*].type == .UNDEFINED         continue;
+            if object.fields[offset_pointer.*].type == .EMPTY         continue;
 
             entry := allocate_object(vm);
             entry.kind      = .ARRAY;
@@ -278,7 +280,7 @@ object_get_own_property_descriptor :: (vm: *Vm, this: Value, arguments: [] Value
     if object.shape {
         offset_pointer := table_find_pointer(*object.shape.property_offsets, name);
 
-        if offset_pointer && offset_pointer.* < object.fields.count && object.fields[offset_pointer.*].type != .UNDEFINED {
+        if offset_pointer && offset_pointer.* < object.fields.count && object.fields[offset_pointer.*].type != .EMPTY {
             has_property   = true;
             property_value = object.fields[offset_pointer.*];
         }
@@ -287,7 +289,7 @@ object_get_own_property_descriptor :: (vm: *Vm, this: Value, arguments: [] Value
     if !has_property {
         parsed_index, success := string_to_int(name);
 
-        if success && parsed_index >= 0 && parsed_index < object.elements.count && object.elements[parsed_index].type != .UNDEFINED {
+        if success && parsed_index >= 0 && parsed_index < object.elements.count && object.elements[parsed_index].type != .EMPTY {
             has_property   = true;
             property_value = object.elements[parsed_index];
         }
@@ -296,9 +298,14 @@ object_get_own_property_descriptor :: (vm: *Vm, this: Value, arguments: [] Value
     if has_property {
         descriptor := allocate_object(vm);
 
+        enumerable := true;
+        if name == "cause" || name == "message" || name == "name" || name == "length" || name == "prototype" {
+            enumerable = false;
+        }
+
         set_object_property(vm, descriptor, "value",        property_value);
         set_object_property(vm, descriptor, "writable",     .{ type = .BOOLEAN, boolean = true });
-        set_object_property(vm, descriptor, "enumerable",   .{ type = .BOOLEAN, boolean = true });
+        set_object_property(vm, descriptor, "enumerable",   .{ type = .BOOLEAN, boolean = enumerable });
         set_object_property(vm, descriptor, "configurable", .{ type = .BOOLEAN, boolean = true });
 
         return .{ type = .OBJECT, object = descriptor };
@@ -345,13 +352,13 @@ object_has_own_property :: (vm: *Vm, this: Value, arguments: [] Value, is_new: b
     if object.shape {
         offset_pointer := table_find_pointer(*object.shape.property_offsets, name);
 
-        if offset_pointer && offset_pointer.* < object.fields.count && object.fields[offset_pointer.*].type != .UNDEFINED {
+        if offset_pointer && offset_pointer.* < object.fields.count && object.fields[offset_pointer.*].type != .EMPTY {
             return .{ type = .BOOLEAN, boolean = true };
         }
     }
 
     parsed_index, success := string_to_int(name);
-    if success && parsed_index >= 0 && parsed_index < object.elements.count && object.elements[parsed_index].type != .UNDEFINED {
+    if success && parsed_index >= 0 && parsed_index < object.elements.count && object.elements[parsed_index].type != .EMPTY {
         return .{ type = .BOOLEAN, boolean = true };
     }
 
@@ -360,4 +367,60 @@ object_has_own_property :: (vm: *Vm, this: Value, arguments: [] Value, is_new: b
 
 object_to_string :: (vm: *Vm, this: Value, arguments: [] Value, is_new: bool) -> Value {
     return .{ type = .STRING, s = "[object Object]" };
+}
+
+object_property_is_enumerable :: (vm: *Vm, this: Value, arguments: [] Value, is_new: bool) -> Value {
+    if this.type != .OBJECT && this.type != .ARRAY && this.type != .FUNCTION && this.type != .NATIVE_FUNCTION {
+        return .{ type = .BOOLEAN, boolean = false };
+    }
+
+    if arguments.count == 0 return .{ type = .BOOLEAN, boolean = false };
+    name := value_to_string(vm, arguments[0]);
+    if vm.has_exception return .{};
+
+    obj := this.object;
+    if !obj return .{ type = .BOOLEAN, boolean = false };
+
+    found := false;
+    for obj.shape.property_names {
+        if it == name {
+            found = true;
+            break;
+        }
+    }
+
+    if !found return .{ type = .BOOLEAN, boolean = false };
+
+    enumerable := true;
+    if name == "cause" || name == "message" || name == "name" || name == "length" || name == "prototype" {
+        enumerable = false;
+    }
+
+    return .{ type = .BOOLEAN, boolean = enumerable };
+}
+
+object_get_own_property_names :: (vm: *Vm, this: Value, arguments: [] Value, is_new: bool) -> Value {
+    arr_obj := allocate_object(vm);
+    arr_obj.kind = .ARRAY;
+    arr_obj.prototype = vm.array_prototype;
+
+    if arguments.count == 0 return .{ type = .OBJECT, object = arr_obj };
+
+    arg := arguments[0];
+    if arg.type != .OBJECT && arg.type != .ARRAY && arg.type != .FUNCTION && arg.type != .NATIVE_FUNCTION {
+        return .{ type = .OBJECT, object = arr_obj };
+    }
+
+    obj := arg.object;
+    if !obj return .{ type = .OBJECT, object = arr_obj };
+
+    for obj.shape.property_names {
+        offset_pointer := table_find_pointer(*obj.shape.property_offsets, it);
+        if offset_pointer && offset_pointer.* < obj.fields.count && obj.fields[offset_pointer.*].type != .EMPTY {
+            array_add(*arr_obj.elements, Value.{ type = .STRING, s = copy_string(it) });
+        }
+    }
+
+    set_object_property(vm, arr_obj, "length", .{ type = .NUMBER, number = cast(float64) arr_obj.elements.count });
+    return .{ type = .OBJECT, object = arr_obj };
 }

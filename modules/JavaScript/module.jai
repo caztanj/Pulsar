@@ -112,6 +112,7 @@ Permission :: enum_flags {
 #load "extensions/error.jai";
 #load "extensions/regexp.jai";
 #load "extensions/symbol.jai";
+#load "extensions/function.jai";
 
 #scope_module
 

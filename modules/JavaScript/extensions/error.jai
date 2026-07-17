@@ -146,6 +146,21 @@ aggregate_error_constructor :: (vm: *Vm, this: Value, arguments: [] Value, is_ne
     }
     set_object_property(vm, object, "message", Value.{ type = .STRING, s = message });
 
+    if arguments.count > 2 {
+        options := arguments[2];
+        if options.type == .OBJECT || options.type == .ARRAY || options.type == .FUNCTION || options.type == .NATIVE_FUNCTION {
+            options_obj := options.object;
+            if options_obj {
+                found_cause, cause_val := lookup_property(vm, options_obj, "cause");
+                if vm.has_exception return .{};
+
+                if found_cause {
+                    set_object_property(vm, object, "cause", cause_val);
+                }
+            }
+        }
+    }
+
     stack_trace := get_stack_trace_string(vm);
     set_object_property(vm, object, "stack", Value.{ type = .STRING, s = stack_trace });
 
@@ -155,19 +170,42 @@ aggregate_error_constructor :: (vm: *Vm, this: Value, arguments: [] Value, is_ne
 iterable_to_list :: (vm: *Vm, iterable: Value) -> [..] Value, bool {
     result: [..] Value;
 
-    if iterable.type != .OBJECT {
+    if iterable.type == .UNDEFINED || iterable.type == .NULL {
+        throw_exception(vm, "TypeError: iterable is not an object");
+        return result, false;
+    }
+
+    object: *Gc_Object;
+    if iterable.type == .OBJECT || iterable.type == .ARRAY || iterable.type == .FUNCTION || iterable.type == .NATIVE_FUNCTION || iterable.type == .SYMBOL {
+        object = iterable.object;
+    } else if iterable.type == .GENERATOR {
+        object = iterable.generator_object;
+    } else if iterable.type == .STRING {
+        object = vm.string_prototype;
+    } else if iterable.type == .NUMBER {
+        object = vm.number_prototype;
+    } else if iterable.type == .BOOLEAN {
+        object = vm.boolean_prototype;
+    } else {
         throw_exception(vm, "TypeError: iterable is not an object");
         return result, false;
     }
 
     iterator_symbol_name := "@@Symbol.iterator";
-    found_method, method := lookup_property(vm, iterable.object, iterator_symbol_name);
+    found_method, method := lookup_property(vm, object, iterator_symbol_name);
     if vm.has_exception return result, false;
 
     if !found_method || method.type == .UNDEFINED || method.type == .NULL {
-        if iterable.object.kind == .ARRAY {
-            for iterable.object.elements {
+        if iterable.type == .ARRAY && object && object.kind == .ARRAY {
+            for object.elements {
                 array_add(*result, it);
+            }
+            return result, true;
+        }
+        if iterable.type == .STRING {
+            for i: 0..iterable.s.count - 1 {
+                char := slice(iterable.s, i, 1);
+                array_add(*result, .{ type = .STRING, s = allocate_string(vm, char) });
             }
             return result, true;
         }

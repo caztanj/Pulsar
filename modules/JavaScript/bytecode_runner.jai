@@ -1,28 +1,3 @@
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 run_bytecode :: (program: *Bytecode_Program, profile := false, permissions: Permission = 0, execute_main_function := true) -> *Vm {
     vm := New(Vm);
 
@@ -322,7 +297,7 @@ execute_function_internal :: (vm: *Vm, initial_function: *Bytecode_Function, ini
                     loaded_function := vm.program.functions[instruction.imm];
 
                     function_object           := allocate_object(vm);
-                    function_object.prototype  = null;
+                    function_object.prototype  = vm.function_prototype;
 
                     registers_data[instruction.dest].object = function_object;
                     set_object_property(vm, function_object, "name", .{ type = .STRING, s = loaded_function.name });
@@ -546,6 +521,8 @@ execute_function_internal :: (vm: *Vm, initial_function: *Bytecode_Function, ini
                     value         := *registers_data[instruction.arg1];
                     property_name := vm.program.property_names[instruction.imm];
 
+                    vm.last_looked_up_property = property_name;
+
                     if (value.type == .OBJECT || value.type == .ARRAY) && value.object {
                         object := value.object;
 
@@ -580,7 +557,7 @@ execute_function_internal :: (vm: *Vm, initial_function: *Bytecode_Function, ini
                         } else {
                             registers_data[instruction.dest] = get_property_or_undefined(vm, vm.string_prototype, property_name, instruction.imm);
                         }
-                    } else if value.type == .OBJECT || value.type == .ARRAY || value.type == .GENERATOR || value.type == .FUNCTION || value.type == .NATIVE_FUNCTION || value.type == .SYMBOL {
+                    } else if value.type == .OBJECT || value.type == .ARRAY || value.type == .GENERATOR || value.type == .SYMBOL {
                         current := ifx value.type == .GENERATOR value.generator_object else value.object;
 
                         if current && current.kind == .GLOBAL_PROXY {
@@ -599,6 +576,13 @@ execute_function_internal :: (vm: *Vm, initial_function: *Bytecode_Function, ini
                         } else {
                             registers_data[instruction.dest] = .{ type = .UNDEFINED };
                         }
+                    } else if value.type == .FUNCTION || value.type == .NATIVE_FUNCTION {
+                        current := value.object;
+                        if current {
+                            registers_data[instruction.dest] = get_property_or_undefined(vm, current, property_name, instruction.imm);
+                        } else {
+                            registers_data[instruction.dest] = get_property_or_undefined(vm, vm.function_prototype, property_name, instruction.imm);
+                        }
                     } else if value.type == .NUMBER {
                         registers_data[instruction.dest] = get_property_or_undefined(vm, vm.number_prototype, property_name, instruction.imm);
                     } else if value.type == .BOOLEAN {
@@ -607,6 +591,27 @@ execute_function_internal :: (vm: *Vm, initial_function: *Bytecode_Function, ini
                         registers_data[instruction.dest] = .{ type = .UNDEFINED };
                     }
 
+                    last_value = registers_data[instruction.dest];
+
+                case .DELETE_PROPERTY;
+                    object_val := registers_data[instruction.arg1];
+                    property_name: string;
+                    if instruction.arg2 != 0 {
+                        property_name = value_to_string(vm, registers_data[instruction.arg2]);
+                    } else {
+                        property_name = vm.program.property_names[instruction.imm];
+                    }
+
+                    success := true;
+                    if object_val.type == .OBJECT || object_val.type == .ARRAY || object_val.type == .FUNCTION || object_val.type == .NATIVE_FUNCTION {
+                        object := object_val.object;
+                        if object {
+                            success = delete_property(vm, object, property_name);
+                        }
+                    }
+
+                    registers_data[instruction.dest].type = .BOOLEAN;
+                    registers_data[instruction.dest].boolean = success;
                     last_value = registers_data[instruction.dest];
 
                 case .NEW_ARRAY;
@@ -1124,6 +1129,7 @@ execute_function_internal :: (vm: *Vm, initial_function: *Bytecode_Function, ini
                         case .ARRAY;           type_name = "object";
                         case .GENERATOR;       type_name = "object";
                         case .SYMBOL;          type_name = "symbol";
+                        case .EMPTY;           type_name = "undefined";
                     }
 
                     registers_data[instruction.dest].type = .STRING;
@@ -1146,7 +1152,7 @@ execute_function_internal :: (vm: *Vm, initial_function: *Bytecode_Function, ini
                 case .YIELD;
                     if generator {
                         generator.generator_pc = cast(int)(pc_pointer - instructions_pointer);
-                        
+
                         vm.call_stack.count -= 1;
                         if env.is_captured {
                             env.next = vm.gc.environments;
@@ -1158,7 +1164,7 @@ execute_function_internal :: (vm: *Vm, initial_function: *Bytecode_Function, ini
                             env.next               = vm.gc.environment_pool;
                             vm.gc.environment_pool = env;
                         }
-                        
+
                         return registers_data[instruction.arg1];
                     }
 
@@ -1928,6 +1934,7 @@ call_value :: inline (vm: *Vm, this: Value, callee: Value, arguments: [] Value, 
             }
         }
 
+        vm.current_native_callee = callee;
         result := callee.native_function(vm, effective_this, final_arguments, is_new);
 
         if is_new {
@@ -1938,6 +1945,9 @@ call_value :: inline (vm: *Vm, this: Value, callee: Value, arguments: [] Value, 
         return result;
     }
 
+    print("call_value failed! callee.type: % last prop: %\n", callee.type, vm.last_looked_up_property);
+    if callee.type == .STRING print("callee string: %\n", callee.s);
+    throw_exception(vm, "TypeError: callee is not a function");
     return .{};
 }
 
@@ -1953,6 +1963,7 @@ get_global_index :: (vm: *Vm, name: string) -> found: bool, index: int {
 init_common_vm_globals :: (vm: *Vm) {
     init_vm_core(vm);
     init_vm_object(vm);
+    init_vm_function(vm);
     init_vm_boolean(vm);
     init_vm_math(vm);
     init_vm_number(vm);
@@ -2159,6 +2170,7 @@ value_to_string :: (vm: *Vm, value: Value) -> string {
         case .FUNCTION;        return "[object Function]";
         case .NATIVE_FUNCTION; return "[object NativeFunction]";
         case .GENERATOR;       return "[object Generator]";
+        case .EMPTY;           return "empty";
     }
 }
 
@@ -2182,7 +2194,7 @@ allocate_string_from_builder :: (vm: *Vm, builder: *String_Builder) -> string {
 
     result := builder_to_string(builder);
     if !result return "";
-    
+
     table_set(*vm.allocated_strings, result.data, .{ s = result, marked = false });
 
     return result;
@@ -2320,6 +2332,7 @@ values_strict_equal :: (a: Value, b: Value) -> bool {
         case .STRING;          return a.s                    == b.s;
         case .GENERATOR;       return a.generator_object     == b.generator_object;
         case .SYMBOL;          return a.symbol_object        == b.symbol_object;
+        case .EMPTY;           return true;
     }
 
     return false;
@@ -2338,6 +2351,7 @@ is_truthy :: (value: Value) -> bool {
         case .STRING;          return value.s.count > 0;
         case .GENERATOR;       return true;
         case .SYMBOL;          return true;
+        case .EMPTY;           return false;
     }
 
     return false;
@@ -2748,10 +2762,14 @@ Vm :: struct {
             error_prototype:   *Gc_Object;
             regexp_prototype:  *Gc_Object;
             symbol_prototype:  *Gc_Object;
+            function_prototype:*Gc_Object;
         };
     };
 
     program:         *Bytecode_Program;
+
+    current_native_callee: Value;
+    last_looked_up_property: string;
     microtask_queue: [..] Microtask;
     timer_queue:     [..] Timer;
     timer_id_counter: int;
@@ -2814,6 +2832,23 @@ Promise_Status :: enum {
     PENDING;
     FULFILLED;
     REJECTED;
+}
+
+delete_property :: (vm: *Vm, object: *Gc_Object, name: string) -> bool {
+    if object.shape {
+        offset_pointer := table_find_pointer(*object.shape.property_offsets, name);
+        if offset_pointer && offset_pointer.* < object.fields.count {
+            object.fields[offset_pointer.*] = .{ type = .EMPTY };
+            return true;
+        }
+    }
+
+    parsed_index, success := string_to_int(name);
+    if success && parsed_index >= 0 && parsed_index < object.elements.count {
+        object.elements[parsed_index] = .{ type = .EMPTY };
+        return true;
+    }
+    return true;
 }
 
 

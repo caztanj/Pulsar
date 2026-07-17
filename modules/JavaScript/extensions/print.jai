@@ -23,6 +23,7 @@ print :: (vm: *Vm, this: Value, arguments: [] Value, is_new: bool = false) -> Va
             case .SYMBOL;
                 if it.symbol_object.primitive_value.type == .STRING print("Symbol(%)", it.symbol_object.primitive_value.s);
                 else print("Symbol()");
+            case .EMPTY;           print("<empty>");
         }
 
         if it_index < arguments.count - 1 print(" ");

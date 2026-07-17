@@ -770,7 +770,7 @@ parse_unary :: (parser: *Parser) -> *Ast_Node {
     if is_at_end(parser) return null;
 
     token := peek(parser);
-    if (token.type == .OPERATOR && (token.text == "!" || token.text == "-" || token.text == "+" || token.text == "++" || token.text == "--")) || (token.type == .IDENTIFIER && (token.text == "typeof" || token.text == "yield" || token.text == "await")) {
+    if (token.type == .OPERATOR && (token.text == "!" || token.text == "-" || token.text == "+" || token.text == "++" || token.text == "--" || token.text == "void" || token.text == "delete")) || (token.type == .IDENTIFIER && (token.text == "typeof" || token.text == "yield" || token.text == "await" || token.text == "void" || token.text == "delete")) {
         advance(parser);
 
         if token.text == "++" || token.text == "--" {
