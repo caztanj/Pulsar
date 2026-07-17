@@ -82,8 +82,18 @@ visitor :: (info: *File_Visit_Info, user_data: *void) {
     } else {
         if vm.has_exception {
             print("FAIL: %\n", info.full_name);
-            print("Uncaught exception: ");
-            print(vm, .{}, .[vm.exception]);
+
+            name := "Error";
+            msg := "";
+            if vm.exception.type == .OBJECT && vm.exception.object {
+                found_name, name_val := lookup_property(vm, vm.exception.object, "name");
+                found_msg, msg_val := lookup_property(vm, vm.exception.object, "message");
+                if found_name && name_val.type == .STRING then name = name_val.s;
+                if found_msg && msg_val.type == .STRING then msg = msg_val.s;
+            } else if vm.exception.type == .STRING {
+                msg = vm.exception.s;
+            }
+            print("Uncaught exception: %: %\n", name, msg);
             print("\n");
 
             if vm.has_stack_trace {

@@ -17,7 +17,8 @@ init_vm_error :: (vm: *Vm) {
         "TypeError",
         "ReferenceError",
         "SyntaxError",
-        "RangeError"
+        "RangeError",
+        "AggregateError"
     ];
 
     for error_classes {
@@ -30,6 +31,7 @@ init_vm_error :: (vm: *Vm) {
             if it == "ReferenceError" vm.current_realm.globals[index].native_function = error_constructor_ReferenceError;
             if it == "SyntaxError"    vm.current_realm.globals[index].native_function = error_constructor_SyntaxError;
             if it == "RangeError"     vm.current_realm.globals[index].native_function = error_constructor_RangeError;
+            if it == "AggregateError" vm.current_realm.globals[index].native_function = error_constructor_AggregateError;
 
             error_constructor_object := allocate_object(vm);
             name_value := Value.{ type = .STRING, s = it };
@@ -105,4 +107,111 @@ error_to_string :: (vm: *Vm, this: Value, arguments: [] Value, is_new: bool) -> 
     }
 
     return .{ type = .STRING, s = name };
+}
+
+error_constructor_AggregateError :: (vm: *Vm, this: Value, arguments: [] Value, is_new: bool) -> Value {
+    return aggregate_error_constructor(vm, this, arguments, is_new);
+}
+
+aggregate_error_constructor :: (vm: *Vm, this: Value, arguments: [] Value, is_new: bool) -> Value {
+    object := allocate_object(vm);
+
+    found_property, index := get_global_index(vm, "AggregateError");
+    if found_property {
+        found_prototype, prototype_value := lookup_property(vm, vm.current_realm.globals[index].object, "prototype");
+        if prototype_value.type == .OBJECT object.prototype = prototype_value.object;
+        else object.prototype = vm.error_prototype;
+    } else {
+        object.prototype = vm.error_prototype;
+    }
+
+    errors_arg := Value.{ type = .UNDEFINED };
+    if arguments.count > 0 {
+        errors_arg = arguments[0];
+    }
+
+    list, success := iterable_to_list(vm, errors_arg);
+    if !success return .{};
+
+    errors_array := allocate_object(vm);
+    errors_array.kind = .ARRAY;
+    for list {
+        array_add(*errors_array.elements, it);
+    }
+    set_object_property(vm, object, "errors", .{ type = .ARRAY, object = errors_array });
+
+    message := "";
+    if arguments.count > 1 && arguments[1].type != .UNDEFINED {
+        message = value_to_string(vm, arguments[1]);
+    }
+    set_object_property(vm, object, "message", Value.{ type = .STRING, s = message });
+
+    stack_trace := get_stack_trace_string(vm);
+    set_object_property(vm, object, "stack", Value.{ type = .STRING, s = stack_trace });
+
+    return .{ type = .OBJECT, object = object };
+}
+
+iterable_to_list :: (vm: *Vm, iterable: Value) -> [..] Value, bool {
+    result: [..] Value;
+
+    if iterable.type != .OBJECT {
+        throw_exception(vm, "TypeError: iterable is not an object");
+        return result, false;
+    }
+
+    iterator_symbol_name := "@@Symbol.iterator";
+    found_method, method := lookup_property(vm, iterable.object, iterator_symbol_name);
+    if vm.has_exception return result, false;
+
+    if !found_method || method.type == .UNDEFINED || method.type == .NULL {
+        if iterable.object.kind == .ARRAY {
+            for iterable.object.elements {
+                array_add(*result, it);
+            }
+            return result, true;
+        }
+        throw_exception(vm, "TypeError: object is not iterable");
+        return result, false;
+    }
+
+    iterator := call_value(vm, iterable, method, .[]);
+    if vm.has_exception return result, false;
+
+    if iterator.type != .OBJECT {
+        throw_exception(vm, "TypeError: iterator is not an object");
+        return result, false;
+    }
+
+    while true {
+        found_next, next_method := lookup_property(vm, iterator.object, "next");
+        if vm.has_exception return result, false;
+
+        if !found_next || (next_method.type != .FUNCTION && next_method.type != .NATIVE_FUNCTION) {
+            throw_exception(vm, "TypeError: iterator next is not callable");
+            return result, false;
+        }
+
+        next_result := call_value(vm, iterator, next_method, .[]);
+        if vm.has_exception return result, false;
+
+        if next_result.type != .OBJECT {
+            throw_exception(vm, "TypeError: iterator next() returned a non-object");
+            return result, false;
+        }
+
+        found_done, done_val := lookup_property(vm, next_result.object, "done");
+        if vm.has_exception return result, false;
+
+        if found_done && is_truthy(done_val) {
+            break;
+        }
+
+        found_val, val := lookup_property(vm, next_result.object, "value");
+        if vm.has_exception return result, false;
+
+        array_add(*result, val);
+    }
+
+    return result, true;
 }

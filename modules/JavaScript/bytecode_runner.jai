@@ -319,12 +319,13 @@ execute_function_internal :: (vm: *Vm, initial_function: *Bytecode_Function, ini
                         current             = current.parent;
                     }
 
+                    loaded_function := vm.program.functions[instruction.imm];
+
                     function_object           := allocate_object(vm);
                     function_object.prototype  = null;
 
                     registers_data[instruction.dest].object = function_object;
-
-                    loaded_function := vm.program.functions[instruction.imm];
+                    set_object_property(vm, function_object, "name", .{ type = .STRING, s = loaded_function.name });
 
                     if !(loaded_function.flags & .ARROW) {
                         prototype_object           := allocate_object(vm);
@@ -2585,10 +2586,36 @@ throw_exception :: (vm: *Vm, value: Value) {
 throw_exception :: (vm: *Vm, message: string) {
     stack_trace := get_stack_trace_string(vm);
 
-    error_object := allocate_object(vm);
-    error_object.prototype = vm.error_prototype;
+    proto := vm.error_prototype;
+    name  := "Error";
+    actual_message := message;
 
-    message_value := Value.{ type = .STRING, s = message };
+    if starts_with(message, "TypeError: ") {
+        name = "TypeError";
+        actual_message = slice(message, 11, message.count - 11);
+    } else if starts_with(message, "ReferenceError: ") {
+        name = "ReferenceError";
+        actual_message = slice(message, 16, message.count - 16);
+    } else if starts_with(message, "RangeError: ") {
+        name = "RangeError";
+        actual_message = slice(message, 12, message.count - 12);
+    } else if starts_with(message, "SyntaxError: ") {
+        name = "SyntaxError";
+        actual_message = slice(message, 13, message.count - 13);
+    }
+
+    found_property, index := get_global_index(vm, name);
+    if found_property {
+        found_prototype, prototype_value := lookup_property(vm, vm.current_realm.globals[index].object, "prototype");
+        if prototype_value.type == .OBJECT proto = prototype_value.object;
+    }
+
+    error_object := allocate_object(vm);
+    error_object.prototype = proto;
+
+    set_object_property(vm, error_object, "name", Value.{ type = .STRING, s = name });
+
+    message_value := Value.{ type = .STRING, s = actual_message };
     set_object_property(vm, error_object, "message", message_value);
 
     stack_value := Value.{ type = .STRING, s = stack_trace };
