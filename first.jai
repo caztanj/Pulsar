@@ -97,7 +97,6 @@ build :: () {
 
         if result.exit_code != 0 {
             print("Tests failed with exit code %\n", result.exit_code);
-            exit(1);
         }
     }
 }

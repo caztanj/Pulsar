@@ -74,6 +74,7 @@ visitor :: (info: *File_Visit_Info, user_data: *void) {
             print("Uncaught exception: ");
             print(vm, .{}, .[vm.exception]);
             print("\n");
+
             if vm.has_stack_trace {
                 print("%\n", vm.stack_trace);
             }

@@ -18,6 +18,7 @@ init_vm_set :: (vm: *Vm) {
         add_instance_method(vm, set_prototype, "clear",   set_clear);
         add_instance_method(vm, set_prototype, "size",    set_size);
         add_instance_method(vm, set_prototype, "forEach", set_for_each);
+        add_instance_method(vm, set_prototype, "isSubsetOf", set_is_subset_of);
 
         set_constructor_object := allocate_object(vm);
 
@@ -131,4 +132,48 @@ set_for_each :: (vm: *Vm, this: Value, arguments: [] Value, is_new: bool) -> Val
     }
 
     return .{ type = .UNDEFINED };
+}
+
+set_is_subset_of :: (vm: *Vm, this: Value, arguments: [] Value, is_new: bool) -> Value {
+    if this.type != .OBJECT || this.object.kind != .SET return .{ type = .BOOLEAN, boolean = false };
+
+    if arguments.count < 1 return .{ type = .BOOLEAN, boolean = false };
+    other := arguments[0];
+
+    if other.type != .OBJECT return .{ type = .BOOLEAN, boolean = false };
+
+    other_size_value := get_property_or_undefined(vm, other.object, "size");
+    other_size: float64 = 0;
+    if other_size_value.type == .NUMBER then other_size = other_size_value.number;
+
+    if this.object.map_entries.count > cast(int) other_size {
+        return .{ type = .BOOLEAN, boolean = false };
+    }
+
+    other_keys := get_property_or_undefined(vm, other.object, "keys");
+    other_has := get_property_or_undefined(vm, other.object, "has");
+
+    for this.object.map_entries {
+        call_args: [1] Value = .[ it ];
+        result := call_value(vm, other, other_has, call_args);
+
+        if vm.has_exception return .{};
+
+        is_true := false;
+        if result.type == .BOOLEAN {
+            is_true = result.boolean;
+        } else if result.type == .NUMBER {
+            is_true = result.number != 0;
+        } else if result.type == .OBJECT {
+            is_true = true;
+        } else if result.type == .STRING {
+            is_true = result.s.count > 0;
+        }
+
+        if !is_true {
+            return .{ type = .BOOLEAN, boolean = false };
+        }
+    }
+
+    return .{ type = .BOOLEAN, boolean = true };
 }

@@ -1337,6 +1337,14 @@ parse_primary :: (parser: *Parser) -> *Ast_Node {
                     array_add(*node.properties, property);
                 } else {
                     key_token := peek(parser);
+                    is_generator := false;
+
+                    if key_token.type == .OPERATOR && key_token.text == "*" {
+                        is_generator = true;
+                        advance(parser);
+                        skip_whitespace_and_comments(parser);
+                        key_token = peek(parser);
+                    }
 
                     if key_token.type != .IDENTIFIER && key_token.type != .STRING && key_token.type != .NUMBER {
                         report_parse_error(parser, key_token, "Expected identifier, string, or number for object property key, but got % (%)", key_token.type, key_token.text);
@@ -1357,9 +1365,59 @@ parse_primary :: (parser: *Parser) -> *Ast_Node {
                     value: *Ast_Node;
 
                     if match(parser, ":") {
+                        if is_generator {
+                            report_parse_error(parser, key_token, "Unexpected ':' after generator modifier");
+                            break;
+                        }
+
                         skip_whitespace_and_comments(parser);
 
                         value = parse_expression(parser);
+                    } else if match(parser, "(") {
+                        func := new_node(parser, Ast_Function_Expression);
+                        func.kind = .FUNCTION_EXPRESSION;
+                        func.is_generator = is_generator;
+
+                        if !check(parser, ")") {
+                            while true {
+                                skip_whitespace_and_comments(parser);
+
+                                if check(parser, "...") {
+                                    advance(parser);
+
+                                    spread := new_node(parser, Ast_Spread_Element);
+                                    spread.kind = .SPREAD_ELEMENT;
+
+                                    skip_whitespace_and_comments(parser);
+
+                                    parameter_token := consume(parser, .IDENTIFIER);
+                                    parameter := create_identifier(parameter_token);
+
+                                    spread.argument = xx parameter;
+
+                                    array_add(*func.parameters, xx spread);
+
+                                    skip_whitespace_and_comments(parser);
+
+                                    break;
+                                } else {
+                                    parameter_token := consume(parser, .IDENTIFIER);
+                                    parameter := create_identifier(parameter_token);
+
+                                    array_add(*func.parameters, xx parameter);
+                                }
+
+                                skip_whitespace_and_comments(parser);
+
+                                if !match(parser, ",") break;
+                            }
+                        }
+
+                        consume(parser, ")");
+                        skip_whitespace_and_comments(parser);
+                        func.body = parse_block_statement(parser);
+
+                        value = xx func;
                     } else {
                         if key_token.type != .IDENTIFIER {
                             report_parse_error(parser, key_token, "Expected ':' after property key, but got % (%)", parser.tokens[parser.current].type, parser.tokens[parser.current].text);
