@@ -15,4 +15,4 @@ While building this JavaScript environment, we also developed several independen
 
 ## Support
 
-If you find this project useful and would like to support its development, you can [buy me a coffee!](https://buymeacoffee.com/caztanj)
+If you find this project useful and would like to support its development, you can [sponsor me on GitHub](https://github.com/sponsors/caztanj) or [buy me a coffee!](https://buymeacoffee.com/caztanj)
