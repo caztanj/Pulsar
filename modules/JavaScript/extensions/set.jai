@@ -142,7 +142,15 @@ set_is_subset_of :: (vm: *Vm, this: Value, arguments: [] Value, is_new: bool) ->
 
     if other.type != .OBJECT return .{ type = .BOOLEAN, boolean = false };
 
-    other_size_value := get_property_or_undefined(vm, other.object, "size");
+    other_size_getter := get_property_or_undefined(vm, other.object, "size__getter__");
+    other_size_value: Value;
+    if other_size_getter.type == .FUNCTION || other_size_getter.type == .NATIVE_FUNCTION {
+        other_size_value = call_value(vm, other, other_size_getter, .[]);
+        if vm.has_exception return .{};
+    } else {
+        other_size_value = get_property_or_undefined(vm, other.object, "size");
+    }
+
     other_size: float64 = 0;
     if other_size_value.type == .NUMBER then other_size = other_size_value.number;
 
@@ -150,8 +158,23 @@ set_is_subset_of :: (vm: *Vm, this: Value, arguments: [] Value, is_new: bool) ->
         return .{ type = .BOOLEAN, boolean = false };
     }
 
-    other_keys := get_property_or_undefined(vm, other.object, "keys");
-    other_has := get_property_or_undefined(vm, other.object, "has");
+    other_keys_getter := get_property_or_undefined(vm, other.object, "keys__getter__");
+    other_keys: Value;
+    if other_keys_getter.type == .FUNCTION || other_keys_getter.type == .NATIVE_FUNCTION {
+        other_keys = call_value(vm, other, other_keys_getter, .[]);
+        if vm.has_exception return .{};
+    } else {
+        other_keys = get_property_or_undefined(vm, other.object, "keys");
+    }
+
+    other_has_getter := get_property_or_undefined(vm, other.object, "has__getter__");
+    other_has: Value;
+    if other_has_getter.type == .FUNCTION || other_has_getter.type == .NATIVE_FUNCTION {
+        other_has = call_value(vm, other, other_has_getter, .[]);
+        if vm.has_exception return .{};
+    } else {
+        other_has = get_property_or_undefined(vm, other.object, "has");
+    }
 
     for this.object.map_entries {
         call_args: [1] Value = .[ it ];

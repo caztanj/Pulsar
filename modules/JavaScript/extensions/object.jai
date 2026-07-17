@@ -254,6 +254,9 @@ object_define_property :: (vm: *Vm, this: Value, arguments: [] Value, is_new: bo
         found, value := lookup_property(vm, descriptor_value.object, "value");
 
         if found set_object_property(vm, target_value.object, name, value);
+
+        found_get, get_value := lookup_property(vm, descriptor_value.object, "get");
+        if found_get set_object_property(vm, target_value.object, tprint("%__getter__", name), get_value);
     }
 
     return target_value;
