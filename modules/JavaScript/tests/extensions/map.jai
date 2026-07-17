@@ -4,7 +4,7 @@ test_map :: () {
             let m = new Map();
             m.set('a', 1);
             m.set('b', 2);
-            let s = m.size();
+            let s = m.size;
             let a = m.get('a');
             let b = m.get('b');
             let hasA = m.has('a');
@@ -39,10 +39,10 @@ test_map :: () {
             m.set('a', 1);
             m.delete('a');
             let hasA = m.has('a');
-            let s1 = m.size();
+            let s1 = m.size;
             m.set('b', 2);
             m.clear();
-            let s2 = m.size();
+            let s2 = m.size;
         JS
 
         run_test(code);

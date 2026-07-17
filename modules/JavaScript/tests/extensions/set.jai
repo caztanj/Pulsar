@@ -5,7 +5,7 @@ test_set :: () {
             s.add(1);
             s.add(2);
             s.add(1);
-            let size = s.size();
+            let size = s.size;
             let has1 = s.has(1);
             let has3 = s.has(3);
         JS
@@ -22,10 +22,10 @@ test_set :: () {
             s.add('a');
             s.delete('a');
             let hasA = s.has('a');
-            let s1 = s.size();
+            let s1 = s.size;
             s.add('b');
             s.clear();
-            let s2 = s.size();
+            let s2 = s.size;
         JS
 
         run_test(code);
