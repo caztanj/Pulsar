@@ -550,7 +550,7 @@ store_local_or_global :: (generator: *Bytecode_Generator, name: string, register
 
         array_add(*generator.locals, name);
         index := generator.locals.count - 1;
-        
+
         array_add(*target_scope.variables, name);
         array_add(*target_scope.indices, index);
         array_add(*target_scope.is_const, is_const);
@@ -566,7 +566,7 @@ store_local_or_global :: (generator: *Bytecode_Generator, name: string, register
     }
 
     location := resolve_variable(generator, name);
-    
+
     if location.is_const {
         generator.has_error = true;
         generator.error_message = "Assignment to constant variable.";
@@ -601,7 +601,7 @@ store_local_or_global :: (generator: *Bytecode_Generator, name: string, register
             } else {
                 array_add(*generator.locals, name);
                 index := generator.locals.count - 1;
-                
+
                 if generator.function_scope {
                     array_add(*generator.function_scope.variables, name);
                     array_add(*generator.function_scope.indices, index);
@@ -799,7 +799,7 @@ emit_statement :: (generator: *Bytecode_Generator, node: *Ast_Node) {
                 }
             }
 
-            
+
             new_function_scope := New(Lexical_Scope,, temp);
                 new_function_scope.variables.allocator = temp;
                 new_function_scope.indices.allocator = temp;
@@ -887,16 +887,16 @@ emit_statement :: (generator: *Bytecode_Generator, node: *Ast_Node) {
 
         case .BLOCK_STATEMENT;
             block_statement := cast(*Ast_Block_Statement) node;
-            
+
             new_scope := New(Lexical_Scope,, temp);
                 new_scope.variables.allocator = temp;
                 new_scope.indices.allocator = temp;
                 new_scope.is_const.allocator = temp;
             new_scope.parent = generator.current_scope;
             generator.current_scope = new_scope;
-            
+
             for block_statement.body emit_statement(generator, it);
-            
+
             generator.current_scope = new_scope.parent;
 
         case .IF_STATEMENT;
@@ -1547,7 +1547,7 @@ emit_statement :: (generator: *Bytecode_Generator, node: *Ast_Node) {
                 catch_pc = generator.current_function.instructions.count;
                 generator.current_function.instructions[try_context_index].imm = cast(s32) catch_pc;
                 generator.current_function.instructions[try_context_index].arg1 = catch_register;
-                
+
                 catch_scope := New(Lexical_Scope,, temp);
                 catch_scope.variables.allocator = temp;
                 catch_scope.indices.allocator = temp;
@@ -1565,13 +1565,13 @@ emit_statement :: (generator: *Bytecode_Generator, node: *Ast_Node) {
                     array_add(*catch_scope.indices, local_index);
                     array_add(*catch_scope.is_const, false);
                     if generator.locals.count > generator.current_function.locals_count generator.current_function.locals_count = generator.locals.count;
-                    
+
                     instruction := Instruction.{ op_code = .STORE_LOCAL, arg1 = catch_register, imm = cast(s32) local_index };
                     emit_instruction(generator, instruction);
                 }
 
                 emit_statement(generator, cast(*Ast_Node) try_statement.catch_block);
-                
+
                 generator.current_scope = catch_scope.parent;
 
                 generator.current_function.instructions[jump_over_catch_index].imm = cast(s32) generator.current_function.instructions.count;
@@ -1751,6 +1751,7 @@ emit_statement :: (generator: *Bytecode_Generator, node: *Ast_Node) {
         case .BINARY_EXPRESSION;
         case .LITERAL_NUMBER;
         case .LITERAL_STRING;
+        case .LITERAL_REGEXP;
         case .IDENTIFIER;
         case .OBJECT_LITERAL;
         case .CALL_EXPRESSION;
@@ -1815,6 +1816,52 @@ emit_expression :: (generator: *Bytecode_Generator, node: *Ast_Node, force_new_r
             };
 
             emit_instruction(generator, instruction);
+
+            return register;
+
+        case .LITERAL_REGEXP;
+            literal_regexp := cast(*Ast_Literal_RegExp) node;
+
+            register := allocate_register(generator, destination_register);
+
+            callee_register := generator.next_register;
+            generator.next_register += 1;
+
+            global_index := generator.program.constants.count;
+            array_add(*generator.program.constants, .{ type = .STRING, s = "RegExp" });
+
+            emit_instruction(generator, Instruction.{
+                op_code = .LOAD_GLOBAL,
+                dest    = callee_register,
+                imm     = cast(s32) global_index,
+            });
+
+            first_argument_new := generator.next_register;
+            generator.next_register += 2;
+
+            pattern_index := generator.program.constants.count;
+            array_add(*generator.program.constants, .{ type = .STRING, s = literal_regexp.pattern });
+            emit_instruction(generator, Instruction.{
+                op_code = .LOAD_CONST,
+                dest    = first_argument_new,
+                imm     = cast(s32) pattern_index,
+            });
+
+            flags_index := generator.program.constants.count;
+            array_add(*generator.program.constants, .{ type = .STRING, s = literal_regexp.flags });
+            emit_instruction(generator, Instruction.{
+                op_code = .LOAD_CONST,
+                dest    = first_argument_new + 1,
+                imm     = cast(s32) flags_index,
+            });
+
+            emit_instruction(generator, Instruction.{
+                op_code = .NEW_CALL,
+                dest    = register,
+                arg1    = callee_register,
+                arg2    = first_argument_new,
+                imm     = 2,
+            });
 
             return register;
 
@@ -2264,7 +2311,7 @@ emit_expression :: (generator: *Bytecode_Generator, node: *Ast_Node, force_new_r
         case .FUNCTION_EXPRESSION;
             function_expression := cast(*Ast_Function_Expression) node;
 
-            
+
             new_function_scope := New(Lexical_Scope,, temp);
                 new_function_scope.variables.allocator = temp;
                 new_function_scope.indices.allocator = temp;
@@ -2333,7 +2380,7 @@ emit_expression :: (generator: *Bytecode_Generator, node: *Ast_Node, force_new_r
         case .ARROW_FUNCTION_EXPRESSION;
             arrow_expression := cast(*Ast_Arrow_Function_Expression) node;
 
-            
+
             new_function_scope := New(Lexical_Scope,, temp);
                 new_function_scope.variables.allocator = temp;
                 new_function_scope.indices.allocator = temp;

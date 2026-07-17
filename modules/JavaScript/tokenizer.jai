@@ -224,6 +224,70 @@ tokenize :: (code: string) -> error: bool, error_message: string, [] Token {
             continue;
         }
 
+        if t.* == "/" && t + 1 < max_t && (t + 1).* != "*" && (t + 1).* != "/" {
+            is_regexp := false;
+
+            last_meaningful_token: *Token = null;
+            for < i: 0 .. tokens.count - 1 {
+                if tokens[i].type != .WHITESPACE && tokens[i].type != .COMMENT {
+                    last_meaningful_token = *tokens[i];
+                    break;
+                }
+            }
+
+            if !last_meaningful_token {
+                is_regexp = true;
+            } else {
+                if last_meaningful_token.type == .OPERATOR {
+                    is_regexp = true;
+                } else if last_meaningful_token.type == .PUNCTUATION {
+                    c := last_meaningful_token.text;
+                    if c == "(" || c == "{" || c == "[" || c == ";" || c == "," || c == ":" || c == "?" {
+                        is_regexp = true;
+                    }
+                } else if last_meaningful_token.type == .IDENTIFIER {
+                    text := last_meaningful_token.text;
+                    if text == "return" || text == "throw" || text == "yield" || text == "typeof" || text == "case" || text == "do" || text == "else" || text == "in" || text == "instanceof" || text == "new" || text == "delete" || text == "void" || text == "await" {
+                        is_regexp = true;
+                    }
+                }
+            }
+
+            if is_regexp {
+                start_t := t;
+                t += 1;
+                column += 1;
+
+                while t < max_t && t.* != "/" {
+                    if t.* == "\\" && t + 1 < max_t {
+                        t += 2;
+                        column += 2;
+                    } else if t.* == "\n" {
+                        break;
+                    } else {
+                        t += 1;
+                        column += 1;
+                    }
+                }
+
+                if t < max_t && t.* == "/" {
+                    t += 1;
+                    column += 1;
+
+                    while t < max_t && is_alpha(t.*) {
+                        t += 1;
+                        column += 1;
+                    }
+
+                    add_token(*tokens, .REGEXP, start_t, t - start_t, start_line, start_column);
+                    continue;
+                } else {
+                    t = start_t;
+                    column = start_column;
+                }
+            }
+        }
+
         if t.* == "=" || t.* == "+" || t.* == "-" || t.* == "*" || t.* == "/" || t.* == "!" || t.* == "<" || t.* == ">" || t.* == "&" || t.* == "|" || t.* == "^" || t.* == "%" || t.* == "?" {
             start_t := t;
 
@@ -392,6 +456,7 @@ Token_Type :: enum {
     IDENTIFIER;
     NUMBER;
     STRING;
+    REGEXP;
     OPERATOR;
     PUNCTUATION;
     WHITESPACE;

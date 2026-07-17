@@ -249,6 +249,7 @@ optimize_node :: (node: *Ast_Node) -> *Ast_Node {
         case .SUPER_EXPRESSION; #through;
         case .LITERAL_NUMBER;   #through;
         case .LITERAL_STRING;   #through;
+        case .LITERAL_REGEXP;   #through;
         case .IDENTIFIER;       #through;
         case .THIS_EXPRESSION;  #through;
         case .IMPORT_STATEMENT; #through;

@@ -994,6 +994,25 @@ parse_primary :: (parser: *Parser) -> *Ast_Node {
         return xx node;
     }
 
+    if token.type == .REGEXP {
+        advance(parser);
+
+        node := new_node(parser, Ast_Literal_RegExp);
+        node.kind = .LITERAL_REGEXP;
+
+        text := token.text;
+        last_slash := find_index_from_right(text, "/");
+        if last_slash != -1 && last_slash > 0 {
+            node.pattern = slice(text, 1, last_slash - 1);
+            node.flags   = slice(text, last_slash + 1, text.count - last_slash - 1);
+        } else {
+            node.pattern = "";
+            node.flags   = "";
+        }
+
+        return xx node;
+    }
+
     if token.type == .IDENTIFIER {
         if token.text == "function" {
             return xx parse_function_expression(parser);
@@ -2092,6 +2111,7 @@ Ast_Kind :: enum {
     BINARY_EXPRESSION;
     LITERAL_NUMBER;
     LITERAL_STRING;
+    LITERAL_REGEXP;
     IDENTIFIER;
     FUNCTION_DECLARATION;
     CALL_EXPRESSION;
@@ -2254,9 +2274,16 @@ Ast_Literal_Number :: struct {
 }
 
 Ast_Literal_String :: struct {
-    using base: Ast_Node;
+    using #as base: Ast_Node;
 
     value: string;
+}
+
+Ast_Literal_RegExp :: struct {
+    using #as base: Ast_Node;
+
+    pattern: string;
+    flags: string;
 }
 
 Ast_Identifier :: struct {
