@@ -47,6 +47,7 @@ visitor :: (info: *File_Visit_Info, user_data: *void) {
 
     full_code := tprint("%\n%\n", harness_code_global, test_code);
 
+    print("RUN: %\n", info.short_name);
     vm := run(full_code, permissions = 0, silence_console_output = true);
     defer {
         if vm.program deinit(vm.program);

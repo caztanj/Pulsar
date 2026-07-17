@@ -244,6 +244,7 @@ parse_block_statement :: (parser: *Parser) -> *Ast_Block_Statement {
     consume(parser, "{");
 
     while !is_at_end(parser) && !check(parser, "}") {
+        if parser.has_error break;
         statement := parse_statement(parser);
 
         if statement array_add(*node.body, statement);
@@ -508,6 +509,7 @@ parse_variable_declaration :: (parser: *Parser) -> *Ast_Node {
     skip_whitespace_and_comments(parser);
 
     while true {
+        if parser.has_error break;
         declarator := new_node(parser, Ast_Variable_Declarator);
         declarator.kind = .VARIABLE_DECLARATOR;
 
@@ -567,6 +569,7 @@ parse_function_declaration :: (parser: *Parser) -> *Ast_Function_Declaration {
 
     if !check(parser, ")") {
         while true {
+            if parser.has_error break;
             skip_whitespace_and_comments(parser);
 
             if check(parser, "...") {
@@ -714,6 +717,7 @@ parse_conditional :: (parser: *Parser) -> *Ast_Node {
 
 parse_binary :: (parser: *Parser, precedence: int) -> *Ast_Node {
     left := parse_unary(parser);
+    if !left return null;
 
     while true {
         skip_whitespace_and_comments(parser);
@@ -874,6 +878,7 @@ parse_postfix :: (parser: *Parser, allow_calls: bool = true) -> *Ast_Node {
 
             if !check(parser, ")") {
                 while true {
+                    if parser.has_error break;
                     skip_whitespace_and_comments(parser);
 
                     if check(parser, "...") {
@@ -1252,6 +1257,7 @@ parse_primary :: (parser: *Parser) -> *Ast_Node {
 
         if !check(parser, "]") {
             while true {
+                if parser.has_error break;
                 skip_whitespace_and_comments(parser);
 
                 if check(parser, "...") {
@@ -1290,6 +1296,7 @@ parse_primary :: (parser: *Parser) -> *Ast_Node {
 
         if !check(parser, "}") {
             while true {
+                if parser.has_error break;
                 skip_whitespace_and_comments(parser);
 
                 if check(parser, "...") {

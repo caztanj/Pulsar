@@ -11,14 +11,14 @@ run :: (code: string, optimize := true, permissions: Permission = 0, silence_con
         has_error, error_message, tokens = tokenize(code);
         if has_error {
             vm := New(Vm);
-            throw_exception(vm, copy_string(error_message));
+            throw_exception(vm, Value.{ type = .STRING, s = copy_string(error_message) });
             return vm;
         }
 
         ast = build_ast(code, tokens);
         if ast.has_error {
             vm := New(Vm);
-            throw_exception(vm, copy_string(ast.error_message));
+            throw_exception(vm, Value.{ type = .STRING, s = copy_string(ast.error_message) });
             return vm;
         }
 
@@ -28,7 +28,7 @@ run :: (code: string, optimize := true, permissions: Permission = 0, silence_con
     bytecode := generate_bytecode(ast);
     if bytecode.has_error {
         vm := New(Vm);
-        throw_exception(vm, copy_string(bytecode.error_message));
+        throw_exception(vm, Value.{ type = .STRING, s = copy_string(bytecode.error_message) });
         return vm;
     }
 
