@@ -39,7 +39,7 @@ harness_code_global: string;
 filter_global: string;
 
 SKIPPED_TESTS :: string.[
-    "built-ins/AbstractModuleSource/length.js",
+    "built-ins/AbstractModuleSource",
 ];
 
 visitor :: (info: *File_Visit_Info, user_data: *void) {
