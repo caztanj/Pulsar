@@ -23,6 +23,12 @@ main :: () {
 
     print("Starting test execution (failing fast on first error)...\n");
 
+    args := get_command_line_arguments();
+    if args.count > 1 {
+        filter_global = args[1];
+        print("Using filter: %\n", filter_global);
+    }
+
     test_dir := "modules/JavaScript/test262/test";
     visit_files(test_dir, true, null, visitor, visit_files=true, visit_directories=true);
 
@@ -30,12 +36,15 @@ main :: () {
 }
 
 harness_code_global: string;
+filter_global: string;
 
 visitor :: (info: *File_Visit_Info, user_data: *void) {
     if info.is_directory return;
     if !ends_with(info.short_name, ".js") return;
-    
+
     if contains(info.full_name, "harness") return;
+
+    if filter_global.count > 0 && !contains(info.full_name, filter_global) return;
 
     test_code, success := read_entire_file(info.full_name);
     if !success {

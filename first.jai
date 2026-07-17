@@ -83,8 +83,15 @@ build :: () {
         exe_path := tprint("%/%", options.output_path, options.output_executable_name);
         #if OS == .WINDOWS { exe_path = tprint("%.exe", exe_path); }
 
+        args_to_pass: [..] string;
+        array_add(*args_to_pass, exe_path);
+        for remaining_args {
+            if it == "test" || it == "test262" || it == "release" || it == "first.jai" || it == "-" continue;
+            array_add(*args_to_pass, it);
+        }
+
         print("\n=== Running Tests (%) ===\n", exe_path);
-        result, output, error := run_command(exe_path, capture_and_return_output = true);
+        result, output, error := run_command(..args_to_pass, capture_and_return_output = true);
         print("%", output);
         if error print("%", error);
 
