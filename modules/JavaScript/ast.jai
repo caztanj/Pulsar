@@ -1296,6 +1296,9 @@ parse_primary :: (parser: *Parser) -> *Ast_Node {
                 skip_whitespace_and_comments(parser);
 
                 if !match(parser, ",") break;
+
+                skip_whitespace_and_comments(parser);
+                if check(parser, "]") break;
             }
         }
 
@@ -1333,7 +1336,21 @@ parse_primary :: (parser: *Parser) -> *Ast_Node {
 
                     array_add(*node.properties, property);
                 } else {
-                    key_token := consume(parser, .IDENTIFIER);
+                    key_token := peek(parser);
+
+                    if key_token.type != .IDENTIFIER && key_token.type != .STRING && key_token.type != .NUMBER {
+                        report_parse_error(parser, key_token, "Expected identifier, string, or number for object property key, but got % (%)", key_token.type, key_token.text);
+                        break;
+                    }
+
+                    advance(parser);
+
+                    key_text: string;
+                    if key_token.type == .STRING {
+                        key_text = unescape_string(slice(key_token.text, 1, key_token.text.count - 2));
+                    } else {
+                        key_text = key_token.text;
+                    }
 
                     skip_whitespace_and_comments(parser);
 
@@ -1344,13 +1361,18 @@ parse_primary :: (parser: *Parser) -> *Ast_Node {
 
                         value = parse_expression(parser);
                     } else {
+                        if key_token.type != .IDENTIFIER {
+                            report_parse_error(parser, key_token, "Expected ':' after property key, but got % (%)", parser.tokens[parser.current].type, parser.tokens[parser.current].text);
+                            break;
+                        }
+
                         identifier := create_identifier(key_token);
 
                         value = xx identifier;
                     }
 
                     property := Ast_Object_Property.{
-                        key   = key_token.text,
+                        key   = key_text,
                         value = value,
                     };
 
@@ -1360,6 +1382,9 @@ parse_primary :: (parser: *Parser) -> *Ast_Node {
                 skip_whitespace_and_comments(parser);
 
                 if !match(parser, ",") break;
+
+                skip_whitespace_and_comments(parser);
+                if check(parser, "}") break;
             }
         }
 
