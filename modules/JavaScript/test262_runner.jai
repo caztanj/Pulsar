@@ -46,16 +46,16 @@ visitor :: (info: *File_Visit_Info, user_data: *void) {
     if info.is_directory return;
     if !ends_with(info.short_name, ".js") return;
 
+    if contains(info.full_name, "harness") return;
+
+    if filter_global.count > 0 && !contains(info.full_name, filter_global) return;
+
     for SKIPPED_TESTS {
         if contains(info.full_name, it) {
             print("SKIP: %\n", it);
             return;
         }
     }
-
-    if contains(info.full_name, "harness") return;
-
-    if filter_global.count > 0 && !contains(info.full_name, filter_global) return;
 
     test_code, success := read_entire_file(info.full_name);
     if !success {
