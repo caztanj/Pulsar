@@ -743,8 +743,10 @@ execute_function_internal :: (vm: *Vm, initial_function: *Bytecode_Function, ini
                     }
 
                     if vm.call_frames.count == start_frame_count {
+                        try_stack.count = initial_try_count;
                         return ret_val;
                     } else {
+                        try_stack.count = initial_try_count;
                         vm.call_frames.count -= 1;
                         frame := *vm.call_frames.data[vm.call_frames.count];
 
@@ -1669,8 +1671,10 @@ execute_function_internal :: (vm: *Vm, initial_function: *Bytecode_Function, ini
                 }
 
                 if vm.call_frames.count == start_frame_count {
+                    try_stack.count = initial_try_count;
                     return .{};
                 } else {
+                    try_stack.count = initial_try_count;
                     vm.call_frames.count -= 1;
                     frame := *vm.call_frames.data[vm.call_frames.count];
 
@@ -1707,8 +1711,10 @@ execute_function_internal :: (vm: *Vm, initial_function: *Bytecode_Function, ini
             }
 
             if vm.call_frames.count == start_frame_count {
+                try_stack.count = initial_try_count;
                 return last_value;
             } else {
+                try_stack.count = initial_try_count;
                 vm.call_frames.count -= 1;
                 frame := *vm.call_frames.data[vm.call_frames.count];
 
