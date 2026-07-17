@@ -14,9 +14,12 @@ build :: () {
     if !success exit(1);
 
     is_test := array_find(remaining_args, "test");
+    is_test262 := array_find(remaining_args, "test262");
 
     if is_test {
         options.output_executable_name = "pulsar_tests";
+    } else if is_test262 {
+        options.output_executable_name = "pulsar_test262";
     } else {
         options.output_executable_name = "pulsar";
     }
@@ -50,6 +53,8 @@ build :: () {
     
     if is_test {
         add_build_file("modules/JavaScript/tests/main.jai", w);
+    } else if is_test262 {
+        add_build_file("modules/JavaScript/test262_runner.jai", w);
     } else {
         add_build_file("main.jai", w);
     }
@@ -74,7 +79,7 @@ build :: () {
     for plugins if it.finish   it.finish  (it);
     for plugins if it.shutdown it.shutdown(it);
 
-    if is_test {
+    if is_test || is_test262 {
         exe_path := tprint("%/%", options.output_path, options.output_executable_name);
         #if OS == .WINDOWS { exe_path = tprint("%.exe", exe_path); }
 
