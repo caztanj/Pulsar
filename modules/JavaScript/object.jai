@@ -55,6 +55,10 @@ lookup_property :: (vm: *Vm, object: *Gc_Object, name: string, imm: int = -1) ->
                 if current.kind == .ARRAY return true, .{ type = .NUMBER, number = cast(float64) current.elements.count };
                 if is_typed_array(current.kind) return true, .{ type = .NUMBER, number = cast(float64) get_typed_array_length(current) };
             }
+            if name == "size" {
+                if current.kind == .SET return true, .{ type = .NUMBER, number = cast(float64) current.map_entries.count };
+                if current.kind == .MAP return true, .{ type = .NUMBER, number = cast(float64) (current.map_entries.count / 2) };
+            }
 
             if current.shape {
                 offset, found := shape_lookup_property(current.shape, name, imm);
