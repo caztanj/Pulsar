@@ -26,6 +26,12 @@ init_vm_symbol :: (vm: *Vm) {
 
         add_static_property(vm, symbol_object,       "prototype",   prototype_value);
         add_static_property(vm, vm.symbol_prototype, "constructor", vm.current_realm.globals[symbol_index]);
+
+        iterator_symbol := allocate_object(vm);
+        iterator_symbol.kind = .SYMBOL;
+        iterator_symbol.primitive_value = .{ type = .STRING, s = "Symbol.iterator" };
+        iterator_symbol_value := Value.{ type = .SYMBOL, object = iterator_symbol, symbol_object = iterator_symbol };
+        add_static_property(vm, symbol_object, "iterator", iterator_symbol_value);
     }
 }
 

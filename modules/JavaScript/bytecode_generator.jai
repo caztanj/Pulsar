@@ -2041,7 +2041,7 @@ emit_expression :: (generator: *Bytecode_Generator, node: *Ast_Node, force_new_r
             emit_instruction(generator, instruction);
 
             for object_literal.properties {
-                if it.is_spread {
+                if it.flags & .SPREAD {
                     spread_element  := cast(*Ast_Spread_Element) it.value;
                     spread_register := emit_expression(generator, spread_element.argument);
 
@@ -2054,16 +2054,59 @@ emit_expression :: (generator: *Bytecode_Generator, node: *Ast_Node, force_new_r
                     emit_instruction(generator, spread_instruction);
                 } else {
                     value_register := emit_expression(generator, it.value);
-                    index          := get_property_index(generator, it.key);
 
-                    set_instruction := Instruction.{
-                        op_code = .SET_FIELD,
-                        dest    = register,
-                        arg1    = value_register,
-                        imm     = cast(s32) index,
-                    };
+                    is_computed := (it.flags & .COMPUTED) != 0;
+                    is_getter   := (it.flags & .GETTER) != 0;
+                    is_setter   := (it.flags & .SETTER) != 0;
 
-                    emit_instruction(generator, set_instruction);
+                    if is_computed {
+                        key_register := emit_expression(generator, it.key_expr);
+
+                        if is_getter || is_setter {
+                            suffix := ifx is_getter then "__getter__" else "__setter__";
+                            suffix_index := generator.program.constants.count;
+                            array_add(*generator.program.constants, .{ type = .STRING, s = suffix });
+
+                            suffix_reg := allocate_register(generator, -1);
+                            emit_instruction(generator, .{
+                                op_code = .LOAD_CONST,
+                                dest    = suffix_reg,
+                                imm     = cast(s32) suffix_index,
+                            });
+
+                            concat_reg := allocate_register(generator, -1);
+                            emit_instruction(generator, .{
+                                op_code = .ADD,
+                                dest    = concat_reg,
+                                arg1    = key_register,
+                                arg2    = suffix_reg,
+                            });
+
+                            key_register = concat_reg;
+                        }
+
+                        emit_instruction(generator, .{
+                            op_code = .COMPUTED_SET,
+                            dest    = register,
+                            arg1    = key_register,
+                            arg2    = value_register,
+                        });
+                    } else {
+                        prop_name := it.key;
+                        if is_getter      prop_name = tprint("%__getter__", prop_name);
+                        else if is_setter prop_name = tprint("%__setter__", prop_name);
+
+                        index := get_property_index(generator, prop_name);
+
+                        set_instruction := Instruction.{
+                            op_code = .SET_FIELD,
+                            dest    = register,
+                            arg1    = value_register,
+                            imm     = cast(s32) index,
+                        };
+
+                        emit_instruction(generator, set_instruction);
+                    }
                 }
             }
 

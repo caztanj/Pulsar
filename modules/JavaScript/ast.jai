@@ -1330,41 +1330,116 @@ parse_primary :: (parser: *Parser) -> *Ast_Node {
                     spread.argument = parse_assignment(parser);
 
                     property := Ast_Object_Property.{
-                        is_spread = true,
-                        value     = xx spread,
+                        flags = .SPREAD,
+                        value = xx spread,
                     };
 
                     array_add(*node.properties, property);
                 } else {
+                    is_getter := false;
+                    is_setter := false;
+
+                    first_token := peek(parser);
+                    if first_token.type == .IDENTIFIER && (first_token.text == "get" || first_token.text == "set") {
+                        next_token := peek_non_whitespace(parser, 1);
+                        if next_token.text == "[" {
+                            t := parser.current + 1;
+                            bracket_depth := 0;
+                            while t < parser.tokens.count {
+                                if parser.tokens[t].text == "[" bracket_depth += 1;
+                                else if parser.tokens[t].text == "]" {
+                                    bracket_depth -= 1;
+                                    if bracket_depth == 0 {
+                                        t_next := t + 1;
+                                        while t_next < parser.tokens.count && (parser.tokens[t_next].type == .WHITESPACE || parser.tokens[t_next].type == .COMMENT) {
+                                            t_next += 1;
+                                        }
+                                        if t_next < parser.tokens.count && parser.tokens[t_next].text == "(" {
+                                            if first_token.text == "get" is_getter = true;
+                                            else                         is_setter = true;
+                                        }
+                                        break;
+                                    }
+                                }
+                                t += 1;
+                            }
+                        } else if next_token.type == .IDENTIFIER || next_token.type == .STRING || next_token.type == .NUMBER {
+                            after_key := peek_non_whitespace(parser, 2);
+                            if after_key.text == "(" {
+                                if first_token.text == "get" is_getter = true;
+                                else                         is_setter = true;
+                            }
+                        }
+                    }
+
+                    if is_getter || is_setter {
+                        advance(parser);
+                        skip_whitespace_and_comments(parser);
+                    }
+
                     key_token := peek(parser);
                     is_generator := false;
 
                     if key_token.type == .OPERATOR && key_token.text == "*" {
+                        if is_getter || is_setter {
+                            report_parse_error(parser, key_token, "Unexpected '*' in getter/setter");
+                            break;
+                        }
                         is_generator = true;
                         advance(parser);
                         skip_whitespace_and_comments(parser);
                         key_token = peek(parser);
                     }
 
-                    if key_token.type != .IDENTIFIER && key_token.type != .STRING && key_token.type != .NUMBER {
-                        report_parse_error(parser, key_token, "Expected identifier, string, or number for object property key, but got % (%)", key_token.type, key_token.text);
-                        break;
-                    }
-
-                    advance(parser);
-
+                    is_computed := false;
+                    key_expr: *Ast_Node = null;
                     key_text: string;
-                    if key_token.type == .STRING {
-                        key_text = unescape_string(slice(key_token.text, 1, key_token.text.count - 2));
+
+                    if key_token.text == "[" {
+                        is_computed = true;
+                        advance(parser); // consume [
+                        skip_whitespace_and_comments(parser);
+                        key_expr = parse_expression(parser);
+                        skip_whitespace_and_comments(parser);
+                        consume(parser, "]");
                     } else {
-                        key_text = key_token.text;
+                        if key_token.type != .IDENTIFIER && key_token.type != .STRING && key_token.type != .NUMBER {
+                            report_parse_error(parser, key_token, "Expected identifier, string, number, or '[' for object property key, but got % (%)", key_token.type, key_token.text);
+                            break;
+                        }
+
+                        advance(parser);
+
+                        if key_token.type == .STRING {
+                            key_text = unescape_string(slice(key_token.text, 1, key_token.text.count - 2));
+                        } else {
+                            key_text = key_token.text;
+                        }
                     }
 
                     skip_whitespace_and_comments(parser);
 
                     value: *Ast_Node;
 
-                    if match(parser, ":") {
+                    if is_getter || is_setter {
+                        consume(parser, "(");
+                        func := new_node(parser, Ast_Function_Expression);
+                        func.kind = .FUNCTION_EXPRESSION;
+
+                        if is_setter {
+                            skip_whitespace_and_comments(parser);
+                            param_token := consume(parser, .IDENTIFIER);
+                            parameter := create_identifier(param_token);
+                            array_add(*func.parameters, xx parameter);
+                        }
+
+                        skip_whitespace_and_comments(parser);
+                        consume(parser, ")");
+                        skip_whitespace_and_comments(parser);
+                        func.body = parse_block_statement(parser);
+
+                        value = xx func;
+                    } else if match(parser, ":") {
                         if is_generator {
                             report_parse_error(parser, key_token, "Unexpected ':' after generator modifier");
                             break;
@@ -1419,6 +1494,10 @@ parse_primary :: (parser: *Parser) -> *Ast_Node {
 
                         value = xx func;
                     } else {
+                        if is_computed {
+                            report_parse_error(parser, peek(parser), "Computed property must have a value or method definition");
+                            break;
+                        }
                         if key_token.type != .IDENTIFIER {
                             report_parse_error(parser, key_token, "Expected ':' after property key, but got % (%)", parser.tokens[parser.current].type, parser.tokens[parser.current].text);
                             break;
@@ -1429,9 +1508,16 @@ parse_primary :: (parser: *Parser) -> *Ast_Node {
                         value = xx identifier;
                     }
 
+                    property_flags: Ast_Object_Property_Flags = 0;
+                    if is_computed property_flags |= .COMPUTED;
+                    if is_getter   property_flags |= .GETTER;
+                    if is_setter   property_flags |= .SETTER;
+
                     property := Ast_Object_Property.{
-                        key   = key_text,
-                        value = value,
+                        key      = key_text,
+                        key_expr = key_expr,
+                        value    = value,
+                        flags    = property_flags,
                     };
 
                     array_add(*node.properties, property);
@@ -1593,6 +1679,19 @@ match :: (parser: *Parser, text: string) -> bool {
     }
 
     return false;
+}
+
+peek_non_whitespace :: (parser: *Parser, offset: int = 0) -> Token {
+    t := parser.current;
+    non_ws_count := 0;
+    while t < parser.tokens.count {
+        if parser.tokens[t].type != .WHITESPACE && parser.tokens[t].type != .COMMENT {
+            if non_ws_count == offset return parser.tokens[t];
+            non_ws_count += 1;
+        }
+        t += 1;
+    }
+    return .{};
 }
 
 consume :: (parser: *Parser, type: Token_Type) -> Token {
@@ -2381,10 +2480,18 @@ Ast_Array_Literal :: struct {
     elements: [..] *Ast_Node;
 }
 
+Ast_Object_Property_Flags :: enum_flags u8 {
+    SPREAD;
+    COMPUTED;
+    GETTER;
+    SETTER;
+}
+
 Ast_Object_Property :: struct {
-    key:   string;
-    value: *Ast_Node;
-    is_spread: bool;
+    key:      string;
+    key_expr: *Ast_Node;
+    value:    *Ast_Node;
+    flags:    Ast_Object_Property_Flags;
 }
 
 Ast_Object_Literal :: struct {

@@ -60,6 +60,20 @@ lookup_property :: (vm: *Vm, object: *Gc_Object, name: string, imm: int = -1) ->
                 if current.kind == .MAP return true, .{ type = .NUMBER, number = cast(float64) (current.map_entries.count / 2) };
             }
 
+            if !ends_with(name, "__getter__") && !ends_with(name, "__setter__") {
+                getter_name := tprint("%__getter__", name);
+                if current.shape {
+                    offset, found := shape_lookup_property(current.shape, getter_name, -1);
+                    if found && offset < current.fields.count && current.fields[offset].type != .UNDEFINED {
+                        getter_val := current.fields[offset];
+                        if getter_val.type == .FUNCTION || getter_val.type == .NATIVE_FUNCTION {
+                            this_val := Value.{ type = .OBJECT, object = object };
+                            return true, call_value(vm, this_val, getter_val, .[]);
+                        }
+                    }
+                }
+            }
+
             if current.shape {
                 offset, found := shape_lookup_property(current.shape, name, imm);
                 if found && offset < current.fields.count && current.fields[offset].type != .UNDEFINED return true, current.fields[offset];
@@ -109,6 +123,26 @@ set_object_property :: (vm: *Vm, object: *Gc_Object, name: string, value: Value,
             write_barrier(vm, object, value);
 
             return;
+        }
+    }
+
+    if !ends_with(name, "__getter__") && !ends_with(name, "__setter__") {
+        setter_name := tprint("%__setter__", name);
+        current := object;
+        while current {
+            if current.shape {
+                offset, found := shape_lookup_property(current.shape, setter_name, -1);
+                if found && offset < current.fields.count && current.fields[offset].type != .UNDEFINED {
+                    setter_val := current.fields[offset];
+                    if setter_val.type == .FUNCTION || setter_val.type == .NATIVE_FUNCTION {
+                        this_val := Value.{ type = .OBJECT, object = object };
+                        call_args: [1] Value = .[ value ];
+                        call_value(vm, this_val, setter_val, call_args);
+                        return;
+                    }
+                }
+            }
+            current = current.prototype;
         }
     }
 
@@ -212,5 +246,13 @@ shape_lookup_property :: inline (shape: *Shape, property_name: string, imm: int 
     if offset_pointer return offset_pointer.*, true;
 
     return -1, false;
+}
+
+get_symbol_string_key :: (symbol_val: *Value) -> string {
+    desc := "";
+    if symbol_val.symbol_object && symbol_val.symbol_object.primitive_value.type == .STRING {
+        desc = symbol_val.symbol_object.primitive_value.s;
+    }
+    return tprint("@@%", desc);
 }
 

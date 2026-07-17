@@ -646,6 +646,9 @@ execute_function_internal :: (vm: *Vm, initial_function: *Bytecode_Function, ini
                             }
                         } else if property.type == .STRING {
                             registers_data[instruction.dest] = get_property_or_undefined(vm, object, property.s);
+                        } else if property.type == .SYMBOL {
+                            symbol_name := get_symbol_string_key(property);
+                            registers_data[instruction.dest] = get_property_or_undefined(vm, object, symbol_name);
                         } else {
                             registers_data[instruction.dest] = .{ type = .UNDEFINED };
                         }
@@ -699,6 +702,9 @@ execute_function_internal :: (vm: *Vm, initial_function: *Bytecode_Function, ini
                     if object {
                         if property.type == .STRING {
                             set_object_property(vm, object, property.s, value);
+                        } else if property.type == .SYMBOL {
+                            symbol_name := get_symbol_string_key(property);
+                            set_object_property(vm, object, symbol_name, value);
                         } else if property.type == .NUMBER {
                             index := cast(int) property.number;
 
@@ -2184,6 +2190,24 @@ allocate_string_from_builder :: (vm: *Vm, builder: *String_Builder) -> string {
 values_addition :: (vm: *Vm, a: Value, b: Value) -> Value {
     if a.type == .NUMBER && b.type == .NUMBER {
         return .{ type = .NUMBER, number = a.number + b.number };
+    }
+
+    if a.type == .SYMBOL && b.type == .STRING {
+        desc := "";
+        if a.symbol_object && a.symbol_object.primitive_value.type == .STRING {
+            desc = a.symbol_object.primitive_value.s;
+        }
+        res_str := allocate_string(vm, tprint("@@%%", desc, b.s));
+        return .{ type = .STRING, s = res_str };
+    }
+
+    if b.type == .SYMBOL && a.type == .STRING {
+        desc := "";
+        if b.symbol_object && b.symbol_object.primitive_value.type == .STRING {
+            desc = b.symbol_object.primitive_value.s;
+        }
+        res_str := allocate_string(vm, tprint("@@%%", a.s, desc));
+        return .{ type = .STRING, s = res_str };
     }
 
     if a.type == .STRING || b.type == .STRING {
