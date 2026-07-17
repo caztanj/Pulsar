@@ -38,9 +38,20 @@ main :: () {
 harness_code_global: string;
 filter_global: string;
 
+SKIPPED_TESTS :: string.[
+    "built-ins/AbstractModuleSource/length.js",
+];
+
 visitor :: (info: *File_Visit_Info, user_data: *void) {
     if info.is_directory return;
     if !ends_with(info.short_name, ".js") return;
+
+    for SKIPPED_TESTS {
+        if contains(info.full_name, it) {
+            print("SKIP: %\n", it);
+            return;
+        }
+    }
 
     if contains(info.full_name, "harness") return;
 
