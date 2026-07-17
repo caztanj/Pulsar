@@ -15,10 +15,11 @@ build :: () {
 
     is_test := array_find(remaining_args, "test");
     is_test262 := array_find(remaining_args, "test262");
+    is_test262_full := array_find(remaining_args, "test262-full");
 
     if is_test {
         options.output_executable_name = "pulsar_tests";
-    } else if is_test262 {
+    } else if is_test262 || is_test262_full {
         options.output_executable_name = "pulsar_test262";
     } else {
         options.output_executable_name = "pulsar";
@@ -50,10 +51,10 @@ build :: () {
     compiler_begin_intercept(w, intercept_flags);
 
     for plugins if it.add_source it.add_source(it);
-    
+
     if is_test {
         add_build_file("modules/JavaScript/tests/main.jai", w);
-    } else if is_test262 {
+    } else if is_test262 || is_test262_full {
         add_build_file("modules/JavaScript/test262_runner.jai", w);
     } else {
         add_build_file("main.jai", w);
@@ -79,14 +80,15 @@ build :: () {
     for plugins if it.finish   it.finish  (it);
     for plugins if it.shutdown it.shutdown(it);
 
-    if is_test || is_test262 {
+    if is_test || is_test262 || is_test262_full {
         exe_path := tprint("%/%", options.output_path, options.output_executable_name);
         #if OS == .WINDOWS { exe_path = tprint("%.exe", exe_path); }
 
         args_to_pass: [..] string;
         array_add(*args_to_pass, exe_path);
+        if is_test262_full array_add(*args_to_pass, "--full");
         for remaining_args {
-            if it == "test" || it == "test262" || it == "release" || it == "first.jai" || it == "-" continue;
+            if it == "test" || it == "test262" || it == "test262-full" || it == "release" || it == "first.jai" || it == "-" continue;
             array_add(*args_to_pass, it);
         }
 

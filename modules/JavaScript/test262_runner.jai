@@ -21,22 +21,40 @@ main :: () {
 
     harness_code_global = tprint("%\n%\n", assert_js, sta_js);
 
-    print("Starting test execution (failing fast on first error)...\n");
+    print("Starting test execution...\n");
 
     args := get_command_line_arguments();
-    if args.count > 1 {
-        filter_global = args[1];
-        print("Using filter: %\n", filter_global);
+    for i: 1..args.count-1 {
+        if args[i] == "--full" {
+            full_run = true;
+        } else {
+            filter_global = args[i];
+            print("Using filter: %\n", filter_global);
+        }
     }
 
     test_dir := "modules/JavaScript/test262/test";
     visit_files(test_dir, true, null, visitor, visit_files=true, visit_directories=true);
 
-    print("\nAll tests passed!\n");
+    print("\n--- Test Summary ---\n");
+    print("Passed:  %\n", total_passed);
+    print("Failed:  %\n", total_failed);
+    print("Skipped: %\n", total_skipped);
+    print("Total:   %\n", total_passed + total_failed + total_skipped);
+
+    if total_failed > 0 {
+        exit(1);
+    } else {
+        print("\nAll tests passed!\n");
+    }
 }
 
 harness_code_global: string;
 filter_global: string;
+full_run: bool;
+total_passed: int;
+total_failed: int;
+total_skipped: int;
 
 SKIPPED_TESTS :: string.[
     "built-ins/AbstractModuleSource",
@@ -53,6 +71,7 @@ visitor :: (info: *File_Visit_Info, user_data: *void) {
     for SKIPPED_TESTS {
         if contains(info.full_name, it) {
             print("SKIP: %\n", it);
+            total_skipped += 1;
             return;
         }
     }
@@ -107,7 +126,9 @@ visitor :: (info: *File_Visit_Info, user_data: *void) {
     if expected_to_fail {
         if !vm.has_exception {
             print("FAIL: % (Expected an error but got none)\n", info.full_name);
-            exit(1);
+            total_failed += 1;
+            if !full_run exit(1);
+            return;
         }
     } else {
         if vm.has_exception {
@@ -129,11 +150,14 @@ visitor :: (info: *File_Visit_Info, user_data: *void) {
             if vm.has_stack_trace {
                 print("%\n", vm.stack_trace);
             }
-            exit(1);
+            total_failed += 1;
+            if !full_run exit(1);
+            return;
         }
     }
 
     print("PASS: %\n", info.short_name);
+    total_passed += 1;
 }
 
 #import "Basic" () (MEMORY_DEBUGGER = DEBUG_MEMORY, TEMP_ALLOCATOR_OVERWRITE_MEMORY = false);
