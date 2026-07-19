@@ -387,7 +387,7 @@ execute_function_internal :: (vm: *Vm, initial_function: *Bytecode_Function, ini
 
                 case .CALL;
                     callee          := *registers_data[instruction.arg1];
-                    this_val        := ifx instruction.arg2 != 255 registers_data[instruction.arg2] else Value.{};
+                    this_val        := ifx instruction.arg2 != 65535 registers_data[instruction.arg2] else Value.{};
                     arguments_count := instruction.imm & 0xFFFF;
 
                     first_argument_register := instruction.imm >> 16;
@@ -432,7 +432,7 @@ execute_function_internal :: (vm: *Vm, initial_function: *Bytecode_Function, ini
 
                 case .NEW_CALL;
                     callee          := registers_data[instruction.arg1];
-                    this_val        := ifx instruction.arg2 != 255 registers_data[instruction.arg2] else Value.{};
+                    this_val        := ifx instruction.arg2 != 65535 registers_data[instruction.arg2] else Value.{};
                     arguments_count := instruction.imm & 0xFFFF;
 
                     first_argument_register := instruction.imm >> 16;
@@ -636,16 +636,20 @@ execute_function_internal :: (vm: *Vm, initial_function: *Bytecode_Function, ini
                         if property.type == .NUMBER {
                             index  := cast(int) property.number;
                             if object {
-                                if is_typed_array(object.kind) {
-                                    len := get_typed_array_length(object);
-                                    if index >= 0 && index < len {
-                                        registers_data[instruction.dest] = .{ type = .NUMBER, number = get_typed_array_element(object, index) };
+                                if cast(float64) index == property.number && index >= 0 && index < 1048576 {
+                                    if is_typed_array(object.kind) {
+                                        len := get_typed_array_length(object);
+                                        if index >= 0 && index < len {
+                                            registers_data[instruction.dest] = .{ type = .NUMBER, number = get_typed_array_element(object, index) };
+                                        } else {
+                                            registers_data[instruction.dest] = .{ type = .UNDEFINED };
+                                        }
                                     } else {
-                                        registers_data[instruction.dest] = .{ type = .UNDEFINED };
+                                        if index >= 0 && index < object.elements.count registers_data[instruction.dest] = object.elements[index];
+                                        else                                             registers_data[instruction.dest] = get_property_or_undefined(vm, object, value_to_string(vm, property));
                                     }
                                 } else {
-                                    if index >= 0 && index < object.elements.count registers_data[instruction.dest] = object.elements[index];
-                                    else                                             registers_data[instruction.dest] = .{ type = .UNDEFINED };
+                                    registers_data[instruction.dest] = get_property_or_undefined(vm, object, value_to_string(vm, property));
                                 }
                             } else {
                                 registers_data[instruction.dest] = .{ type = .UNDEFINED };
@@ -714,7 +718,7 @@ execute_function_internal :: (vm: *Vm, initial_function: *Bytecode_Function, ini
                         } else if property.type == .NUMBER {
                             index := cast(int) property.number;
 
-                            if index >= 0 {
+                            if cast(float64) index == property.number && index >= 0 && index < 1048576 {
                                 if is_typed_array(object.kind) {
                                     len := get_typed_array_length(object);
                                     if index < len {
@@ -727,6 +731,8 @@ execute_function_internal :: (vm: *Vm, initial_function: *Bytecode_Function, ini
 
                                     write_barrier(vm, object, value);
                                 }
+                            } else {
+                                set_object_property(vm, object, value_to_string(vm, property), value);
                             }
                         }
                     }
@@ -1611,7 +1617,7 @@ execute_function_internal :: (vm: *Vm, initial_function: *Bytecode_Function, ini
 
                 case .CALL_APPLY;
                     callee          := registers_data[instruction.arg1];
-                    this_value      := ifx instruction.arg2 == 255 Value.{} else registers_data[instruction.arg2];
+                    this_value      := ifx instruction.arg2 == 65535 Value.{} else registers_data[instruction.arg2];
                     arguments_array := *registers_data[instruction.imm];
 
                     if arguments_array.type == .ARRAY && arguments_array.object {
@@ -1664,7 +1670,7 @@ execute_function_internal :: (vm: *Vm, initial_function: *Bytecode_Function, ini
                 ctx := try_stack.data[try_stack.count - 1];
                 try_stack.count -= 1;
                 pc_pointer = instructions_pointer + ctx.catch_pc;
-                if ctx.catch_reg != 255 registers_data[ctx.catch_reg] = vm.exception;
+                if ctx.catch_reg != 65535 registers_data[ctx.catch_reg] = vm.exception;
                 vm.has_exception = false;
                 vm.has_stack_trace = false;
                 vm.stack_trace = "";
@@ -2706,7 +2712,7 @@ Call_Frame :: struct {
     instructions_pointer: *Instruction;
     pc_pointer:           *Instruction;
     pc_end:               *Instruction;
-    dest_register:        u8;
+    dest_register:        u16;
     initial_try_count:    s64;
     generator:            *Gc_Object;
 }
@@ -2825,7 +2831,7 @@ Environment :: struct {
 
 Try_Context :: struct {
     catch_pc:  int;
-    catch_reg: u8;
+    catch_reg: u16;
 }
 
 Promise_Status :: enum {

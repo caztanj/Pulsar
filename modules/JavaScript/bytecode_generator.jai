@@ -241,8 +241,13 @@ collect_globals :: (generator: *Bytecode_Generator, node: *Ast_Node) {
         case .BINARY_EXPRESSION;
             binary_expression := cast(*Ast_Binary_Expression) node;
 
-            collect_globals(generator, binary_expression.left);
-            collect_globals(generator, binary_expression.right);
+            curr := binary_expression;
+            while curr.left.kind == .BINARY_EXPRESSION {
+                collect_globals(generator, curr.right);
+                curr = cast(*Ast_Binary_Expression) curr.left;
+            }
+            collect_globals(generator, curr.right);
+            collect_globals(generator, curr.left);
 
         case .CALL_EXPRESSION;
             call_expression := cast(*Ast_Call_Expression) node;
@@ -456,8 +461,8 @@ generate_module_bytecode :: (ast: *Ast_Program, program: *Bytecode_Program, name
     return module_function;
 }
 
-allocate_register :: inline (generator: *Bytecode_Generator, destination_register: s16) -> u8 {
-    if destination_register != -1 return cast(u8) destination_register;
+allocate_register :: inline (generator: *Bytecode_Generator, destination_register: s32) -> u16 {
+    if destination_register != -1 return cast(u16) destination_register;
 
     register := generator.next_register;
     generator.next_register += 1;
@@ -517,7 +522,7 @@ resolve_variable :: (generator: *Bytecode_Generator, name: string) -> Variable_L
     return .{ .NOT_FOUND, -1, 0, false };
 }
 
-store_local_or_global :: (generator: *Bytecode_Generator, name: string, register: u8, is_declaration: bool, is_const: bool, is_var: bool = false) {
+store_local_or_global :: (generator: *Bytecode_Generator, name: string, register: u16, is_declaration: bool, is_const: bool, is_var: bool = false) {
     instruction := Instruction.{
         arg1 = register,
     };
@@ -622,7 +627,7 @@ store_local_or_global :: (generator: *Bytecode_Generator, name: string, register
     }
 }
 
-load_const :: (generator: *Bytecode_Generator, register: u8, value: Value) {
+load_const :: (generator: *Bytecode_Generator, register: u16, value: Value) {
     index := generator.program.constants.count;
 
     array_add(*generator.program.constants, value);
@@ -636,7 +641,7 @@ load_const :: (generator: *Bytecode_Generator, register: u8, value: Value) {
     emit_instruction(generator, instruction);
 }
 
-emit_store :: (generator: *Bytecode_Generator, left: *Ast_Node, value_register: u8, is_declaration := false, is_const := false, is_var := false) {
+emit_store :: (generator: *Bytecode_Generator, left: *Ast_Node, value_register: u16, is_declaration := false, is_const := false, is_var := false) {
     if left.kind == {
         case .IDENTIFIER;
             identifier := cast(*Ast_Identifier) left;
@@ -759,7 +764,7 @@ emit_statement :: (generator: *Bytecode_Generator, node: *Ast_Node) {
             variable_declaration := cast(*Ast_Variable_Declaration) node;
 
             for variable_declaration.declarations {
-                register: u8;
+                register: u16;
 
                 if it.init {
                     register = emit_expression(generator, it.init);
@@ -797,7 +802,7 @@ emit_statement :: (generator: *Bytecode_Generator, node: *Ast_Node) {
 
                     if generator.locals.count > generator.current_function.locals_count {
                         generator.current_function.locals_count = generator.locals.count;
-                        generator.next_register = cast(u8) generator.locals.count;
+                        generator.next_register        = cast(u16) generator.locals.count;
                     }
                 }
             }
@@ -812,7 +817,7 @@ emit_statement :: (generator: *Bytecode_Generator, node: *Ast_Node) {
                 function_scope = new_function_scope,
                 program              = generator.program,
                 parent               = generator,
-                next_register        = cast(u8) function_declaration.parameters.count,
+                next_register        = cast(u16) function_declaration.parameters.count,
                 locals.allocator     = temp,
                 loop_stack.allocator = temp,
             };
@@ -873,7 +878,7 @@ emit_statement :: (generator: *Bytecode_Generator, node: *Ast_Node) {
         case .RETURN_STATEMENT;
             return_statement := cast(*Ast_Return_Statement) node;
 
-            register: u8 = 0;
+            register: u16 = 0;
 
             if return_statement.argument register = emit_expression(generator, return_statement.argument);
 
@@ -1037,8 +1042,8 @@ emit_statement :: (generator: *Bytecode_Generator, node: *Ast_Node) {
                         if const_index <= 255 {
                             jump_to_body_instruction := Instruction.{
                                 op_code = .JUMP_IF_LOCAL_LESS_THAN_CONST,
-                                dest    = cast(u8) local_index,
-                                arg1    = cast(u8) const_index,
+                                dest    = cast(u16) local_index,
+                                arg1    = cast(u16) const_index,
                             };
 
                             jump_to_body_index := generator.current_function.instructions.count;
@@ -1502,8 +1507,8 @@ emit_statement :: (generator: *Bytecode_Generator, node: *Ast_Node) {
         case .TRY_STATEMENT;
             try_statement := cast(*Ast_Try_Statement) node;
 
-            has_exception_register: u8;
-            exception_value_register: u8;
+            has_exception_register: u16;
+            exception_value_register: u16;
             finally_try_context_index: int = -1;
 
             if try_statement.finally_block {
@@ -1519,7 +1524,7 @@ emit_statement :: (generator: *Bytecode_Generator, node: *Ast_Node) {
             }
 
             catch_pc := -1;
-            catch_register: u8 = 255;
+            catch_register: u16 = 65535;
             jump_over_catch_index := -1;
 
             if try_statement.catch_block {
@@ -1778,12 +1783,12 @@ emit_statement :: (generator: *Bytecode_Generator, node: *Ast_Node) {
     }
 }
 
-emit_expression :: (generator: *Bytecode_Generator, node: *Ast_Node, force_new_register := false, destination_register: s16 = -1) -> u8 {
+emit_expression :: (generator: *Bytecode_Generator, node: *Ast_Node, force_new_register := false, destination_register: s32 = -1) -> u16 {
     if !node return 0;
 
     if node.line > 0 then generator.current_line = cast(u32) node.line;
 
-    register: u8;
+    register: u16;
 
     if #complete node.kind == {
         case .LITERAL_NUMBER;
@@ -1830,8 +1835,18 @@ emit_expression :: (generator: *Bytecode_Generator, node: *Ast_Node, force_new_r
             callee_register := generator.next_register;
             generator.next_register += 1;
 
-            global_index := generator.program.constants.count;
-            array_add(*generator.program.constants, .{ type = .STRING, s = "RegExp" });
+            global_index := -1;
+            for generator.program.globals {
+                if it == "RegExp" {
+                    global_index = it_index;
+                    break;
+                }
+            }
+
+            if global_index == -1 {
+                global_index = generator.program.globals.count;
+                array_add(*generator.program.globals, "RegExp");
+            }
 
             emit_instruction(generator, Instruction.{
                 op_code = .LOAD_GLOBAL,
@@ -1862,8 +1877,8 @@ emit_expression :: (generator: *Bytecode_Generator, node: *Ast_Node, force_new_r
                 op_code = .NEW_CALL,
                 dest    = register,
                 arg1    = callee_register,
-                arg2    = first_argument_new,
-                imm     = 2,
+                arg2    = 65535,
+                imm     = ((cast(s32) first_argument_new) << 16) | 2,
             });
 
             return register;
@@ -1873,7 +1888,7 @@ emit_expression :: (generator: *Bytecode_Generator, node: *Ast_Node, force_new_r
 
             location := resolve_variable(generator, identifier.name);
 
-            if location.type == .LOCAL && !force_new_register && destination_register == -1 return cast(u8) location.index;
+            if location.type == .LOCAL && !force_new_register && destination_register == -1 return cast(u16) location.index;
 
             register := allocate_register(generator, destination_register);
 
@@ -1927,67 +1942,82 @@ emit_expression :: (generator: *Bytecode_Generator, node: *Ast_Node, force_new_r
                 return emit_expression(generator, xx logical_expression, force_new_register, destination_register);
             }
 
-            left := emit_expression(generator, binary_expression.left);
-
-            right: u8;
-
-            register := allocate_register(generator, destination_register);
-
-            instruction := Instruction.{
-                dest = register,
-                arg1 = left,
-            };
-
-            if (binary_expression.op == "-" || binary_expression.op == "+") && binary_expression.right.kind == .LITERAL_NUMBER {
-                literal_number := cast(*Ast_Literal_Number) binary_expression.right;
-
-                const_index := -1;
-
-                for generator.program.constants {
-                    if it.type == .NUMBER && it.number == literal_number.value {
-                        const_index = it_index;
-                        break;
-                    }
-                }
-
-                if const_index == -1 {
-                    const_index = generator.program.constants.count;
-                    array_add(*generator.program.constants, .{type=.NUMBER, number=literal_number.value});
-                }
-
-                if binary_expression.op == "-" instruction.op_code = .SUB_CONST;
-                else                           instruction.op_code = .ADD_CONST;
-
-                instruction.imm = cast(s32) const_index;
-            } else {
-                right = emit_expression(generator, binary_expression.right);
-
-                instruction.arg2 = right;
-
-                if      binary_expression.op == "+"          instruction.op_code = .ADD;
-                else if binary_expression.op == "-"          instruction.op_code = .SUB;
-                else if binary_expression.op == "*"          instruction.op_code = .MUL;
-                else if binary_expression.op == "/"          instruction.op_code = .DIV;
-                else if binary_expression.op == "%"          instruction.op_code = .MOD;
-                else if binary_expression.op == "=="         instruction.op_code = .EQUAL;
-                else if binary_expression.op == "!="         instruction.op_code = .NOT_EQUAL;
-                else if binary_expression.op == "<"          instruction.op_code = .LESS_THAN;
-                else if binary_expression.op == ">"          instruction.op_code = .GREATER_THAN;
-                else if binary_expression.op == "<="         instruction.op_code = .LESS_THAN_EQUAL;
-                else if binary_expression.op == ">="         instruction.op_code = .GREATER_THAN_EQUAL;
-                else if binary_expression.op == "==="        instruction.op_code = .STRICT_EQUAL;
-                else if binary_expression.op == "!=="        instruction.op_code = .STRICT_NOT_EQUAL;
-                else if binary_expression.op == "instanceof" instruction.op_code = .INSTANCEOF;
-                else if binary_expression.op == "in"         instruction.op_code = .IN;
-                else if binary_expression.op == "&"          instruction.op_code = .BITWISE_AND;
-                else if binary_expression.op == "|"          instruction.op_code = .BITWISE_OR;
-                else if binary_expression.op == "^"          instruction.op_code = .BITWISE_XOR;
-                else if binary_expression.op == "**"         instruction.op_code = .EXPONENTIATION;
+            nodes: [..] *Ast_Binary_Expression;
+            curr := binary_expression;
+            while curr.left.kind == .BINARY_EXPRESSION {
+                left_bin := cast(*Ast_Binary_Expression) curr.left;
+                if left_bin.op == "&&" || left_bin.op == "||" break;
+                array_add(*nodes, curr);
+                curr = left_bin;
             }
 
-            emit_instruction(generator, instruction);
+            left := emit_expression(generator, curr.left);
 
-            return register;
+            array_add(*nodes, curr);
+
+            for < i: 0 .. nodes.count - 1 {
+                bin_node := nodes[i];
+
+                dest_reg := allocate_register(generator, ifx i == 0 then destination_register else -1);
+
+                instruction := Instruction.{
+                    dest = dest_reg,
+                    arg1 = left,
+                };
+
+                if (bin_node.op == "-" || bin_node.op == "+") && bin_node.right.kind == .LITERAL_NUMBER {
+                    literal_number := cast(*Ast_Literal_Number) bin_node.right;
+
+                    const_index := -1;
+
+                    for generator.program.constants {
+                        if it.type == .NUMBER && it.number == literal_number.value {
+                            const_index = it_index;
+                            break;
+                        }
+                    }
+
+                    if const_index == -1 {
+                        const_index = generator.program.constants.count;
+                        array_add(*generator.program.constants, .{type=.NUMBER, number=literal_number.value});
+                    }
+
+                    if bin_node.op == "-" instruction.op_code = .SUB_CONST;
+                    else                  instruction.op_code = .ADD_CONST;
+
+                    instruction.imm = cast(s32) const_index;
+                } else {
+                    right := emit_expression(generator, bin_node.right);
+
+                    instruction.arg2 = right;
+
+                    if      bin_node.op == "+"          instruction.op_code = .ADD;
+                    else if bin_node.op == "-"          instruction.op_code = .SUB;
+                    else if bin_node.op == "*"          instruction.op_code = .MUL;
+                    else if bin_node.op == "/"          instruction.op_code = .DIV;
+                    else if bin_node.op == "%"          instruction.op_code = .MOD;
+                    else if bin_node.op == "=="         instruction.op_code = .EQUAL;
+                    else if bin_node.op == "!="         instruction.op_code = .NOT_EQUAL;
+                    else if bin_node.op == "<"          instruction.op_code = .LESS_THAN;
+                    else if bin_node.op == ">"          instruction.op_code = .GREATER_THAN;
+                    else if bin_node.op == "<="         instruction.op_code = .LESS_THAN_EQUAL;
+                    else if bin_node.op == ">="         instruction.op_code = .GREATER_THAN_EQUAL;
+                    else if bin_node.op == "==="        instruction.op_code = .STRICT_EQUAL;
+                    else if bin_node.op == "!=="        instruction.op_code = .STRICT_NOT_EQUAL;
+                    else if bin_node.op == "instanceof" instruction.op_code = .INSTANCEOF;
+                    else if bin_node.op == "in"         instruction.op_code = .IN;
+                    else if bin_node.op == "&"          instruction.op_code = .BITWISE_AND;
+                    else if bin_node.op == "|"          instruction.op_code = .BITWISE_OR;
+                    else if bin_node.op == "^"          instruction.op_code = .BITWISE_XOR;
+                    else if bin_node.op == "**"         instruction.op_code = .EXPONENTIATION;
+                }
+
+                emit_instruction(generator, instruction);
+                left = dest_reg;
+            }
+
+            array_free(nodes);
+            return left;
 
         case .ARRAY_LITERAL;
             array_literal := cast(*Ast_Array_Literal) node;
@@ -2160,8 +2190,8 @@ emit_expression :: (generator: *Bytecode_Generator, node: *Ast_Node, force_new_r
                 }
             }
 
-            this_register:   u8 = 255;
-            callee_register: u8;
+            this_register:   u16 = 65535;
+            callee_register: u16;
 
             if call_expression.callee.kind == .MEMBER_EXPRESSION {
                 member_expression := cast(*Ast_Member_Expression) call_expression.callee;
@@ -2254,7 +2284,7 @@ emit_expression :: (generator: *Bytecode_Generator, node: *Ast_Node, force_new_r
             } else {
                 first_argument := generator.next_register;
 
-                generator.next_register += cast(u8) call_expression.arguments.count;
+                generator.next_register += cast(u16) call_expression.arguments.count;
 
                 for call_expression.arguments emit_expression(generator, it, false, cast(s16) (first_argument + it_index));
 
@@ -2337,7 +2367,7 @@ emit_expression :: (generator: *Bytecode_Generator, node: *Ast_Node, force_new_r
             } else {
                 first_argument_new := generator.next_register;
 
-                generator.next_register += cast(u8) new_expression.arguments.count;
+                generator.next_register += cast(u16) new_expression.arguments.count;
 
                 for new_expression.arguments emit_expression(generator, it, false, cast(s16) (first_argument_new + it_index));
 
@@ -2345,7 +2375,7 @@ emit_expression :: (generator: *Bytecode_Generator, node: *Ast_Node, force_new_r
                     op_code = .NEW_CALL,
                     dest    = register,
                     arg1    = callee_register,
-                    arg2    = 255,
+                    arg2    = 65535,
                     imm     = ((cast(s32) first_argument_new) << 16) | cast(s32) new_expression.arguments.count,
                 };
 
@@ -2367,7 +2397,7 @@ emit_expression :: (generator: *Bytecode_Generator, node: *Ast_Node, force_new_r
                 function_scope = new_function_scope,
                 program              = generator.program,
                 parent               = generator,
-                next_register        = cast(u8) function_expression.parameters.count,
+                next_register        = cast(u16) function_expression.parameters.count,
                 locals.allocator     = temp,
                 loop_stack.allocator = temp,
             };
@@ -2436,7 +2466,7 @@ emit_expression :: (generator: *Bytecode_Generator, node: *Ast_Node, force_new_r
                 function_scope = new_function_scope,
                 program              = generator.program,
                 parent               = generator,
-                next_register        = cast(u8) arrow_expression.parameters.count,
+                next_register        = cast(u16) arrow_expression.parameters.count,
                 locals.allocator     = temp,
                 loop_stack.allocator = temp,
             };
@@ -2508,7 +2538,7 @@ emit_expression :: (generator: *Bytecode_Generator, node: *Ast_Node, force_new_r
         case .TEMPLATE_LITERAL;
             template_literal := cast(*Ast_Template_Literal) node;
 
-            result_register: u8;
+            result_register: u16;
 
             first := true;
 
@@ -2597,7 +2627,7 @@ emit_expression :: (generator: *Bytecode_Generator, node: *Ast_Node, force_new_r
             return result_register;
 
         case .SPREAD_ELEMENT;
-            return 255;
+            return 65535;
 
         case .UNARY_EXPRESSION;
             unary_expression := cast(*Ast_Unary_Expression) node;
@@ -2685,7 +2715,7 @@ emit_expression :: (generator: *Bytecode_Generator, node: *Ast_Node, force_new_r
         case .YIELD_EXPRESSION;
             yield_expression := cast(*Ast_Yield_Expression) node;
 
-            argument_register: u8 = 0;
+            argument_register: u16 = 0;
             if yield_expression.argument argument_register = emit_expression(generator, yield_expression.argument);
 
             register := allocate_register(generator, destination_register);
@@ -2785,13 +2815,13 @@ emit_expression :: (generator: *Bytecode_Generator, node: *Ast_Node, force_new_r
                 if left_index != -1 && right_index != -1 {
                     op_instruction := Instruction.{
                         op_code = .ADD_LOCAL_LOCAL,
-                        dest    = cast(u8) left_index,
-                        arg1    = cast(u8) right_index,
+                        dest    = cast(u16) left_index,
+                        arg1    = cast(u16) right_index,
                     };
 
                     array_add(*generator.current_function.instructions, op_instruction);
 
-                    return cast(u8) left_index;
+                    return cast(u16) left_index;
                 }
 
                 left_register  := emit_expression(generator, assignment_expression.left);
@@ -2823,13 +2853,13 @@ emit_expression :: (generator: *Bytecode_Generator, node: *Ast_Node, force_new_r
                 if left_index != -1 && right_index != -1 {
                     op_instruction := Instruction.{
                         op_code = .SUB_LOCAL_LOCAL,
-                        dest    = cast(u8) left_index,
-                        arg1    = cast(u8) right_index,
+                        dest    = cast(u16) left_index,
+                        arg1    = cast(u16) right_index,
                     };
 
                     array_add(*generator.current_function.instructions, op_instruction);
 
-                    return cast(u8) left_index;
+                    return cast(u16) left_index;
                 }
 
                 left_register  := emit_expression(generator, assignment_expression.left);
@@ -2959,7 +2989,7 @@ emit_expression :: (generator: *Bytecode_Generator, node: *Ast_Node, force_new_r
                         move_instruction := Instruction.{
                             op_code = .MOVE,
                             dest    = register,
-                            arg1    = cast(u8) local_index,
+                            arg1    = cast(u16) local_index,
                         };
 
                         array_add(*generator.current_function.instructions, move_instruction);
@@ -2983,7 +3013,7 @@ emit_expression :: (generator: *Bytecode_Generator, node: *Ast_Node, force_new_r
                         move_instruction := Instruction.{
                             op_code = .MOVE,
                             dest    = register,
-                            arg1    = cast(u8) local_index,
+                            arg1    = cast(u16) local_index,
                         };
 
                         array_add(*generator.current_function.instructions, move_instruction);
@@ -3270,7 +3300,7 @@ emit_class_declaration :: (generator: *Bytecode_Generator, node: *Ast_Class_Decl
     }
 }
 
-emit_class_expression :: (generator: *Bytecode_Generator, node: *Ast_Class_Expression, dest_register: u8) {
+emit_class_expression :: (generator: *Bytecode_Generator, node: *Ast_Class_Expression, dest_register: u16) {
     if !node return;
 
     constructor_register := emit_class_common(generator, node.super_class, node.body);
@@ -3284,7 +3314,7 @@ emit_class_expression :: (generator: *Bytecode_Generator, node: *Ast_Class_Expre
     emit_instruction(generator, move_instruction);
 }
 
-emit_class_common :: (generator: *Bytecode_Generator, super_class: *Ast_Node, body: *Ast_Class_Body) -> u8 {
+emit_class_common :: (generator: *Bytecode_Generator, super_class: *Ast_Node, body: *Ast_Class_Body) -> u16 {
     constructor_method: *Ast_Method_Definition = null;
 
     for body.body {
@@ -3294,7 +3324,7 @@ emit_class_common :: (generator: *Bytecode_Generator, super_class: *Ast_Node, bo
         }
     }
 
-    constructor_register: u8;
+    constructor_register: u16;
 
     if constructor_method {
         constructor_register = emit_expression(generator, constructor_method.value);
@@ -3400,7 +3430,7 @@ emit_class_common :: (generator: *Bytecode_Generator, super_class: *Ast_Node, bo
     return constructor_register;
 }
 
-emit_super_expression :: (generator: *Bytecode_Generator, node: *Ast_Super_Expression, dest_register: u8) {
+emit_super_expression :: (generator: *Bytecode_Generator, node: *Ast_Super_Expression, dest_register: u16) {
     load_this := Instruction.{
         op_code = .LOAD_THIS,
         dest    = dest_register,
@@ -3509,10 +3539,10 @@ Op_Code :: enum u8 {
 Instruction :: struct {
     op_code: Op_Code;
 
-    dest:    u8;
+    dest:    u16;
 
-    arg1:    u8;
-    arg2:    u8;
+    arg1:    u16;
+    arg2:    u16;
 
     imm:     s32;
 
@@ -3582,7 +3612,7 @@ Bytecode_Generator :: struct {
     current_scope:    *Lexical_Scope;
     function_scope:   *Lexical_Scope;
 
-    next_register: u8;
+    next_register: u16;
 
     locals:     [..] string;
     loop_stack: [..] Loop_Context;

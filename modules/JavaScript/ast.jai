@@ -660,6 +660,7 @@ parse_expression :: (parser: *Parser) -> *Ast_Node {
 
 parse_assignment :: (parser: *Parser) -> *Ast_Node {
     left := parse_conditional(parser);
+    if !left return null;
 
     skip_whitespace_and_comments(parser);
 

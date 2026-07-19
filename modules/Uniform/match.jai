@@ -13,7 +13,7 @@ match :: (text: string, pattern: string, anchor: Anchor = .UNANCHORED) -> matche
 }
 
 // You need to free the captures array, but not its contents (which just references the input text)
-match :: (text: string, re: Regexp, re_anchor_in: Anchor = .UNANCHORED) -> matched: bool, captures: [] string {
+match :: (text: string, re: Regexp, re_anchor_in: Anchor = .UNANCHORED, start_index: int = 0) -> matched: bool, captures: [] string {
 	num_captures := 1 + re.num_capture_groups;
 
 	re_anchor := re_anchor_in;
@@ -23,9 +23,9 @@ match :: (text: string, re: Regexp, re_anchor_in: Anchor = .UNANCHORED) -> match
 		re_anchor = .ANCHOR_START;
 	}
 
-	subtext := text;
+	subtext := slice(text, start_index, text.count - start_index);
 	if re.prefix.count {
-		if re.prefix.count > text.count {
+		if re.prefix.count > subtext.count {
 			return false, .[];
 		}
 

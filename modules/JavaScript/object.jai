@@ -35,8 +35,8 @@ lookup_property :: (vm: *Vm, object: *Gc_Object, name: string, imm: int = -1) ->
         name_copy       := name;
         parsed, success := parse_int(*name_copy);
 
-        if success && parsed >= 0 parsed_index = parsed;
-        else                      is_all_digits = false;
+        if success && parsed >= 0 && parsed < 1048576 parsed_index = parsed;
+        else                                          is_all_digits = false;
     }
 
     current := object;
@@ -116,13 +116,15 @@ set_object_property :: (vm: *Vm, object: *Gc_Object, name: string, value: Value,
                 }
             }
 
-            while object.elements.count <= parsed array_add(*object.elements, .{});
+            if parsed < 1048576 {
+                while object.elements.count <= parsed array_add(*object.elements, .{});
 
-            object.elements[parsed] = value;
+                object.elements[parsed] = value;
 
-            write_barrier(vm, object, value);
+                write_barrier(vm, object, value);
 
-            return;
+                return;
+            }
         }
     }
 

@@ -30,6 +30,12 @@ init_vm_regexp :: (vm: *Vm) {
 }
 
 regexp_constructor :: (vm: *Vm, this: Value, arguments: [] Value, is_new: bool) -> Value {
+    if !is_new && arguments.count > 0 && arguments[0].type == .OBJECT && arguments[0].object && arguments[0].object.kind == .REGEXP {
+        if arguments.count == 1 || arguments[1].type == .UNDEFINED {
+            return arguments[0];
+        }
+    }
+
     pattern := "";
     
     if arguments.count > 0 {
@@ -49,7 +55,6 @@ regexp_constructor :: (vm: *Vm, this: Value, arguments: [] Value, is_new: bool) 
     }
     
     regexp_object := allocate_object(vm);
-    regexp_object.kind      = .REGEXP;
     regexp_object.prototype = vm.regexp_prototype;
     
     regexp, success := Uniform.compile(pattern);
@@ -58,6 +63,7 @@ regexp_constructor :: (vm: *Vm, this: Value, arguments: [] Value, is_new: bool) 
         return .{ type = .OBJECT, object = regexp_object };
     }
     
+    regexp_object.kind   = .REGEXP;
     regexp_object.regexp = regexp;
     
     set_object_property(vm, regexp_object, "source", .{ type = .STRING, s = allocate_string(vm, pattern) });
@@ -77,10 +83,51 @@ regexp_test :: (vm: *Vm, this: Value, arguments: [] Value, is_new: bool) -> Valu
         str = value_to_string(vm, arguments[0]);
     }
     
-    matched, captures := Uniform.match(str, this.object.regexp);
-    array_free(captures);
+    flags_val := get_property_or_undefined(vm, this.object, "flags");
+    flags := ifx flags_val.type == .STRING then flags_val.s else "";
+    is_global := contains(flags, "g");
+    is_sticky := contains(flags, "y");
+
+    last_index := 0;
+    if is_global || is_sticky {
+        last_index_val := get_property_or_undefined(vm, this.object, "lastIndex");
+        if last_index_val.type == .NUMBER {
+            last_index = cast(int) last_index_val.number;
+            if last_index < 0 last_index = 0;
+        }
+    }
+
+    if last_index > str.count {
+        if is_global || is_sticky {
+            set_object_property(vm, this.object, "lastIndex", .{ type = .NUMBER, number = 0.0 });
+        }
+        return .{ type = .BOOLEAN, boolean = false };
+    }
+
+    anchor: Uniform.Anchor = .UNANCHORED;
+    if is_sticky anchor = .ANCHOR_START;
+
+    matched, captures := Uniform.match(str, this.object.regexp, anchor, last_index);
+    defer array_free(captures);
     
-    return .{ type = .BOOLEAN, boolean = matched };
+    if !matched {
+        if is_global || is_sticky {
+            set_object_property(vm, this.object, "lastIndex", .{ type = .NUMBER, number = 0.0 });
+        }
+        return .{ type = .BOOLEAN, boolean = false };
+    }
+
+    match_index := last_index;
+    if captures.count > 0 && captures[0].data >= str.data && captures[0].data <= str.data + str.count {
+        match_index = cast(int)(captures[0].data - str.data);
+    }
+    
+    if is_global || is_sticky {
+        new_last_index := match_index + captures[0].count;
+        set_object_property(vm, this.object, "lastIndex", .{ type = .NUMBER, number = cast(float64) new_last_index });
+    }
+    
+    return .{ type = .BOOLEAN, boolean = true };
 }
 
 regexp_exec :: (vm: *Vm, this: Value, arguments: [] Value, is_new: bool) -> Value {
@@ -93,11 +140,50 @@ regexp_exec :: (vm: *Vm, this: Value, arguments: [] Value, is_new: bool) -> Valu
     if arguments.count > 0 {
         str = value_to_string(vm, arguments[0]);
     }
-    
-    matched, captures := Uniform.match(str, this.object.regexp);
+
+    flags_val := get_property_or_undefined(vm, this.object, "flags");
+    flags := ifx flags_val.type == .STRING then flags_val.s else "";
+    is_global := contains(flags, "g");
+    is_sticky := contains(flags, "y");
+
+    last_index := 0;
+    if is_global || is_sticky {
+        last_index_val := get_property_or_undefined(vm, this.object, "lastIndex");
+        if last_index_val.type == .NUMBER {
+            last_index = cast(int) last_index_val.number;
+            if last_index < 0 last_index = 0;
+        }
+    }
+
+    if last_index > str.count {
+        if is_global || is_sticky {
+            set_object_property(vm, this.object, "lastIndex", .{ type = .NUMBER, number = 0.0 });
+        }
+        return .{ type = .NULL };
+    }
+
+    anchor: Uniform.Anchor = .UNANCHORED;
+    if is_sticky anchor = .ANCHOR_START;
+
+    matched, captures := Uniform.match(str, this.object.regexp, anchor, last_index);
     defer array_free(captures);
     
-    if !matched return .{ type = .NULL };
+    if !matched {
+        if is_global || is_sticky {
+            set_object_property(vm, this.object, "lastIndex", .{ type = .NUMBER, number = 0.0 });
+        }
+        return .{ type = .NULL };
+    }
+
+    match_index := last_index;
+    if captures.count > 0 && captures[0].data >= str.data && captures[0].data <= str.data + str.count {
+        match_index = cast(int)(captures[0].data - str.data);
+    }
+    
+    if is_global || is_sticky {
+        new_last_index := match_index + captures[0].count;
+        set_object_property(vm, this.object, "lastIndex", .{ type = .NUMBER, number = cast(float64) new_last_index });
+    }
     
     array_object := allocate_object(vm);
     array_object.kind      = .ARRAY;
@@ -108,7 +194,7 @@ regexp_exec :: (vm: *Vm, this: Value, arguments: [] Value, is_new: bool) -> Valu
     }
     
     set_object_property(vm, array_object, "length", .{ type = .NUMBER, number = cast(float64) captures.count });
-    set_object_property(vm, array_object, "index",  .{ type = .NUMBER, number = 0.0 });
+    set_object_property(vm, array_object, "index",  .{ type = .NUMBER, number = cast(float64) match_index });
     set_object_property(vm, array_object, "input",  .{ type = .STRING, s = allocate_string(vm, str) });
     
     return .{ type = .OBJECT, object = array_object };

@@ -237,13 +237,19 @@ sweep_environments :: (vm: *Vm, is_major := false) {
 }
 
 sweep_shapes :: (vm: *Vm) {
-    for vm.shapes {
-        if it.marked {
-            for shape, name: it.transitions {
-                if !shape.marked table_remove(*it.transitions, name);
+    to_remove: [..] string;
+
+    for current_shape: vm.shapes {
+        if current_shape.marked {
+            for target_shape, name: current_shape.transitions {
+                if !target_shape.marked array_add(*to_remove, name);
             }
+            for name: to_remove table_remove(*current_shape.transitions, name);
+            to_remove.count = 0;
         }
     }
+    
+    array_free(to_remove);
 
     surviving_shapes: [..] *Shape;
 

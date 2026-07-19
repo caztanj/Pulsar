@@ -19,8 +19,8 @@ remove_dead_instructions :: (function: *Bytecode_Function) {
         instruction := *function.instructions[i];
 
         should_remove :=  instruction.op_code == .MOVE        && instruction.dest == instruction.arg1;
-        should_remove ||= instruction.op_code == .LOAD_LOCAL  && instruction.dest == cast(u8) instruction.imm;
-        should_remove ||= instruction.op_code == .STORE_LOCAL && instruction.arg1 == cast(u8) instruction.imm;
+        should_remove ||= instruction.op_code == .LOAD_LOCAL  && instruction.dest == cast(u16) instruction.imm;
+        should_remove ||= instruction.op_code == .STORE_LOCAL && instruction.arg1 == cast(u16) instruction.imm;
         should_remove ||= instruction.op_code == .JUMP        && instruction.imm == i + 1;
 
         if should_remove {

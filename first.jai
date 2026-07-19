@@ -93,9 +93,7 @@ build :: () {
         }
 
         print("\n=== Running Tests (%) ===\n", exe_path);
-        result, output, error := run_command(..args_to_pass, capture_and_return_output = true);
-        print("%", output);
-        if error print("%", error);
+        result := run_command(..args_to_pass, capture_and_return_output = false);
 
         if result.exit_code != 0 {
             print("Tests failed with exit code %\n", result.exit_code);

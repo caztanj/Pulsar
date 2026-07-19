@@ -6,10 +6,12 @@ run :: (code: string, optimize := true, permissions: Permission = 0, silence_con
     has_error: bool;
     error_message: string;
 
+    original_allocator := context.allocator;
     {
         push_allocator(temp);
         has_error, error_message, tokens = tokenize(code);
         if has_error {
+            push_allocator(original_allocator);
             vm := New(Vm);
             throw_exception(vm, Value.{ type = .STRING, s = copy_string(error_message) });
             return vm;
@@ -17,6 +19,7 @@ run :: (code: string, optimize := true, permissions: Permission = 0, silence_con
 
         ast = build_ast(code, tokens);
         if ast.has_error {
+            push_allocator(original_allocator);
             vm := New(Vm);
             throw_exception(vm, Value.{ type = .STRING, s = copy_string(ast.error_message) });
             return vm;
