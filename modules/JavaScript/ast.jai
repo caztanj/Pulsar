@@ -688,6 +688,7 @@ parse_assignment :: (parser: *Parser) -> *Ast_Node {
 
 parse_conditional :: (parser: *Parser) -> *Ast_Node {
     left := parse_binary(parser, 0);
+    if !left return null;
 
     skip_whitespace_and_comments(parser);
 
