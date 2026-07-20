@@ -41,7 +41,7 @@ init :: (server: *Http_Server, port: u16, tls := false, certificate_file := "", 
         addr.sin_addr.s_addr = Socket.INADDR_ANY;
 
         if Socket.bind(server.wakeup_socket, cast(*Socket.sockaddr)*addr, size_of(type_of(addr))) == 0 {
-            addr_size: s32 = size_of(type_of(addr));
+            addr_size: u32 = size_of(type_of(addr));
 
             Socket.getsockname(server.wakeup_socket, cast(*Socket.sockaddr)*addr, *addr_size);
 

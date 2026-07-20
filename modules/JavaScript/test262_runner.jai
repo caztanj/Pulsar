@@ -1,21 +1,12 @@
 main :: () {
     print("\n--- Pulsar Test262 Runner ---\n\n");
 
-    is_dir := is_directory("modules/JavaScript/test262");
-    if !is_dir {
-        print("Error: The test262 submodule is not checked out.\n");
-        print("Please run 'git submodule update --init' in the root directory.\n");
-        exit(1);
-    }
-
-    print("Test262 repository found.\n");
-    print("Loading test262 harness files...\n");
-
-    assert_js, assert_success := read_entire_file("modules/JavaScript/test262/harness/assert.js");
-    sta_js, sta_success       := read_entire_file("modules/JavaScript/test262/harness/sta.js");
+    assert_js, assert_success := read_entire_file("modules/JavaScript/test262/harness/assert.js", log_errors = false);
+    sta_js, sta_success       := read_entire_file("modules/JavaScript/test262/harness/sta.js", log_errors = false);
 
     if !assert_success || !sta_success {
-        print("Error: Could not read harness files.\n");
+        print("Error: The test262 submodule is not checked out.\n");
+        print("Please run 'git submodule update --init' in the root directory.\n");
         exit(1);
     }
 
