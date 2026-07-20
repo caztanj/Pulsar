@@ -1701,6 +1701,7 @@ consume :: (parser: *Parser, type: Token_Type) -> Token {
     if token.type == type return advance(parser);
 
     report_parse_error(parser, token, "Expected token type %, but got % (%)", type, token.type, token.text);
+
     return .{};
 }
 
@@ -1710,6 +1711,7 @@ consume :: (parser: *Parser, text: string) -> Token {
     if token.text == text return advance(parser);
 
     report_parse_error(parser, token, "Expected token text '%', but got '%' (%)", text, token.text, token.type);
+
     return .{};
 }
 
@@ -1885,7 +1887,9 @@ parse_import_statement :: (parser: *Parser) -> *Ast_Import_Statement {
     skip_whitespace_and_comments(parser);
 
     source_token := consume(parser, .STRING);
-    source       := New(Ast_Literal_String);
+    if parser.has_error return node;
+
+    source := New(Ast_Literal_String);
 
     source.kind   = .LITERAL_STRING;
     source.line   = source_token.line;
