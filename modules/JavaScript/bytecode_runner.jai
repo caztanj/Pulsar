@@ -1951,9 +1951,8 @@ call_value :: inline (vm: *Vm, this: Value, callee: Value, arguments: [] Value, 
         return result;
     }
 
-    print("call_value failed! callee.type: % last prop: %\n", callee.type, vm.last_looked_up_property);
-    if callee.type == .STRING print("callee string: %\n", callee.s);
     throw_exception(vm, "TypeError: callee is not a function");
+
     return .{};
 }
 
