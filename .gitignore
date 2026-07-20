@@ -10,6 +10,8 @@
 build_debug
 build_release
 
+debug_test262.js
+
 modules/Curl/linux
 modules/Curl/macos
 modules/Curl/windows

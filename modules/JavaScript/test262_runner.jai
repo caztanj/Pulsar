@@ -107,7 +107,6 @@ visitor :: (info: *File_Visit_Info, user_data: *void) {
     full_code := tprint("%\n%\n%\n", harness_code_global, builder_to_string(*includes_code), test_code);
 
     print("RUN: %\n", info.short_name);
-    write_entire_file("debug_test262.js", full_code);
     vm := run(full_code, permissions = 0, silence_console_output = true);
     defer {
         if vm.program deinit(vm.program);
@@ -117,6 +116,7 @@ visitor :: (info: *File_Visit_Info, user_data: *void) {
     if expected_to_fail {
         if !vm.has_exception {
             print("FAIL: % (Expected an error but got none)\n", info.full_name);
+            write_entire_file("debug_test262.js", full_code);
             total_failed += 1;
             if !full_run exit(1);
             return;
@@ -124,6 +124,7 @@ visitor :: (info: *File_Visit_Info, user_data: *void) {
     } else {
         if vm.has_exception {
             print("FAIL: %\n", info.full_name);
+            write_entire_file("debug_test262.js", full_code);
 
             name := "Error";
             msg := "";
