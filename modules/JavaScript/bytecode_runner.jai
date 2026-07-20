@@ -2127,7 +2127,19 @@ generator_next :: (vm: *Vm, this: Value, final_arguments: [] Value, is_new: bool
         return .{ type = .OBJECT, object = result };
     }
 
+    if generator_object.generator_executing {
+        throw_exception(vm, "TypeError: Generator is already executing");
+        return .{ type = .UNDEFINED };
+    }
+
+    generator_object.generator_executing = true;
     function_result := execute_function(vm, generator_object.generator_func, .[], .{}, generator_object);
+    generator_object.generator_executing = false;
+
+    if vm.has_exception {
+        generator_object.generator_closed = true;
+    }
+
     is_done         := generator_object.generator_closed;
     result          := allocate_object(vm);
 

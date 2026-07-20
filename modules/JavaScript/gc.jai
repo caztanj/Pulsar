@@ -499,6 +499,7 @@ Gc_Object :: struct {
             generator_registers: [..] Value;
             generator_func:      *Bytecode_Function;
             generator_closed:    bool;
+            generator_executing: bool;
         };
 
         regexp: Uniform.Regexp;
