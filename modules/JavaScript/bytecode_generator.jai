@@ -1448,7 +1448,7 @@ emit_statement :: (generator: *Bytecode_Generator, node: *Ast_Node) {
 
                     emit_instruction(generator, export_instruction);
                 }
-            } else {
+            } else if export_statement.declaration {
                 emit_statement(generator, export_statement.declaration);
 
                 if export_statement.declaration.kind == .VARIABLE_DECLARATION {

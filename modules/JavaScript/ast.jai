@@ -1988,7 +1988,8 @@ parse_export_statement :: (parser: *Parser) -> *Ast_Export_Statement {
     }
 
     skip_whitespace_and_comments(parser);
-    match(parser, ";");
+
+    if !node.declaration || node.is_default consume_semicolon(parser);
 
     return node;
 }
