@@ -1923,7 +1923,9 @@ parse_export_statement :: (parser: *Parser) -> *Ast_Export_Statement {
         skip_whitespace_and_comments(parser);
 
         source_token := consume(parser, .STRING);
-        source       := New(Ast_Literal_String);
+        if parser.has_error return node;
+
+        source := New(Ast_Literal_String);
 
         source.kind   = .LITERAL_STRING;
         source.line   = source_token.line;
@@ -1970,7 +1972,9 @@ parse_export_statement :: (parser: *Parser) -> *Ast_Export_Statement {
             skip_whitespace_and_comments(parser);
 
             source_token := consume(parser, .STRING);
-            source       := New(Ast_Literal_String);
+            if parser.has_error return node;
+
+            source := New(Ast_Literal_String);
 
             source.kind   = .LITERAL_STRING;
             source.line   = source_token.line;
