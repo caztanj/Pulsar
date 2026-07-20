@@ -2066,6 +2066,8 @@ parse_class_body :: (parser: *Parser) -> *Ast_Class_Body {
             continue;
         }
 
+        if parser.has_error break;
+
         method := parse_method_definition(parser);
         array_add(*node.body, method);
 
