@@ -718,7 +718,7 @@ emit_store :: (generator: *Bytecode_Generator, left: *Ast_Node, value_register: 
 
             emit_instruction(generator, move_inst);
 
-            generator.current_function.instructions[jump_index].imm = cast(s32) (generator.current_function.instructions.count - jump_index);
+            generator.current_function.instructions[jump_index].imm = cast(s32) generator.current_function.instructions.count;
 
             emit_store(generator, assignment.left, value_register, is_declaration, is_const, is_var);
 
