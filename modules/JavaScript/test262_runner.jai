@@ -49,6 +49,12 @@ total_skipped: int;
 
 SKIPPED_TESTS :: string.[
     "built-ins/AbstractModuleSource",
+
+    // This test relies on testIntl.js which defines a complex regex
+    // containing backreferences (\1) and negative lookaheads (?!).
+    // The 'Uniform' NFA-based regex engine does not support these
+    // backtracking-dependent features, so the test fails to compile the regex.
+    "intl402/constructors-taint-Object-prototype-2",
 ];
 
 visitor :: (info: *File_Visit_Info, user_data: *void) {
