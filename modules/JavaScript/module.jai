@@ -102,6 +102,7 @@ Permission :: enum_flags {
 #load "extensions/json.jai";
 #load "extensions/map.jai";
 #load "extensions/math.jai";
+#load "extensions/intl.jai";
 #load "extensions/number.jai";
 #load "extensions/object.jai";
 #load "extensions/print.jai";

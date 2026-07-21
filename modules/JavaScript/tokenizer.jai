@@ -132,9 +132,17 @@ tokenize :: (code: string) -> error: bool, error_message: string, [] Token {
         if is_digit(t.*) {
             start_t := t;
 
-            while t < max_t && (is_digit(t.*) || t.* == ".") {
-                t      += 1;
-                column += 1;
+            while t < max_t {
+                c := t.*;
+                if is_alnum(c) || c == #char "." || c == #char "_" {
+                    t      += 1;
+                    column += 1;
+                } else if (c == #char "-" || c == #char "+") && t > start_t && ((t-1).* == #char "e" || (t-1).* == #char "E") {
+                    t      += 1;
+                    column += 1;
+                } else {
+                    break;
+                }
             }
 
             add_token(*tokens, .NUMBER, start_t, t - start_t, start_line, start_column);

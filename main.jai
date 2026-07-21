@@ -33,6 +33,11 @@ main :: () {
     }
 
     ast := build_ast(code, tokens,, temp);
+    if ast.has_error {
+        log_error("Unknown JavaScript: %", ast.error_message);
+        exit(EXIT_CODE_JS_ERROR);
+    }
+
     optimize_ast(ast);
 
     if args.print_ast {

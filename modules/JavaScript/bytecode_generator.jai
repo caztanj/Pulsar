@@ -158,6 +158,10 @@ collect_identifiers :: (node: *Ast_Node, identifiers: *[..] string) {
         case .OBJECT_LITERAL;
             object_literal := cast(*Ast_Object_Literal) node;
             for object_literal.properties collect_identifiers(it.value, identifiers);
+
+        case .ASSIGNMENT_EXPRESSION;
+            assignment := cast(*Ast_Assignment_Expression) node;
+            collect_identifiers(assignment.left, identifiers);
     }
 }
 
@@ -675,6 +679,48 @@ emit_store :: (generator: *Bytecode_Generator, left: *Ast_Node, value_register: 
 
                 emit_instruction(generator, instruction);
             }
+
+        case .ASSIGNMENT_EXPRESSION;
+            assignment := cast(*Ast_Assignment_Expression) left;
+
+            undefined_register := generator.next_register;
+            generator.next_register += 1;
+            load_const(generator, undefined_register, .{ type = .UNDEFINED });
+
+            cmp_register := generator.next_register;
+            generator.next_register += 1;
+
+            cmp_instruction := Instruction.{
+                op_code = .STRICT_EQUAL,
+                dest    = cmp_register,
+                arg1    = value_register,
+                arg2    = undefined_register,
+            };
+
+            emit_instruction(generator, cmp_instruction);
+
+            jump_instruction := Instruction.{
+                op_code = .JUMP_IF_FALSE,
+                arg1    = cmp_register,
+            };
+
+            jump_index := generator.current_function.instructions.count;
+
+            emit_instruction(generator, jump_instruction);
+
+            default_value_register := emit_expression(generator, assignment.right);
+
+            move_inst := Instruction.{
+                op_code = .MOVE,
+                dest    = value_register,
+                arg1    = default_value_register,
+            };
+
+            emit_instruction(generator, move_inst);
+
+            generator.current_function.instructions[jump_index].imm = cast(s32) (generator.current_function.instructions.count - jump_index);
+
+            emit_store(generator, assignment.left, value_register, is_declaration, is_const, is_var);
 
         case .ARRAY_LITERAL;
             array_literal := cast(*Ast_Array_Literal) left;

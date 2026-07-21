@@ -1971,6 +1971,7 @@ init_common_vm_globals :: (vm: *Vm) {
     init_vm_function(vm);
     init_vm_boolean(vm);
     init_vm_math(vm);
+    init_vm_intl(vm);
     init_vm_number(vm);
     init_vm_array(vm);
     init_vm_string(vm);

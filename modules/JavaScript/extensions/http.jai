@@ -117,7 +117,9 @@ http_server_shutdown_js :: (vm: *Vm, this: Value, arguments: [] Value, is_new: b
     }
 
     shutdown(*wrapper.server);
-    free(wrapper.thread.starting_temporary_storage.data);
+
+    #if OS == .MACOS free(wrapper.thread.starting_temporary_storage.data);
+
     thread_deinit(*wrapper.thread);
 
     destroy(*wrapper.response_mutex);

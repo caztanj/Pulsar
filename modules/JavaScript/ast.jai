@@ -600,6 +600,9 @@ parse_function_declaration :: (parser: *Parser) -> *Ast_Function_Declaration {
             skip_whitespace_and_comments(parser);
 
             if !match(parser, ",") break;
+
+            skip_whitespace_and_comments(parser);
+            if check(parser, ")") break;
         }
     }
 
@@ -900,6 +903,9 @@ parse_postfix :: (parser: *Parser, allow_calls: bool = true) -> *Ast_Node {
                     skip_whitespace_and_comments(parser);
 
                     if !match(parser, ",") break;
+
+                    skip_whitespace_and_comments(parser);
+                    if check(parser, ")") break;
                 }
             }
 
@@ -1096,6 +1102,9 @@ parse_primary :: (parser: *Parser) -> *Ast_Node {
                                 skip_whitespace_and_comments(parser);
 
                                 if !match(parser, ",") break;
+
+                                skip_whitespace_and_comments(parser);
+                                if check(parser, ")") break;
                             }
                         }
 
@@ -1136,6 +1145,9 @@ parse_primary :: (parser: *Parser) -> *Ast_Node {
                     skip_whitespace_and_comments(parser);
 
                     if !match(parser, ",") break;
+
+                    skip_whitespace_and_comments(parser);
+                    if check(parser, ")") break;
                 }
             }
 
@@ -1243,6 +1255,9 @@ parse_primary :: (parser: *Parser) -> *Ast_Node {
                         skip_whitespace_and_comments(parser);
 
                         if !match(parser, ",") break;
+
+                        skip_whitespace_and_comments(parser);
+                        if check(parser, ")") break;
                     }
                 }
 
@@ -1487,6 +1502,9 @@ parse_primary :: (parser: *Parser) -> *Ast_Node {
                                 skip_whitespace_and_comments(parser);
 
                                 if !match(parser, ",") break;
+
+                                skip_whitespace_and_comments(parser);
+                                if check(parser, ")") break;
                             }
                         }
 
@@ -1507,7 +1525,23 @@ parse_primary :: (parser: *Parser) -> *Ast_Node {
 
                         identifier := create_identifier(key_token);
 
-                        value = xx identifier;
+                        skip_whitespace_and_comments(parser);
+                        if match(parser, "=") {
+                            skip_whitespace_and_comments(parser);
+                            right := parse_assignment(parser);
+
+                            assign := new_node(parser, Ast_Assignment_Expression);
+                            assign.kind = .ASSIGNMENT_EXPRESSION;
+                            assign.line = identifier.line;
+                            assign.column = identifier.column;
+                            assign.op = "=";
+                            assign.left = xx identifier;
+                            assign.right = right;
+
+                            value = xx assign;
+                        } else {
+                            value = xx identifier;
+                        }
                     }
 
                     property_flags: Ast_Object_Property_Flags = 0;
@@ -1625,6 +1659,9 @@ parse_function_expression :: (parser: *Parser) -> *Ast_Function_Expression {
             skip_whitespace_and_comments(parser);
 
             if !match(parser, ",") break;
+
+            skip_whitespace_and_comments(parser);
+            if check(parser, ")") break;
         }
     }
 
@@ -1821,6 +1858,9 @@ parse_import_statement :: (parser: *Parser) -> *Ast_Import_Statement {
             skip_whitespace_and_comments(parser);
 
             if !match(parser, ",") break;
+
+            skip_whitespace_and_comments(parser);
+            if check(parser, "}") break;
         }
 
         skip_whitespace_and_comments(parser);
@@ -1875,6 +1915,9 @@ parse_import_statement :: (parser: *Parser) -> *Ast_Import_Statement {
                     skip_whitespace_and_comments(parser);
 
                     if !match(parser, ",") break;
+
+                    skip_whitespace_and_comments(parser);
+                    if check(parser, "}") break;
                 }
 
                 skip_whitespace_and_comments(parser);
@@ -1962,6 +2005,9 @@ parse_export_statement :: (parser: *Parser) -> *Ast_Export_Statement {
             skip_whitespace_and_comments(parser);
 
             if !match(parser, ",") break;
+
+            skip_whitespace_and_comments(parser);
+            if check(parser, "}") break;
         }
 
         skip_whitespace_and_comments(parser);
@@ -2157,6 +2203,9 @@ parse_method_definition :: (parser: *Parser) -> *Ast_Method_Definition {
             skip_whitespace_and_comments(parser);
 
             if !match(parser, ",") break;
+
+            skip_whitespace_and_comments(parser);
+            if check(parser, ")") break;
         }
     }
 
