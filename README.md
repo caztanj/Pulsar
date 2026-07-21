@@ -8,7 +8,7 @@ The aim of this project is to build a highly capable JavaScript environment, des
 
 You can run JavaScript files using the Pulsar executable. By default, scripts run in a restricted environment without access to the network or filesystem.
 
-`Pulsar [options] <file.js>`
+`pulsar [options] <file.js>`
 
 ### Command Line Arguments
 
