@@ -41,11 +41,11 @@ allocate_object :: (vm: *Vm) -> *Gc_Object {
         vm.gc.object_pool = object.next;
 
         if object.kind == .MAP || object.kind == .SET {
-            array_free(object.map_entries);
+            array_reset(*object.map_entries);
         } else if object.kind == .PROMISE {
-            array_free(object.promise_then_callbacks);
+            array_reset(*object.promise_then_callbacks);
         } else if object.kind == .GENERATOR || object.kind == .ASYNC_EXECUTION {
-            array_free(object.generator_registers);
+            array_reset(*object.generator_registers);
         }
 
         object.marked                       = false;
