@@ -38,24 +38,50 @@ init_vm_object :: (vm: *Vm) {
     }
 }
 
-
 object_set_prototype :: (vm: *Vm, this: Value, arguments: [] Value, is_new: bool) -> Value {
-    if arguments.count >= 2 {
-        target    := arguments[0];
-        prototype := arguments[1];
+    if arguments.count < 2 {
+        throw_exception(vm, "TypeError: Object.setPrototypeOf requires at least 2 arguments");
+        return .{ type = .UNDEFINED };
+    }
 
-        if (target.type == .OBJECT || target.type == .ARRAY) && target.object {
-            if (prototype.type == .OBJECT || prototype.type == .ARRAY) && prototype.object {
-                target.object.prototype = prototype.object;
-            } else if prototype.type == .NULL {
-                target.object.prototype = null;
+    target    := arguments[0];
+    prototype := arguments[1];
+
+    if target.type == .UNDEFINED || target.type == .NULL {
+        throw_exception(vm, "TypeError: Object.setPrototypeOf called on null or undefined");
+        return .{ type = .UNDEFINED };
+    }
+
+    if prototype.type != .OBJECT && prototype.type != .ARRAY && prototype.type != .NULL {
+        throw_exception(vm, "TypeError: Object prototype may only be an Object or null");
+        return .{ type = .UNDEFINED };
+    }
+
+    if (target.type == .OBJECT || target.type == .ARRAY) && target.object {
+        if target.object == vm.object_prototype {
+            if prototype.type != .NULL {
+                throw_exception(vm, "TypeError: Immutable prototype object '#<Object>' cannot have their prototype set");
+                return .{ type = .UNDEFINED };
             }
         }
 
-        return target;
+        if prototype.type == .OBJECT || prototype.type == .ARRAY {
+            current := prototype.object;
+            while current {
+                if current == target.object {
+                    throw_exception(vm, "TypeError: Cyclic __proto__ value");
+                    return .{ type = .UNDEFINED };
+                }
+                current = current.prototype;
+            }
+
+            target.object.prototype = prototype.object;
+        } else if prototype.type == .NULL {
+            target.object.prototype = null;
+        }
     }
 
-    return .{ type = .UNDEFINED };
+    return target;
 }
 
 object_keys :: (vm: *Vm, this: Value, arguments: [] Value, is_new: bool) -> Value {
