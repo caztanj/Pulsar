@@ -18,8 +18,12 @@ json_stringify :: (vm: *Vm, this: Value, arguments: [] Value, is_new: bool) -> V
     builder: String_Builder;
     builder.allocator = temp;
 
-    success := json_stringify_recursive(vm, *builder, arguments[0]);
+    visited: [..] *Gc_Object;
+    visited.allocator = temp;
 
+    success := json_stringify_recursive(vm, *builder, arguments[0], *visited);
+
+    if vm.has_exception return .{ type = .UNDEFINED };
     if !success return .{ type = .UNDEFINED };
 
     result := builder_to_string(*builder);
@@ -29,7 +33,7 @@ json_stringify :: (vm: *Vm, this: Value, arguments: [] Value, is_new: bool) -> V
     return .{ type = .STRING, s = result };
 }
 
-json_stringify_recursive :: (vm: *Vm, builder: *String_Builder, value: Value) -> bool {
+json_stringify_recursive :: (vm: *Vm, builder: *String_Builder, value: Value, visited: *[..] *Gc_Object) -> bool {
     if value.type == {
         case .UNDEFINED;
             return false;
@@ -68,9 +72,16 @@ json_stringify_recursive :: (vm: *Vm, builder: *String_Builder, value: Value) ->
             append(builder, "\"");
 
         case .ARRAY;
-            append(builder, "[");
-
             object := value.object;
+            for visited.* {
+                if it == object {
+                    throw_exception(vm, "TypeError: Converting circular structure to JSON");
+                    return false;
+                }
+            }
+            array_add(visited, object);
+
+            append(builder, "[");
 
             for object.elements {
                 if it_index > 0 append(builder, ",");
@@ -78,16 +89,27 @@ json_stringify_recursive :: (vm: *Vm, builder: *String_Builder, value: Value) ->
                 if it.type == .UNDEFINED || it.type == .FUNCTION || it.type == .NATIVE_FUNCTION {
                     append(builder, "null");
                 } else {
-                    json_stringify_recursive(vm, builder, it);
+                    json_stringify_recursive(vm, builder, it, visited);
+                    if vm.has_exception return false;
                 }
             }
 
             append(builder, "]");
 
+            visited.count -= 1;
+
         case .OBJECT;
+            object := value.object;
+            for visited.* {
+                if it == object {
+                    throw_exception(vm, "TypeError: Converting circular structure to JSON");
+                    return false;
+                }
+            }
+            array_add(visited, object);
+
             append(builder, "{");
 
-            object := value.object;
             first  := true;
 
             for object.elements {
@@ -101,7 +123,8 @@ json_stringify_recursive :: (vm: *Vm, builder: *String_Builder, value: Value) ->
                 append(builder, tprint("%", it_index));
                 append(builder, "\":");
 
-                json_stringify_recursive(vm, builder, it);
+                json_stringify_recursive(vm, builder, it, visited);
+                if vm.has_exception return false;
             }
 
             if object.shape {
@@ -122,11 +145,14 @@ json_stringify_recursive :: (vm: *Vm, builder: *String_Builder, value: Value) ->
                     append(builder, it);
                     append(builder, "\":");
 
-                    json_stringify_recursive(vm, builder, property_value);
+                    json_stringify_recursive(vm, builder, property_value, visited);
+                    if vm.has_exception return false;
                 }
             }
 
             append(builder, "}");
+
+            visited.count -= 1;
 
         case .FUNCTION; #through;
         case .NATIVE_FUNCTION;
