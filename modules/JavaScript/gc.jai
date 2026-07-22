@@ -40,13 +40,19 @@ allocate_object :: (vm: *Vm) -> *Gc_Object {
         object            = vm.gc.object_pool;
         vm.gc.object_pool = object.next;
 
-        if object.kind == .MAP || object.kind == .SET {
-            array_reset(*object.map_entries);
-        } else if object.kind == .PROMISE {
-            array_reset(*object.promise_then_callbacks);
-        } else if object.kind == .GENERATOR || object.kind == .ASYNC_EXECUTION {
-            array_reset(*object.generator_registers);
-        }
+        array_reset(*object.fields);
+        array_reset(*object.elements);
+
+        object.primitive_value = .{};
+        object.map_entries.count = 0;
+        object.map_entries.allocated = 0;
+        object.map_entries.data = null;
+        object.promise_then_callbacks.count = 0;
+        object.promise_then_callbacks.allocated = 0;
+        object.promise_then_callbacks.data = null;
+        object.generator_registers.count = 0;
+        object.generator_registers.allocated = 0;
+        object.generator_registers.data = null;
 
         object.marked                       = false;
         object.prototype                    = vm.object_prototype;
@@ -320,11 +326,20 @@ collect_garbage_minor :: (vm: *Vm) {
             gc_array_reset(*unreachable.elements);
 
             if unreachable.kind == .MAP || unreachable.kind == .SET {
-                gc_array_reset(*unreachable.map_entries);
+                array_free(unreachable.map_entries);
+                unreachable.map_entries.count = 0;
+                unreachable.map_entries.allocated = 0;
+                unreachable.map_entries.data = null;
             } else if unreachable.kind == .PROMISE {
-                gc_array_reset(*unreachable.promise_then_callbacks);
+                array_free(unreachable.promise_then_callbacks);
+                unreachable.promise_then_callbacks.count = 0;
+                unreachable.promise_then_callbacks.allocated = 0;
+                unreachable.promise_then_callbacks.data = null;
             } else if unreachable.kind == .GENERATOR || unreachable.kind == .ASYNC_EXECUTION {
-                gc_array_reset(*unreachable.generator_registers);
+                array_free(unreachable.generator_registers);
+                unreachable.generator_registers.count = 0;
+                unreachable.generator_registers.allocated = 0;
+                unreachable.generator_registers.data = null;
             } else if unreachable.kind == .REGEXP {
                 Uniform.uninit(*unreachable.regexp);
             } else if is_typed_array(unreachable.kind) {
@@ -400,11 +415,20 @@ collect_garbage_major :: (vm: *Vm) {
                 gc_array_reset(*unreachable.elements);
 
                 if unreachable.kind == .MAP || unreachable.kind == .SET {
-                    gc_array_reset(*unreachable.map_entries);
+                    array_free(unreachable.map_entries);
+                    unreachable.map_entries.count = 0;
+                    unreachable.map_entries.allocated = 0;
+                    unreachable.map_entries.data = null;
                 } else if unreachable.kind == .PROMISE {
-                    gc_array_reset(*unreachable.promise_then_callbacks);
+                    array_free(unreachable.promise_then_callbacks);
+                    unreachable.promise_then_callbacks.count = 0;
+                    unreachable.promise_then_callbacks.allocated = 0;
+                    unreachable.promise_then_callbacks.data = null;
                 } else if unreachable.kind == .GENERATOR || unreachable.kind == .ASYNC_EXECUTION {
-                    gc_array_reset(*unreachable.generator_registers);
+                    array_free(unreachable.generator_registers);
+                    unreachable.generator_registers.count = 0;
+                    unreachable.generator_registers.allocated = 0;
+                    unreachable.generator_registers.data = null;
                 } else if unreachable.kind == .REGEXP {
                     Uniform.uninit(*unreachable.regexp);
                 } else if is_typed_array(unreachable.kind) {

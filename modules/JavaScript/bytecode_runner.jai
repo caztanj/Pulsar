@@ -1171,6 +1171,8 @@ execute_function_internal :: (vm: *Vm, initial_function: *Bytecode_Function, ini
                             vm.gc.environment_pool = env;
                         }
 
+                        try_stack.count = initial_try_count;
+
                         return registers_data[instruction.arg1];
                     }
 
