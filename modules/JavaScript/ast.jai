@@ -1689,6 +1689,10 @@ is_at_end :: (parser: *Parser) -> bool {
 }
 
 peek :: (parser: *Parser) -> Token {
+    if is_at_end(parser) {
+        return .{ type = .EOF, text = "EOF", line = parser.last_token_line };
+    }
+
     return parser.tokens[parser.current];
 }
 

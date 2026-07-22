@@ -470,6 +470,7 @@ Token_Type :: enum {
     WHITESPACE;
     COMMENT;
     TEMPLATE_PART;
+    EOF;
 }
 
 Token :: struct {
