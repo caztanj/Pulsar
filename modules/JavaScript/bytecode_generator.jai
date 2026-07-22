@@ -1980,788 +1980,37 @@ emit_expression :: (generator: *Bytecode_Generator, node: *Ast_Node, force_new_r
             return register;
 
         case .BINARY_EXPRESSION;
-            binary_expression := cast(*Ast_Binary_Expression) node;
-
-            if binary_expression.op == "&&" || binary_expression.op == "||" {
-                logical_expression := New(Ast_Logical_Expression);
-
-                logical_expression.kind  = .LOGICAL_EXPRESSION;
-                logical_expression.left  = binary_expression.left;
-                logical_expression.right = binary_expression.right;
-                logical_expression.op    = binary_expression.op;
-
-                return emit_expression(generator, xx logical_expression, force_new_register, destination_register);
-            }
-
-            nodes: [..] *Ast_Binary_Expression;
-            curr := binary_expression;
-            while curr.left.kind == .BINARY_EXPRESSION {
-                left_bin := cast(*Ast_Binary_Expression) curr.left;
-                if left_bin.op == "&&" || left_bin.op == "||" break;
-                array_add(*nodes, curr);
-                curr = left_bin;
-            }
-
-            left := emit_expression(generator, curr.left);
-
-            array_add(*nodes, curr);
-
-            for < i: 0 .. nodes.count - 1 {
-                bin_node := nodes[i];
-
-                dest_reg := allocate_register(generator, ifx i == 0 then destination_register else -1);
-
-                instruction := Instruction.{
-                    dest = dest_reg,
-                    arg1 = left,
-                };
-
-                if (bin_node.op == "-" || bin_node.op == "+") && bin_node.right.kind == .LITERAL_NUMBER {
-                    literal_number := cast(*Ast_Literal_Number) bin_node.right;
-
-                    const_index := -1;
-
-                    for generator.program.constants {
-                        if it.type == .NUMBER && it.number == literal_number.value {
-                            const_index = it_index;
-                            break;
-                        }
-                    }
-
-                    if const_index == -1 {
-                        const_index = generator.program.constants.count;
-                        array_add(*generator.program.constants, .{type=.NUMBER, number=literal_number.value});
-                    }
-
-                    if bin_node.op == "-" instruction.op_code = .SUB_CONST;
-                    else                  instruction.op_code = .ADD_CONST;
-
-                    instruction.imm = cast(s32) const_index;
-                } else {
-                    right := emit_expression(generator, bin_node.right);
-
-                    instruction.arg2 = right;
-
-                    if      bin_node.op == "+"          instruction.op_code = .ADD;
-                    else if bin_node.op == "-"          instruction.op_code = .SUB;
-                    else if bin_node.op == "*"          instruction.op_code = .MUL;
-                    else if bin_node.op == "/"          instruction.op_code = .DIV;
-                    else if bin_node.op == "%"          instruction.op_code = .MOD;
-                    else if bin_node.op == "=="         instruction.op_code = .EQUAL;
-                    else if bin_node.op == "!="         instruction.op_code = .NOT_EQUAL;
-                    else if bin_node.op == "<"          instruction.op_code = .LESS_THAN;
-                    else if bin_node.op == ">"          instruction.op_code = .GREATER_THAN;
-                    else if bin_node.op == "<="         instruction.op_code = .LESS_THAN_EQUAL;
-                    else if bin_node.op == ">="         instruction.op_code = .GREATER_THAN_EQUAL;
-                    else if bin_node.op == "==="        instruction.op_code = .STRICT_EQUAL;
-                    else if bin_node.op == "!=="        instruction.op_code = .STRICT_NOT_EQUAL;
-                    else if bin_node.op == "instanceof" instruction.op_code = .INSTANCEOF;
-                    else if bin_node.op == "in"         instruction.op_code = .IN;
-                    else if bin_node.op == "&"          instruction.op_code = .BITWISE_AND;
-                    else if bin_node.op == "|"          instruction.op_code = .BITWISE_OR;
-                    else if bin_node.op == "^"          instruction.op_code = .BITWISE_XOR;
-                    else if bin_node.op == "**"         instruction.op_code = .EXPONENTIATION;
-                }
-
-                emit_instruction(generator, instruction);
-                left = dest_reg;
-            }
-
-            array_free(nodes);
-            return left;
+            return emit_binary_expression_helper(generator, cast(*Ast_Binary_Expression) node, force_new_register, destination_register);
 
         case .ARRAY_LITERAL;
-            array_literal := cast(*Ast_Array_Literal) node;
-
-            register := allocate_register(generator, destination_register);
-
-            instruction := Instruction.{
-                op_code = .NEW_ARRAY,
-                dest    = register,
-                imm     = 0,
-            };
-
-            emit_instruction(generator, instruction);
-
-            for array_literal.elements {
-                if !it continue;
-
-                if it.kind == .SPREAD_ELEMENT {
-                    spread_element  := cast(*Ast_Spread_Element) it;
-                    spread_register := emit_expression(generator, spread_element.argument);
-
-                    spread_instruction := Instruction.{
-                        op_code = .ARRAY_APPEND,
-                        arg1    = register,
-                        arg2    = spread_register,
-                    };
-
-                    emit_instruction(generator, spread_instruction);
-                } else {
-                    elements_register := emit_expression(generator, it);
-
-                    push_instruction := Instruction.{
-                        op_code = .ARRAY_PUSH,
-                        arg1    = register,
-                        arg2    = elements_register,
-                    };
-
-                    emit_instruction(generator, push_instruction);
-                }
-            }
-
-            return register;
+            return emit_array_literal_helper(generator, cast(*Ast_Array_Literal) node, destination_register);
 
         case .OBJECT_LITERAL;
-            object_literal := cast(*Ast_Object_Literal) node;
-
-            register := allocate_register(generator, destination_register);
-
-            instruction := Instruction.{
-                op_code = .NEW_OBJECT,
-                dest    = register,
-            };
-
-            emit_instruction(generator, instruction);
-
-            for object_literal.properties {
-                if it.flags & .SPREAD {
-                    spread_element  := cast(*Ast_Spread_Element) it.value;
-                    spread_register := emit_expression(generator, spread_element.argument);
-
-                    spread_instruction := Instruction.{
-                        op_code = .OBJECT_SPREAD,
-                        dest    = register,
-                        arg1    = spread_register,
-                    };
-
-                    emit_instruction(generator, spread_instruction);
-                } else {
-                    value_register := emit_expression(generator, it.value);
-
-                    is_computed := (it.flags & .COMPUTED) != 0;
-                    is_getter   := (it.flags & .GETTER) != 0;
-                    is_setter   := (it.flags & .SETTER) != 0;
-
-                    if is_computed {
-                        key_register := emit_expression(generator, it.key_expr);
-
-                        if is_getter || is_setter {
-                            suffix := ifx is_getter then "__getter__" else "__setter__";
-                            suffix_index := generator.program.constants.count;
-                            array_add(*generator.program.constants, .{ type = .STRING, s = suffix });
-
-                            suffix_reg := allocate_register(generator, -1);
-                            emit_instruction(generator, .{
-                                op_code = .LOAD_CONST,
-                                dest    = suffix_reg,
-                                imm     = cast(s32) suffix_index,
-                            });
-
-                            concat_reg := allocate_register(generator, -1);
-                            emit_instruction(generator, .{
-                                op_code = .ADD,
-                                dest    = concat_reg,
-                                arg1    = key_register,
-                                arg2    = suffix_reg,
-                            });
-
-                            key_register = concat_reg;
-                        }
-
-                        emit_instruction(generator, .{
-                            op_code = .COMPUTED_SET,
-                            dest    = register,
-                            arg1    = key_register,
-                            arg2    = value_register,
-                        });
-                    } else {
-                        prop_name := it.key;
-                        if is_getter      prop_name = tprint("%__getter__", prop_name);
-                        else if is_setter prop_name = tprint("%__setter__", prop_name);
-
-                        index := get_property_index(generator, prop_name);
-
-                        set_instruction := Instruction.{
-                            op_code = .SET_FIELD,
-                            dest    = register,
-                            arg1    = value_register,
-                            imm     = cast(s32) index,
-                        };
-
-                        emit_instruction(generator, set_instruction);
-                    }
-                }
-            }
-
-            return register;
+            return emit_object_literal_helper(generator, cast(*Ast_Object_Literal) node, destination_register);
 
         case .MEMBER_EXPRESSION;
-            member_expression := cast(*Ast_Member_Expression) node;
-
-            object_register := emit_expression(generator, member_expression.object);
-
-            register := allocate_register(generator, destination_register);
-
-            if member_expression.computed {
-                property_register := emit_expression(generator, member_expression.property);
-
-                instruction := Instruction.{
-                    op_code = .ARRAY_GET,
-                    dest    = register,
-                    arg1    = object_register,
-                    arg2    = property_register,
-                };
-
-                emit_instruction(generator, instruction);
-            } else {
-                identifier := cast(*Ast_Identifier) member_expression.property;
-                index      := get_property_index(generator, identifier.name);
-
-                instruction := Instruction.{
-                    op_code = .GET_FIELD,
-                    dest    = register,
-                    arg1    = object_register,
-                    imm     = cast(s32) index,
-                };
-
-                emit_instruction(generator, instruction);
-            }
-
-            return register;
+            return emit_member_expression_helper(generator, cast(*Ast_Member_Expression) node, destination_register);
 
         case .CALL_EXPRESSION;
-            call_expression := cast(*Ast_Call_Expression) node;
-
-            has_spread := false;
-            for call_expression.arguments {
-                if it && it.kind == .SPREAD_ELEMENT {
-                    has_spread = true;
-                    break;
-                }
-            }
-
-            this_register:   u16 = 65535;
-            callee_register: u16;
-
-            if call_expression.callee.kind == .MEMBER_EXPRESSION {
-                member_expression := cast(*Ast_Member_Expression) call_expression.callee;
-
-                this_register = emit_expression(generator, member_expression.object);
-
-                callee_register = generator.next_register;
-
-                generator.next_register += 1;
-
-                if member_expression.computed {
-                    propery_register := emit_expression(generator, member_expression.property);
-
-                    instruction := Instruction.{
-                        op_code = .ARRAY_GET,
-                        dest    = callee_register,
-                        arg1    = this_register,
-                        arg2    = propery_register,
-                    };
-
-                    emit_instruction(generator, instruction);
-                } else {
-                    identifier := cast(*Ast_Identifier) member_expression.property;
-                    index      := get_property_index(generator, identifier.name);
-
-                    instruction := Instruction.{
-                        op_code = .GET_FIELD,
-                        dest    = callee_register,
-                        arg1    = this_register,
-                        imm     = cast(s32) index,
-                    };
-
-                    emit_instruction(generator, instruction);
-                }
-            } else {
-                callee_register = emit_expression(generator, call_expression.callee);
-            }
-
-            register := allocate_register(generator, destination_register);
-
-            if has_spread {
-                args_array_register := generator.next_register;
-
-                generator.next_register += 1;
-
-                new_array_instruction := Instruction.{
-                    op_code = .NEW_ARRAY,
-                    dest    = args_array_register,
-                    imm     = 0,
-                };
-
-                emit_instruction(generator, new_array_instruction);
-
-                for call_expression.arguments {
-                    if !it continue;
-
-                    if it.kind == .SPREAD_ELEMENT {
-                        spread_element  := cast(*Ast_Spread_Element) it;
-                        spread_register := emit_expression(generator, spread_element.argument);
-
-                        append_instruction := Instruction.{
-                            op_code = .ARRAY_APPEND,
-                            arg1    = args_array_register,
-                            arg2    = spread_register,
-                        };
-
-                        emit_instruction(generator, append_instruction);
-                    } else {
-                        argument_register := emit_expression(generator, it);
-
-                        push_instruction := Instruction.{
-                            op_code = .ARRAY_PUSH,
-                            arg1    = args_array_register,
-                            arg2    = argument_register,
-                        };
-
-                        emit_instruction(generator, push_instruction);
-                    }
-                }
-
-                call_instruction := Instruction.{
-                    op_code = .CALL_APPLY,
-                    dest    = register,
-                    arg1    = callee_register,
-                    arg2    = this_register,
-                    imm     = cast(s32) args_array_register,
-                };
-
-                emit_instruction(generator, call_instruction);
-            } else {
-                first_argument := generator.next_register;
-
-                generator.next_register += cast(u16) call_expression.arguments.count;
-
-                for call_expression.arguments emit_expression(generator, it, false, cast(s16) (first_argument + it_index));
-
-                instruction := Instruction.{
-                    op_code = .CALL,
-                    dest    = register,
-                    arg1    = callee_register,
-                    arg2    = this_register,
-                    imm     = ((cast(s32) first_argument) << 16) | cast(s32) call_expression.arguments.count,
-                };
-
-                emit_instruction(generator, instruction);
-            }
-
-            return register;
+            return emit_call_expression_helper(generator, cast(*Ast_Call_Expression) node, destination_register);
 
         case .NEW_EXPRESSION;
-            new_expression := cast(*Ast_New_Expression) node;
-
-            has_spread := false;
-            for new_expression.arguments {
-                if it && it.kind == .SPREAD_ELEMENT {
-                    has_spread = true;
-                    break;
-                }
-            }
-
-            callee_register := emit_expression(generator, new_expression.callee);
-
-            register := allocate_register(generator, destination_register);
-
-            if has_spread {
-                arguments_array_register := generator.next_register;
-
-                generator.next_register += 1;
-
-                new_array_instruction := Instruction.{
-                    op_code = .NEW_ARRAY,
-                    dest    = arguments_array_register,
-                    imm     = 0,
-                };
-
-                emit_instruction(generator, new_array_instruction);
-
-                for new_expression.arguments {
-                    if !it continue;
-
-                    if it.kind == .SPREAD_ELEMENT {
-                        spread_element  := cast(*Ast_Spread_Element) it;
-                        spread_register := emit_expression(generator, spread_element.argument);
-
-                        append_instruction := Instruction.{
-                            op_code = .ARRAY_APPEND,
-                            arg1    = arguments_array_register,
-                            arg2    = spread_register,
-                        };
-
-                        emit_instruction(generator, append_instruction);
-                    } else {
-                        argument_register := emit_expression(generator, it);
-
-                        push_instruction := Instruction.{
-                            op_code = .ARRAY_PUSH,
-                            arg1    = arguments_array_register,
-                            arg2    = argument_register,
-                        };
-
-                        emit_instruction(generator, push_instruction);
-                    }
-                }
-
-                call_instruction := Instruction.{
-                    op_code = .NEW_CALL_APPLY,
-                    dest    = register,
-                    arg1    = callee_register,
-                    arg2    = arguments_array_register,
-                };
-
-                emit_instruction(generator, call_instruction);
-            } else {
-                first_argument_new := generator.next_register;
-
-                generator.next_register += cast(u16) new_expression.arguments.count;
-
-                for new_expression.arguments emit_expression(generator, it, false, cast(s16) (first_argument_new + it_index));
-
-                instruction := Instruction.{
-                    op_code = .NEW_CALL,
-                    dest    = register,
-                    arg1    = callee_register,
-                    arg2    = 65535,
-                    imm     = ((cast(s32) first_argument_new) << 16) | cast(s32) new_expression.arguments.count,
-                };
-
-                emit_instruction(generator, instruction);
-            }
-
-            return register;
+            return emit_new_expression_helper(generator, cast(*Ast_New_Expression) node, destination_register);
 
         case .FUNCTION_EXPRESSION;
-            function_expression := cast(*Ast_Function_Expression) node;
-
-
-            new_function_scope := New(Lexical_Scope,, temp);
-                new_function_scope.variables.allocator = temp;
-                new_function_scope.indices.allocator = temp;
-                new_function_scope.is_const.allocator = temp;
-            nested_generator := Bytecode_Generator.{
-                current_scope = new_function_scope,
-                function_scope = new_function_scope,
-                program              = generator.program,
-                parent               = generator,
-                next_register        = cast(u16) function_expression.parameters.count,
-                locals.allocator     = temp,
-                loop_stack.allocator = temp,
-            };
-
-            bytecode_function := New(Bytecode_Function);
-
-            bytecode_function.name            = copy_string("anonymous");
-            bytecode_function.arguments_count = function_expression.parameters.count;
-            if function_expression.is_generator bytecode_function.flags |= .GENERATOR;
-            if function_expression.is_async bytecode_function.flags |= .ASYNC;
-
-            for function_expression.parameters {
-                if it.kind == .SPREAD_ELEMENT {
-                    spread_element := cast(*Ast_Spread_Element) it;
-                    identifier     := cast(*Ast_Identifier) spread_element.argument;
-
-                    array_add(*nested_generator.locals, identifier.name);
-                    array_add(*nested_generator.function_scope.variables, identifier.name);
-                    array_add(*nested_generator.function_scope.indices, nested_generator.locals.count - 1);
-                    array_add(*nested_generator.function_scope.is_const, false);
-
-                    bytecode_function.flags |= .REST_PARAMETER;
-                } else {
-                    identifier := cast(*Ast_Identifier) it;
-                    array_add(*nested_generator.locals, identifier.name);
-                    array_add(*nested_generator.function_scope.variables, identifier.name);
-                    array_add(*nested_generator.function_scope.indices, nested_generator.locals.count - 1);
-                    array_add(*nested_generator.function_scope.is_const, false);
-                }
-            }
-
-            nested_generator.current_function = bytecode_function;
-
-            for function_expression.body.body emit_statement(*nested_generator, it);
-
-            bytecode_function.locals_count = max(bytecode_function.locals_count, nested_generator.next_register);
-
-            for nested_generator.locals array_add(*bytecode_function.locals, it);
-
-            array_add(*generator.program.functions, bytecode_function);
-
-            function_index := generator.program.functions.count - 1;
-
-            register := allocate_register(generator, destination_register);
-
-            instruction := Instruction.{
-                op_code = .LOAD_FUNC,
-                dest    = register,
-                imm     = cast(s32) function_index,
-            };
-
-            emit_instruction(generator, instruction);
-
-            return register;
+            return emit_function_expression_helper(generator, cast(*Ast_Function_Expression) node, destination_register);
 
         case .ARROW_FUNCTION_EXPRESSION;
-            arrow_expression := cast(*Ast_Arrow_Function_Expression) node;
-
-
-            new_function_scope := New(Lexical_Scope,, temp);
-                new_function_scope.variables.allocator = temp;
-                new_function_scope.indices.allocator = temp;
-                new_function_scope.is_const.allocator = temp;
-            nested_generator := Bytecode_Generator.{
-                current_scope = new_function_scope,
-                function_scope = new_function_scope,
-                program              = generator.program,
-                parent               = generator,
-                next_register        = cast(u16) arrow_expression.parameters.count,
-                locals.allocator     = temp,
-                loop_stack.allocator = temp,
-            };
-
-            bytecode_function := New(Bytecode_Function);
-
-            bytecode_function.name            = copy_string("anonymous");
-            bytecode_function.arguments_count = arrow_expression.parameters.count;
-            bytecode_function.flags |= .ARROW;
-            if arrow_expression.is_async bytecode_function.flags |= .ASYNC;
-
-            for arrow_expression.parameters {
-                if it.kind == .SPREAD_ELEMENT {
-                    spread_element := cast(*Ast_Spread_Element) it;
-                    identifier     := cast(*Ast_Identifier) spread_element.argument;
-
-                    array_add(*nested_generator.locals, identifier.name);
-                    array_add(*nested_generator.function_scope.variables, identifier.name);
-                    array_add(*nested_generator.function_scope.indices, nested_generator.locals.count - 1);
-                    array_add(*nested_generator.function_scope.is_const, false);
-
-                    bytecode_function.flags |= .REST_PARAMETER;
-                } else {
-                    identifier := cast(*Ast_Identifier) it;
-                    array_add(*nested_generator.locals, identifier.name);
-                    array_add(*nested_generator.function_scope.variables, identifier.name);
-                    array_add(*nested_generator.function_scope.indices, nested_generator.locals.count - 1);
-                    array_add(*nested_generator.function_scope.is_const, false);
-                }
-            }
-
-            nested_generator.current_function = bytecode_function;
-
-            if arrow_expression.body.kind == .BLOCK_STATEMENT {
-                block_statement := cast(*Ast_Block_Statement) arrow_expression.body;
-
-                for block_statement.body emit_statement(*nested_generator, it);
-            } else {
-                register := emit_expression(*nested_generator, arrow_expression.body);
-
-                instruction := Instruction.{
-                    op_code = .RETURN,
-                    arg1    = register,
-                };
-
-                array_add(*bytecode_function.instructions, instruction);
-            }
-
-            bytecode_function.locals_count = max(bytecode_function.locals_count, nested_generator.next_register);
-
-            for nested_generator.locals array_add(*bytecode_function.locals, it);
-
-            array_add(*generator.program.functions, bytecode_function);
-
-            function_index := generator.program.functions.count - 1;
-
-            register := allocate_register(generator, destination_register);
-
-            instruction := Instruction.{
-                op_code = .LOAD_FUNC,
-                dest    = register,
-                imm     = cast(s32) function_index,
-            };
-
-            emit_instruction(generator, instruction);
-
-            return register;
+            return emit_arrow_function_expression_helper(generator, cast(*Ast_Arrow_Function_Expression) node, destination_register);
 
         case .TEMPLATE_LITERAL;
-            template_literal := cast(*Ast_Template_Literal) node;
-
-            result_register: u16;
-
-            first := true;
-
-            for template_literal.quasis {
-                if it.count > 0 || (it_index == 0 && template_literal.expressions.count > 0) || (template_literal.quasis.count == 1 && template_literal.expressions.count == 0) {
-                    quasi_index := generator.program.constants.count;
-
-                    array_add(*generator.program.constants, .{ type = .STRING, s = it });
-
-                    quasi_reg := generator.next_register;
-
-                    generator.next_register += 1;
-
-                    quasi_instruction := Instruction.{
-                        op_code = .LOAD_CONST,
-                        dest    = quasi_reg,
-                        imm     = cast(s32) quasi_index,
-                    };
-
-                    emit_instruction(generator, quasi_instruction);
-
-                    if first {
-                        result_register = quasi_reg;
-                        first           = false;
-                    } else {
-                        concat_register := generator.next_register;
-
-                        generator.next_register += 1;
-
-                        concat_instruction := Instruction.{
-                            op_code = .ADD,
-                            dest    = concat_register,
-                            arg1    = result_register,
-                            arg2    = quasi_reg,
-                        };
-
-                        emit_instruction(generator, concat_instruction);
-
-                        result_register = concat_register;
-                    }
-                }
-
-                if it_index < template_literal.expressions.count {
-                    expression_register := emit_expression(generator, template_literal.expressions[it_index]);
-
-                    if first {
-                        result_register = expression_register;
-                        first           = false;
-                    } else {
-                        concat_register := generator.next_register;
-
-                        generator.next_register += 1;
-
-                        concat_instruction := Instruction.{
-                            op_code = .ADD,
-                            dest    = concat_register,
-                            arg1    = result_register,
-                            arg2    = expression_register,
-                        };
-
-                        emit_instruction(generator, concat_instruction);
-
-                        result_register = concat_register;
-                    }
-                }
-            }
-
-            if first {
-                quasi_index := generator.program.constants.count;
-
-                array_add(*generator.program.constants, .{ type = .STRING, s = "" });
-
-                result_register = generator.next_register;
-
-                generator.next_register += 1;
-
-                quasi_instruction := Instruction.{
-                    op_code = .LOAD_CONST,
-                    dest    = result_register,
-                    imm     = cast(s32) quasi_index,
-                };
-
-                emit_instruction(generator, quasi_instruction);
-            }
-
-            return result_register;
+            return emit_template_literal_helper(generator, cast(*Ast_Template_Literal) node);
 
         case .SPREAD_ELEMENT;
             return 65535;
 
         case .UNARY_EXPRESSION;
-            unary_expression := cast(*Ast_Unary_Expression) node;
-
-            register := allocate_register(generator, destination_register);
-
-            if unary_expression.op == "delete" {
-                if unary_expression.right.kind == .MEMBER_EXPRESSION {
-                    member_expression := cast(*Ast_Member_Expression) unary_expression.right;
-                    object_register := emit_expression(generator, member_expression.object);
-
-                    if member_expression.computed {
-                        property_register := emit_expression(generator, member_expression.property);
-
-                        instruction := Instruction.{
-                            op_code = .DELETE_PROPERTY,
-                            dest    = register,
-                            arg1    = object_register,
-                            arg2    = property_register,
-                        };
-                        emit_instruction(generator, instruction);
-                    } else {
-                        identifier := cast(*Ast_Identifier) member_expression.property;
-                        index      := get_property_index(generator, identifier.name);
-
-                        instruction := Instruction.{
-                            op_code = .DELETE_PROPERTY,
-                            dest    = register,
-                            arg1    = object_register,
-                            imm     = cast(s32) index,
-                        };
-                        emit_instruction(generator, instruction);
-                    }
-                } else {
-                    emit_expression(generator, unary_expression.right);
-
-                    index := generator.program.constants.count;
-                    array_add(*generator.program.constants, .{ type = .BOOLEAN, boolean = true });
-
-                    instruction := Instruction.{
-                        op_code = .LOAD_CONST,
-                        dest    = register,
-                        imm     = cast(s32) index,
-                    };
-                    emit_instruction(generator, instruction);
-                }
-                return register;
-            } else if unary_expression.op == "void" {
-                emit_expression(generator, unary_expression.right);
-
-                index := generator.program.constants.count;
-                array_add(*generator.program.constants, .{ type = .UNDEFINED });
-
-                instruction := Instruction.{
-                    op_code = .LOAD_CONST,
-                    dest    = register,
-                    imm     = cast(s32) index,
-                };
-                emit_instruction(generator, instruction);
-                return register;
-            }
-
-            right := emit_expression(generator, unary_expression.right);
-
-            instruction := Instruction.{
-                dest = register,
-                arg1 = right,
-            };
-
-            if unary_expression.op == "!" {
-                instruction.op_code = .LOGICAL_NOT;
-            } else if unary_expression.op == "typeof" {
-                instruction.op_code = .TYPEOF;
-            } else if unary_expression.op == "-" {
-                instruction.op_code = .UNARY_MINUS;
-            } else if unary_expression.op == "+" {
-                instruction.op_code = .MOVE;
-                instruction.arg1 = right;
-            }
-
-            emit_instruction(generator, instruction);
-
-            return register;
+            return emit_unary_expression_helper(generator, cast(*Ast_Unary_Expression) node, destination_register);
 
         case .YIELD_EXPRESSION;
             yield_expression := cast(*Ast_Yield_Expression) node;
@@ -2817,147 +2066,7 @@ emit_expression :: (generator: *Bytecode_Generator, node: *Ast_Node, force_new_r
             return register;
 
         case .ASSIGNMENT_EXPRESSION;
-            assignment_expression := cast(*Ast_Assignment_Expression) node;
-
-            if assignment_expression.op == "=" {
-                value_register := emit_expression(generator, assignment_expression.right);
-
-                emit_store(generator, assignment_expression.left, value_register);
-
-                return value_register;
-            } else if assignment_expression.op == "+=" && assignment_expression.right.kind == .LITERAL_NUMBER {
-                literal_number := cast(*Ast_Literal_Number) assignment_expression.right;
-
-                left_register := emit_expression(generator, assignment_expression.left);
-
-                const_index := -1;
-
-                for generator.program.constants {
-                    if it.type == .NUMBER && it.number == literal_number.value {
-                        const_index = it_index;
-                        break;
-                    }
-                }
-
-                if const_index == -1 {
-                    const_index = generator.program.constants.count;
-                    array_add(*generator.program.constants, .{type=.NUMBER, number = literal_number.value});
-                }
-
-                op_instruction := Instruction.{
-                    op_code = .ADD_CONST,
-                    dest    = left_register,
-                    arg1    = left_register,
-                    imm     = cast(s32) const_index,
-                };
-
-                array_add(*generator.current_function.instructions, op_instruction);
-
-                emit_store(generator, assignment_expression.left, left_register);
-
-                return left_register;
-            } else if assignment_expression.op == "+=" && assignment_expression.left.kind == .IDENTIFIER && assignment_expression.right.kind == .IDENTIFIER {
-                left_identifier  := cast(*Ast_Identifier) assignment_expression.left;
-                right_identifier := cast(*Ast_Identifier) assignment_expression.right;
-
-                left_index  := get_local_index(generator, left_identifier.name);
-                right_index := get_local_index(generator, right_identifier.name);
-
-                if left_index != -1 && right_index != -1 {
-                    op_instruction := Instruction.{
-                        op_code = .ADD_LOCAL_LOCAL,
-                        dest    = cast(u16) left_index,
-                        arg1    = cast(u16) right_index,
-                    };
-
-                    array_add(*generator.current_function.instructions, op_instruction);
-
-                    return cast(u16) left_index;
-                }
-
-                left_register  := emit_expression(generator, assignment_expression.left);
-                right_register := emit_expression(generator, assignment_expression.right);
-
-                result_register := generator.next_register;
-
-                generator.next_register += 1;
-
-                instruction := Instruction.{
-                    dest    = result_register,
-                    arg1    = left_register,
-                    arg2    = right_register,
-                    op_code = .ADD,
-                };
-
-                emit_instruction(generator, instruction);
-
-                emit_store(generator, assignment_expression.left, result_register);
-
-                return result_register;
-            } else if assignment_expression.op == "-=" && assignment_expression.left.kind == .IDENTIFIER && assignment_expression.right.kind == .IDENTIFIER {
-                left_identifier  := cast(*Ast_Identifier) assignment_expression.left;
-                right_identifier := cast(*Ast_Identifier) assignment_expression.right;
-
-                left_index  := get_local_index(generator, left_identifier.name);
-                right_index := get_local_index(generator, right_identifier.name);
-
-                if left_index != -1 && right_index != -1 {
-                    op_instruction := Instruction.{
-                        op_code = .SUB_LOCAL_LOCAL,
-                        dest    = cast(u16) left_index,
-                        arg1    = cast(u16) right_index,
-                    };
-
-                    array_add(*generator.current_function.instructions, op_instruction);
-
-                    return cast(u16) left_index;
-                }
-
-                left_register  := emit_expression(generator, assignment_expression.left);
-                right_register := emit_expression(generator, assignment_expression.right);
-
-                result_register := generator.next_register;
-
-                generator.next_register += 1;
-
-                instruction := Instruction.{
-                    dest    = result_register,
-                    arg1    = left_register,
-                    arg2    = right_register,
-                    op_code = .SUB,
-                };
-
-                emit_instruction(generator, instruction);
-
-                emit_store(generator, assignment_expression.left, result_register);
-
-                return result_register;
-            } else {
-                left_register  := emit_expression(generator, assignment_expression.left);
-                right_register := emit_expression(generator, assignment_expression.right);
-
-                result_register := generator.next_register;
-
-                generator.next_register += 1;
-
-                instruction := Instruction.{
-                    dest = result_register,
-                    arg1 = left_register,
-                    arg2 = right_register,
-                };
-
-                if      assignment_expression.op == "+=" instruction.op_code = .ADD;
-                else if assignment_expression.op == "-=" instruction.op_code = .SUB;
-                else if assignment_expression.op == "*=" instruction.op_code = .MUL;
-                else if assignment_expression.op == "/=" instruction.op_code = .DIV;
-                else if assignment_expression.op == "**=" instruction.op_code = .EXPONENTIATION;
-
-                emit_instruction(generator, instruction);
-
-                emit_store(generator, assignment_expression.left, result_register);
-
-                return result_register;
-            }
+            return emit_assignment_expression_helper(generator, cast(*Ast_Assignment_Expression) node);
 
         case .PROGRAM;
         case .VARIABLE_DECLARATION;
@@ -3729,3 +2838,916 @@ Variable_Location :: struct {
 }
 
 PIC_SIZE :: 4;
+
+emit_call_expression_helper :: (generator: *Bytecode_Generator, call_expression: *Ast_Call_Expression, destination_register: s32) -> u16 {
+    has_spread := false;
+    for call_expression.arguments {
+        if it && it.kind == .SPREAD_ELEMENT {
+            has_spread = true;
+            break;
+        }
+    }
+
+    this_register:   u16 = 65535;
+    callee_register: u16;
+
+    if call_expression.callee.kind == .MEMBER_EXPRESSION {
+        member_expression := cast(*Ast_Member_Expression) call_expression.callee;
+
+        this_register = emit_expression(generator, member_expression.object);
+
+        callee_register = generator.next_register;
+
+        generator.next_register += 1;
+
+        if member_expression.computed {
+            propery_register := emit_expression(generator, member_expression.property);
+
+            instruction := Instruction.{
+                op_code = .ARRAY_GET,
+                dest    = callee_register,
+                arg1    = this_register,
+                arg2    = propery_register,
+            };
+
+            emit_instruction(generator, instruction);
+        } else {
+            identifier := cast(*Ast_Identifier) member_expression.property;
+            index      := get_property_index(generator, identifier.name);
+
+            instruction := Instruction.{
+                op_code = .GET_FIELD,
+                dest    = callee_register,
+                arg1    = this_register,
+                imm     = cast(s32) index,
+            };
+
+            emit_instruction(generator, instruction);
+        }
+    } else if call_expression.callee.kind == .FUNCTION_EXPRESSION {
+        callee_register = emit_function_expression_helper(generator, cast(*Ast_Function_Expression) call_expression.callee, -1);
+    } else {
+        callee_register = emit_expression(generator, call_expression.callee);
+    }
+
+    register := allocate_register(generator, destination_register);
+
+    if has_spread {
+        args_array_register := generator.next_register;
+
+        generator.next_register += 1;
+
+        new_array_instruction := Instruction.{
+            op_code = .NEW_ARRAY,
+            dest    = args_array_register,
+            imm     = 0,
+        };
+
+        emit_instruction(generator, new_array_instruction);
+
+        for call_expression.arguments {
+            if !it continue;
+
+            if it.kind == .SPREAD_ELEMENT {
+                spread_element  := cast(*Ast_Spread_Element) it;
+                spread_register := emit_expression(generator, spread_element.argument);
+
+                append_instruction := Instruction.{
+                    op_code = .ARRAY_APPEND,
+                    arg1    = args_array_register,
+                    arg2    = spread_register,
+                };
+
+                emit_instruction(generator, append_instruction);
+            } else {
+                argument_register := emit_expression(generator, it);
+
+                push_instruction := Instruction.{
+                    op_code = .ARRAY_PUSH,
+                    arg1    = args_array_register,
+                    arg2    = argument_register,
+                };
+
+                emit_instruction(generator, push_instruction);
+            }
+        }
+
+        call_instruction := Instruction.{
+            op_code = .CALL_APPLY,
+            dest    = register,
+            arg1    = callee_register,
+            arg2    = this_register,
+            imm     = cast(s32) args_array_register,
+        };
+
+        emit_instruction(generator, call_instruction);
+    } else {
+        first_argument := generator.next_register;
+
+        generator.next_register += cast(u16) call_expression.arguments.count;
+
+        for call_expression.arguments emit_expression(generator, it, false, cast(s16) (first_argument + it_index));
+
+        instruction := Instruction.{
+            op_code = .CALL,
+            dest    = register,
+            arg1    = callee_register,
+            arg2    = this_register,
+            imm     = ((cast(s32) first_argument) << 16) | cast(s32) call_expression.arguments.count,
+        };
+
+        emit_instruction(generator, instruction);
+    }
+
+    return register;
+}
+
+emit_function_expression_helper :: (generator: *Bytecode_Generator, function_expression: *Ast_Function_Expression, destination_register: s32) -> u16 {
+    new_function_scope := New(Lexical_Scope,, temp);
+    new_function_scope.variables.allocator = temp;
+    new_function_scope.indices.allocator = temp;
+    new_function_scope.is_const.allocator = temp;
+    nested_generator := Bytecode_Generator.{
+        current_scope = new_function_scope,
+        function_scope = new_function_scope,
+        program              = generator.program,
+        parent               = generator,
+        next_register        = cast(u16) function_expression.parameters.count,
+        locals.allocator     = temp,
+        loop_stack.allocator = temp,
+    };
+
+    bytecode_function := New(Bytecode_Function);
+
+    bytecode_function.name            = copy_string("anonymous");
+    bytecode_function.arguments_count = function_expression.parameters.count;
+    if function_expression.is_generator bytecode_function.flags |= .GENERATOR;
+    if function_expression.is_async bytecode_function.flags |= .ASYNC;
+
+    for function_expression.parameters {
+        if it.kind == .SPREAD_ELEMENT {
+            spread_element := cast(*Ast_Spread_Element) it;
+            identifier     := cast(*Ast_Identifier) spread_element.argument;
+
+            array_add(*nested_generator.locals, identifier.name);
+            array_add(*nested_generator.function_scope.variables, identifier.name);
+            array_add(*nested_generator.function_scope.indices, nested_generator.locals.count - 1);
+            array_add(*nested_generator.function_scope.is_const, false);
+
+            bytecode_function.flags |= .REST_PARAMETER;
+        } else {
+            identifier := cast(*Ast_Identifier) it;
+            array_add(*nested_generator.locals, identifier.name);
+            array_add(*nested_generator.function_scope.variables, identifier.name);
+            array_add(*nested_generator.function_scope.indices, nested_generator.locals.count - 1);
+            array_add(*nested_generator.function_scope.is_const, false);
+        }
+    }
+
+    nested_generator.current_function = bytecode_function;
+
+    for function_expression.body.body emit_statement(*nested_generator, it);
+
+    bytecode_function.locals_count = max(bytecode_function.locals_count, nested_generator.next_register);
+
+    for nested_generator.locals array_add(*bytecode_function.locals, it);
+
+    array_add(*generator.program.functions, bytecode_function);
+
+    function_index := generator.program.functions.count - 1;
+
+    register := allocate_register(generator, destination_register);
+
+    instruction := Instruction.{
+        op_code = .LOAD_FUNC,
+        dest    = register,
+        imm     = cast(s32) function_index,
+    };
+
+    emit_instruction(generator, instruction);
+
+    return register;
+}
+
+emit_arrow_function_expression_helper :: (generator: *Bytecode_Generator, arrow_expression: *Ast_Arrow_Function_Expression, destination_register: s32) -> u16 {
+    new_function_scope := New(Lexical_Scope,, temp);
+    new_function_scope.variables.allocator = temp;
+    new_function_scope.indices.allocator = temp;
+    new_function_scope.is_const.allocator = temp;
+    nested_generator := Bytecode_Generator.{
+        current_scope = new_function_scope,
+        function_scope = new_function_scope,
+        program              = generator.program,
+        parent               = generator,
+        next_register        = cast(u16) arrow_expression.parameters.count,
+        locals.allocator     = temp,
+        loop_stack.allocator = temp,
+    };
+
+    bytecode_function := New(Bytecode_Function);
+
+    bytecode_function.name            = copy_string("anonymous");
+    bytecode_function.arguments_count = arrow_expression.parameters.count;
+    bytecode_function.flags |= .ARROW;
+    if arrow_expression.is_async bytecode_function.flags |= .ASYNC;
+
+    for arrow_expression.parameters {
+        if it.kind == .SPREAD_ELEMENT {
+            spread_element := cast(*Ast_Spread_Element) it;
+            identifier     := cast(*Ast_Identifier) spread_element.argument;
+
+            array_add(*nested_generator.locals, identifier.name);
+            array_add(*nested_generator.function_scope.variables, identifier.name);
+            array_add(*nested_generator.function_scope.indices, nested_generator.locals.count - 1);
+            array_add(*nested_generator.function_scope.is_const, false);
+
+            bytecode_function.flags |= .REST_PARAMETER;
+        } else {
+            identifier := cast(*Ast_Identifier) it;
+            array_add(*nested_generator.locals, identifier.name);
+            array_add(*nested_generator.function_scope.variables, identifier.name);
+            array_add(*nested_generator.function_scope.indices, nested_generator.locals.count - 1);
+            array_add(*nested_generator.function_scope.is_const, false);
+        }
+    }
+
+    nested_generator.current_function = bytecode_function;
+
+    if arrow_expression.body.kind == .BLOCK_STATEMENT {
+        block_statement := cast(*Ast_Block_Statement) arrow_expression.body;
+
+        for block_statement.body emit_statement(*nested_generator, it);
+    } else {
+        register := emit_expression(*nested_generator, arrow_expression.body);
+
+        instruction := Instruction.{
+            op_code = .RETURN,
+            arg1    = register,
+        };
+
+        array_add(*bytecode_function.instructions, instruction);
+    }
+
+    bytecode_function.locals_count = max(bytecode_function.locals_count, nested_generator.next_register);
+
+    for nested_generator.locals array_add(*bytecode_function.locals, it);
+
+    array_add(*generator.program.functions, bytecode_function);
+
+    function_index := generator.program.functions.count - 1;
+
+    register := allocate_register(generator, destination_register);
+
+    instruction := Instruction.{
+        op_code = .LOAD_FUNC,
+        dest    = register,
+        imm     = cast(s32) function_index,
+    };
+
+    emit_instruction(generator, instruction);
+
+    return register;
+}
+
+emit_binary_expression_helper :: (generator: *Bytecode_Generator, binary_expression: *Ast_Binary_Expression, force_new_register: bool, destination_register: s32) -> u16 {
+    if binary_expression.op == "&&" || binary_expression.op == "||" {
+        logical_expression := New(Ast_Logical_Expression);
+
+        logical_expression.kind  = .LOGICAL_EXPRESSION;
+        logical_expression.left  = binary_expression.left;
+        logical_expression.right = binary_expression.right;
+        logical_expression.op    = binary_expression.op;
+
+        return emit_expression(generator, xx logical_expression, force_new_register, destination_register);
+    }
+
+    nodes: [..] *Ast_Binary_Expression;
+    curr := binary_expression;
+    while curr.left.kind == .BINARY_EXPRESSION {
+        left_bin := cast(*Ast_Binary_Expression) curr.left;
+        if left_bin.op == "&&" || left_bin.op == "||" break;
+        array_add(*nodes, curr);
+        curr = left_bin;
+    }
+
+    left := emit_expression(generator, curr.left);
+
+    array_add(*nodes, curr);
+
+    for < i: 0 .. nodes.count - 1 {
+        bin_node := nodes[i];
+
+        dest_reg := allocate_register(generator, ifx i == 0 then destination_register else -1);
+
+        instruction := Instruction.{
+            dest = dest_reg,
+            arg1 = left,
+        };
+
+        if (bin_node.op == "-" || bin_node.op == "+") && bin_node.right.kind == .LITERAL_NUMBER {
+            literal_number := cast(*Ast_Literal_Number) bin_node.right;
+
+            const_index := -1;
+
+            for generator.program.constants {
+                if it.type == .NUMBER && it.number == literal_number.value {
+                    const_index = it_index;
+                    break;
+                }
+            }
+
+            if const_index == -1 {
+                const_index = generator.program.constants.count;
+                array_add(*generator.program.constants, .{type=.NUMBER, number=literal_number.value});
+            }
+
+            if bin_node.op == "-" instruction.op_code = .SUB_CONST;
+            else                  instruction.op_code = .ADD_CONST;
+
+            instruction.imm = cast(s32) const_index;
+        } else {
+            right := emit_expression(generator, bin_node.right);
+
+            instruction.arg2 = right;
+
+            if      bin_node.op == "+"          instruction.op_code = .ADD;
+            else if bin_node.op == "-"          instruction.op_code = .SUB;
+            else if bin_node.op == "*"          instruction.op_code = .MUL;
+            else if bin_node.op == "/"          instruction.op_code = .DIV;
+            else if bin_node.op == "%"          instruction.op_code = .MOD;
+            else if bin_node.op == "=="         instruction.op_code = .EQUAL;
+            else if bin_node.op == "!="         instruction.op_code = .NOT_EQUAL;
+            else if bin_node.op == "<"          instruction.op_code = .LESS_THAN;
+            else if bin_node.op == ">"          instruction.op_code = .GREATER_THAN;
+            else if bin_node.op == "<="         instruction.op_code = .LESS_THAN_EQUAL;
+            else if bin_node.op == ">="         instruction.op_code = .GREATER_THAN_EQUAL;
+            else if bin_node.op == "==="        instruction.op_code = .STRICT_EQUAL;
+            else if bin_node.op == "!=="        instruction.op_code = .STRICT_NOT_EQUAL;
+            else if bin_node.op == "instanceof" instruction.op_code = .INSTANCEOF;
+            else if bin_node.op == "in"         instruction.op_code = .IN;
+            else if bin_node.op == "&"          instruction.op_code = .BITWISE_AND;
+            else if bin_node.op == "|"          instruction.op_code = .BITWISE_OR;
+            else if bin_node.op == "^"          instruction.op_code = .BITWISE_XOR;
+            else if bin_node.op == "**"         instruction.op_code = .EXPONENTIATION;
+        }
+
+        emit_instruction(generator, instruction);
+        left = dest_reg;
+    }
+
+    array_free(nodes);
+    return left;
+}
+
+emit_assignment_expression_helper :: (generator: *Bytecode_Generator, assignment_expression: *Ast_Assignment_Expression) -> u16 {
+    if assignment_expression.op == "=" {
+        value_register := emit_expression(generator, assignment_expression.right);
+
+        emit_store(generator, assignment_expression.left, value_register);
+
+        return value_register;
+    } else if assignment_expression.op == "+=" && assignment_expression.right.kind == .LITERAL_NUMBER {
+        literal_number := cast(*Ast_Literal_Number) assignment_expression.right;
+
+        left_register := emit_expression(generator, assignment_expression.left);
+
+        const_index := -1;
+
+        for generator.program.constants {
+            if it.type == .NUMBER && it.number == literal_number.value {
+                const_index = it_index;
+                break;
+            }
+        }
+
+        if const_index == -1 {
+            const_index = generator.program.constants.count;
+            array_add(*generator.program.constants, .{type=.NUMBER, number = literal_number.value});
+        }
+
+        op_instruction := Instruction.{
+            op_code = .ADD_CONST,
+            dest    = left_register,
+            arg1    = left_register,
+            imm     = cast(s32) const_index,
+        };
+
+        array_add(*generator.current_function.instructions, op_instruction);
+
+        emit_store(generator, assignment_expression.left, left_register);
+
+        return left_register;
+    } else if assignment_expression.op == "+=" && assignment_expression.left.kind == .IDENTIFIER && assignment_expression.right.kind == .IDENTIFIER {
+        left_identifier  := cast(*Ast_Identifier) assignment_expression.left;
+        right_identifier := cast(*Ast_Identifier) assignment_expression.right;
+
+        left_index  := get_local_index(generator, left_identifier.name);
+        right_index := get_local_index(generator, right_identifier.name);
+
+        if left_index != -1 && right_index != -1 {
+            op_instruction := Instruction.{
+                op_code = .ADD_LOCAL_LOCAL,
+                dest    = cast(u16) left_index,
+                arg1    = cast(u16) right_index,
+            };
+
+            array_add(*generator.current_function.instructions, op_instruction);
+
+            return cast(u16) left_index;
+        }
+
+        left_register  := emit_expression(generator, assignment_expression.left);
+        right_register := emit_expression(generator, assignment_expression.right);
+
+        result_register := generator.next_register;
+
+        generator.next_register += 1;
+
+        instruction := Instruction.{
+            dest    = result_register,
+            arg1    = left_register,
+            arg2    = right_register,
+            op_code = .ADD,
+        };
+
+        emit_instruction(generator, instruction);
+
+        emit_store(generator, assignment_expression.left, result_register);
+
+        return result_register;
+    } else if assignment_expression.op == "-=" && assignment_expression.left.kind == .IDENTIFIER && assignment_expression.right.kind == .IDENTIFIER {
+        left_identifier  := cast(*Ast_Identifier) assignment_expression.left;
+        right_identifier := cast(*Ast_Identifier) assignment_expression.right;
+
+        left_index  := get_local_index(generator, left_identifier.name);
+        right_index := get_local_index(generator, right_identifier.name);
+
+        if left_index != -1 && right_index != -1 {
+            op_instruction := Instruction.{
+                op_code = .SUB_LOCAL_LOCAL,
+                dest    = cast(u16) left_index,
+                arg1    = cast(u16) right_index,
+            };
+
+            array_add(*generator.current_function.instructions, op_instruction);
+
+            return cast(u16) left_index;
+        }
+
+        left_register  := emit_expression(generator, assignment_expression.left);
+        right_register := emit_expression(generator, assignment_expression.right);
+
+        result_register := generator.next_register;
+
+        generator.next_register += 1;
+
+        instruction := Instruction.{
+            dest    = result_register,
+            arg1    = left_register,
+            arg2    = right_register,
+            op_code = .SUB,
+        };
+
+        emit_instruction(generator, instruction);
+
+        emit_store(generator, assignment_expression.left, result_register);
+
+        return result_register;
+    } else {
+        left_register  := emit_expression(generator, assignment_expression.left);
+        right_register := emit_expression(generator, assignment_expression.right);
+
+        result_register := generator.next_register;
+
+        generator.next_register += 1;
+
+        instruction := Instruction.{
+            dest = result_register,
+            arg1 = left_register,
+            arg2 = right_register,
+        };
+
+        if      assignment_expression.op == "+=" instruction.op_code = .ADD;
+        else if assignment_expression.op == "-=" instruction.op_code = .SUB;
+        else if assignment_expression.op == "*=" instruction.op_code = .MUL;
+        else if assignment_expression.op == "/=" instruction.op_code = .DIV;
+        else if assignment_expression.op == "**=" instruction.op_code = .EXPONENTIATION;
+
+        emit_instruction(generator, instruction);
+
+        emit_store(generator, assignment_expression.left, result_register);
+
+        return result_register;
+    }
+}
+
+emit_object_literal_helper :: (generator: *Bytecode_Generator, object_literal: *Ast_Object_Literal, destination_register: s32) -> u16 {
+    register := allocate_register(generator, destination_register);
+
+    instruction := Instruction.{
+        op_code = .NEW_OBJECT,
+        dest    = register,
+    };
+
+    emit_instruction(generator, instruction);
+
+    for object_literal.properties {
+        if it.flags & .SPREAD {
+            spread_element  := cast(*Ast_Spread_Element) it.value;
+            spread_register := emit_expression(generator, spread_element.argument);
+
+            spread_instruction := Instruction.{
+                op_code = .OBJECT_SPREAD,
+                dest    = register,
+                arg1    = spread_register,
+            };
+
+            emit_instruction(generator, spread_instruction);
+        } else {
+            value_register := emit_expression(generator, it.value);
+
+            is_computed := (it.flags & .COMPUTED) != 0;
+            is_getter   := (it.flags & .GETTER) != 0;
+            is_setter   := (it.flags & .SETTER) != 0;
+
+            if is_computed {
+                key_register := emit_expression(generator, it.key_expr);
+
+                if is_getter || is_setter {
+                    suffix := ifx is_getter then "__getter__" else "__setter__";
+                    suffix_index := generator.program.constants.count;
+                    array_add(*generator.program.constants, .{ type = .STRING, s = suffix });
+
+                    suffix_reg := allocate_register(generator, -1);
+                    emit_instruction(generator, .{
+                        op_code = .LOAD_CONST,
+                        dest    = suffix_reg,
+                        imm     = cast(s32) suffix_index,
+                    });
+
+                    concat_reg := allocate_register(generator, -1);
+                    emit_instruction(generator, .{
+                        op_code = .ADD,
+                        dest    = concat_reg,
+                        arg1    = key_register,
+                        arg2    = suffix_reg,
+                    });
+
+                    key_register = concat_reg;
+                }
+
+                emit_instruction(generator, .{
+                    op_code = .COMPUTED_SET,
+                    dest    = register,
+                    arg1    = key_register,
+                    arg2    = value_register,
+                });
+            } else {
+                prop_name := it.key;
+                if is_getter      prop_name = tprint("%__getter__", prop_name);
+                else if is_setter prop_name = tprint("%__setter__", prop_name);
+
+                index := get_property_index(generator, prop_name);
+
+                set_instruction := Instruction.{
+                    op_code = .SET_FIELD,
+                    dest    = register,
+                    arg1    = value_register,
+                    imm     = cast(s32) index,
+                };
+
+                emit_instruction(generator, set_instruction);
+            }
+        }
+    }
+
+    return register;
+}
+
+emit_member_expression_helper :: (generator: *Bytecode_Generator, member_expression: *Ast_Member_Expression, destination_register: s32) -> u16 {
+    object_register := emit_expression(generator, member_expression.object);
+
+    register := allocate_register(generator, destination_register);
+
+    if member_expression.computed {
+        property_register := emit_expression(generator, member_expression.property);
+
+        instruction := Instruction.{
+            op_code = .ARRAY_GET,
+            dest    = register,
+            arg1    = object_register,
+            arg2    = property_register,
+        };
+
+        emit_instruction(generator, instruction);
+    } else {
+        identifier := cast(*Ast_Identifier) member_expression.property;
+        index      := get_property_index(generator, identifier.name);
+
+        instruction := Instruction.{
+            op_code = .GET_FIELD,
+            dest    = register,
+            arg1    = object_register,
+            imm     = cast(s32) index,
+        };
+
+        emit_instruction(generator, instruction);
+    }
+
+    return register;
+}
+
+emit_new_expression_helper :: (generator: *Bytecode_Generator, new_expression: *Ast_New_Expression, destination_register: s32) -> u16 {
+    has_spread := false;
+    for new_expression.arguments {
+        if it && it.kind == .SPREAD_ELEMENT {
+            has_spread = true;
+            break;
+        }
+    }
+
+    callee_register := emit_expression(generator, new_expression.callee);
+
+    register := allocate_register(generator, destination_register);
+
+    if has_spread {
+        arguments_array_register := generator.next_register;
+
+        generator.next_register += 1;
+
+        new_array_instruction := Instruction.{
+            op_code = .NEW_ARRAY,
+            dest    = arguments_array_register,
+            imm     = 0,
+        };
+
+        emit_instruction(generator, new_array_instruction);
+
+        for new_expression.arguments {
+            if !it continue;
+
+            if it.kind == .SPREAD_ELEMENT {
+                spread_element  := cast(*Ast_Spread_Element) it;
+                spread_register := emit_expression(generator, spread_element.argument);
+
+                append_instruction := Instruction.{
+                    op_code = .ARRAY_APPEND,
+                    arg1    = arguments_array_register,
+                    arg2    = spread_register,
+                };
+
+                emit_instruction(generator, append_instruction);
+            } else {
+                argument_register := emit_expression(generator, it);
+
+                push_instruction := Instruction.{
+                    op_code = .ARRAY_PUSH,
+                    arg1    = arguments_array_register,
+                    arg2    = argument_register,
+                };
+
+                emit_instruction(generator, push_instruction);
+            }
+        }
+
+        call_instruction := Instruction.{
+            op_code = .NEW_CALL_APPLY,
+            dest    = register,
+            arg1    = callee_register,
+            arg2    = arguments_array_register,
+        };
+
+        emit_instruction(generator, call_instruction);
+    } else {
+        first_argument_new := generator.next_register;
+
+        generator.next_register += cast(u16) new_expression.arguments.count;
+
+        for new_expression.arguments emit_expression(generator, it, false, cast(s16) (first_argument_new + it_index));
+
+        instruction := Instruction.{
+            op_code = .NEW_CALL,
+            dest    = register,
+            arg1    = callee_register,
+            arg2    = 65535,
+            imm     = ((cast(s32) first_argument_new) << 16) | cast(s32) new_expression.arguments.count,
+        };
+
+        emit_instruction(generator, instruction);
+    }
+
+    return register;
+}
+
+emit_array_literal_helper :: (generator: *Bytecode_Generator, array_literal: *Ast_Array_Literal, destination_register: s32) -> u16 {
+    register := allocate_register(generator, destination_register);
+
+    instruction := Instruction.{
+        op_code = .NEW_ARRAY,
+        dest    = register,
+        imm     = 0,
+    };
+
+    emit_instruction(generator, instruction);
+
+    for array_literal.elements {
+        if !it continue;
+
+        if it.kind == .SPREAD_ELEMENT {
+            spread_element  := cast(*Ast_Spread_Element) it;
+            spread_register := emit_expression(generator, spread_element.argument);
+
+            spread_instruction := Instruction.{
+                op_code = .ARRAY_APPEND,
+                arg1    = register,
+                arg2    = spread_register,
+            };
+
+            emit_instruction(generator, spread_instruction);
+        } else {
+            elements_register := emit_expression(generator, it);
+
+            push_instruction := Instruction.{
+                op_code = .ARRAY_PUSH,
+                arg1    = register,
+                arg2    = elements_register,
+            };
+
+            emit_instruction(generator, push_instruction);
+        }
+    }
+
+    return register;
+}
+
+emit_template_literal_helper :: (generator: *Bytecode_Generator, template_literal: *Ast_Template_Literal) -> u16 {
+    result_register: u16;
+
+    first := true;
+
+    for template_literal.quasis {
+        if it.count > 0 || (it_index == 0 && template_literal.expressions.count > 0) || (template_literal.quasis.count == 1 && template_literal.expressions.count == 0) {
+            quasi_index := generator.program.constants.count;
+
+            array_add(*generator.program.constants, .{ type = .STRING, s = it });
+
+            quasi_reg := generator.next_register;
+
+            generator.next_register += 1;
+
+            quasi_instruction := Instruction.{
+                op_code = .LOAD_CONST,
+                dest    = quasi_reg,
+                imm     = cast(s32) quasi_index,
+            };
+
+            emit_instruction(generator, quasi_instruction);
+
+            if first {
+                result_register = quasi_reg;
+                first           = false;
+            } else {
+                concat_register := generator.next_register;
+
+                generator.next_register += 1;
+
+                concat_instruction := Instruction.{
+                    op_code = .ADD,
+                    dest    = concat_register,
+                    arg1    = result_register,
+                    arg2    = quasi_reg,
+                };
+
+                emit_instruction(generator, concat_instruction);
+
+                result_register = concat_register;
+            }
+        }
+
+        if it_index < template_literal.expressions.count {
+            expression_register := emit_expression(generator, template_literal.expressions[it_index]);
+
+            if first {
+                result_register = expression_register;
+                first           = false;
+            } else {
+                concat_register := generator.next_register;
+
+                generator.next_register += 1;
+
+                concat_instruction := Instruction.{
+                    op_code = .ADD,
+                    dest    = concat_register,
+                    arg1    = result_register,
+                    arg2    = expression_register,
+                };
+
+                emit_instruction(generator, concat_instruction);
+
+                result_register = concat_register;
+            }
+        }
+    }
+
+    if first {
+        quasi_index := generator.program.constants.count;
+
+        array_add(*generator.program.constants, .{ type = .STRING, s = "" });
+
+        result_register = generator.next_register;
+
+        generator.next_register += 1;
+
+        quasi_instruction := Instruction.{
+            op_code = .LOAD_CONST,
+            dest    = result_register,
+            imm     = cast(s32) quasi_index,
+        };
+
+        emit_instruction(generator, quasi_instruction);
+    }
+
+    return result_register;
+}
+
+emit_unary_expression_helper :: (generator: *Bytecode_Generator, unary_expression: *Ast_Unary_Expression, destination_register: s32) -> u16 {
+    register := allocate_register(generator, destination_register);
+
+    if unary_expression.op == "delete" {
+        if unary_expression.right.kind == .MEMBER_EXPRESSION {
+            member_expression := cast(*Ast_Member_Expression) unary_expression.right;
+            object_register := emit_expression(generator, member_expression.object);
+
+            if member_expression.computed {
+                property_register := emit_expression(generator, member_expression.property);
+
+                instruction := Instruction.{
+                    op_code = .DELETE_PROPERTY,
+                    dest    = register,
+                    arg1    = object_register,
+                    arg2    = property_register,
+                };
+                emit_instruction(generator, instruction);
+            } else {
+                identifier := cast(*Ast_Identifier) member_expression.property;
+                index      := get_property_index(generator, identifier.name);
+
+                instruction := Instruction.{
+                    op_code = .DELETE_PROPERTY,
+                    dest    = register,
+                    arg1    = object_register,
+                    imm     = cast(s32) index,
+                };
+                emit_instruction(generator, instruction);
+            }
+        } else {
+            emit_expression(generator, unary_expression.right);
+
+            index := generator.program.constants.count;
+            array_add(*generator.program.constants, .{ type = .BOOLEAN, boolean = true });
+
+            instruction := Instruction.{
+                op_code = .LOAD_CONST,
+                dest    = register,
+                imm     = cast(s32) index,
+            };
+            emit_instruction(generator, instruction);
+        }
+        return register;
+    } else if unary_expression.op == "void" {
+        emit_expression(generator, unary_expression.right);
+
+        index := generator.program.constants.count;
+        array_add(*generator.program.constants, .{ type = .UNDEFINED });
+
+        instruction := Instruction.{
+            op_code = .LOAD_CONST,
+            dest    = register,
+            imm     = cast(s32) index,
+        };
+        emit_instruction(generator, instruction);
+        return register;
+    }
+
+    right := emit_expression(generator, unary_expression.right);
+
+    instruction := Instruction.{
+        dest = register,
+        arg1 = right,
+    };
+
+    if unary_expression.op == "!" {
+        instruction.op_code = .LOGICAL_NOT;
+    } else if unary_expression.op == "typeof" {
+        instruction.op_code = .TYPEOF;
+    } else if unary_expression.op == "-" {
+        instruction.op_code = .UNARY_MINUS;
+    } else if unary_expression.op == "+" {
+        instruction.op_code = .MOVE;
+        instruction.arg1 = right;
+    }
+
+    emit_instruction(generator, instruction);
+
+    return register;
+}
