@@ -3482,12 +3482,14 @@ emit_class_common :: (generator: *Bytecode_Generator, super_class: *Ast_Node, bo
 }
 
 emit_super_expression :: (generator: *Bytecode_Generator, node: *Ast_Super_Expression, dest_register: u16) {
-    load_this := Instruction.{
-        op_code = .LOAD_THIS,
-        dest    = dest_register,
+    load_const(generator, dest_register, .{ type = .STRING, s = "super is not implemented" });
+
+    throw_instruction := Instruction.{
+        op_code = .THROW,
+        arg1    = dest_register,
     };
 
-    emit_instruction(generator, load_this);
+    emit_instruction(generator, throw_instruction);
 }
 
 operator == :: (a: Value, b: Value) -> bool {
