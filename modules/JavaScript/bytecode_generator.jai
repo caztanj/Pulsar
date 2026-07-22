@@ -926,7 +926,12 @@ emit_statement :: (generator: *Bytecode_Generator, node: *Ast_Node) {
 
             register: u16 = 0;
 
-            if return_statement.argument register = emit_expression(generator, return_statement.argument);
+            if return_statement.argument {
+                register = emit_expression(generator, return_statement.argument);
+            } else {
+                register = allocate_register(generator, -1);
+                load_const(generator, register, .{ type = .UNDEFINED });
+            }
 
             instruction := Instruction.{
                 op_code = .RETURN,
