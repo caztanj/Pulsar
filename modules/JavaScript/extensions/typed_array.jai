@@ -47,6 +47,20 @@ init_typed_array :: (vm: *Vm, name: string, kind: Gc_Object_Kind, prototype_ptr:
 
         add_static_property(vm, array_object,    "prototype",   prototype_value);
         add_static_property(vm, prototype_ptr.*, "constructor", vm.current_realm.globals[index]);
+
+        bytes_per_element := 1;
+        if kind == {
+            case .UINT16_ARRAY; bytes_per_element = 2;
+            case .INT16_ARRAY;  bytes_per_element = 2;
+            case .UINT32_ARRAY; bytes_per_element = 4;
+            case .INT32_ARRAY;  bytes_per_element = 4;
+            case .FLOAT32_ARRAY; bytes_per_element = 4;
+            case .FLOAT64_ARRAY; bytes_per_element = 8;
+        }
+
+        bpe_val := Value.{ type = .NUMBER, number = cast(float64) bytes_per_element };
+        add_static_property(vm, array_object, "BYTES_PER_ELEMENT", bpe_val);
+        add_static_property(vm, prototype_ptr.*, "BYTES_PER_ELEMENT", bpe_val);
     }
 }
 
@@ -83,7 +97,15 @@ typed_array_constructor_impl :: (vm: *Vm, this: Value, arguments: [] Value, is_n
     if arguments.count > 0 {
         arg := arguments[0];
         if arg.type == .NUMBER {
-            length = cast(int) arg.number;
+            length_f := arg.number;
+            if isnan(length_f) {
+                length = 0;
+            } else if length_f < 0 || length_f > 104857600 {
+                throw_exception(vm, "RangeError: Invalid typed array length");
+                return .{};
+            } else {
+                length = cast(int) length_f;
+            }
             buffer := cast(*u8) alloc(length * element_size);
             memset(buffer, 0, length * element_size);
             object.primitive_value = .{ type = .STRING, s = string.{ length * element_size, buffer } };
@@ -119,7 +141,15 @@ typed_array_set :: (vm: *Vm, this: Value, arguments: [] Value, is_new: bool) -> 
         offset := 0;
 
         if arguments.count > 1 && arguments[1].type == .NUMBER {
-            offset = cast(int) arguments[1].number;
+            offset_f := arguments[1].number;
+            if isnan(offset_f) {
+                offset = 0;
+            } else if offset_f < 0 || offset_f > 104857600 {
+                throw_exception(vm, "RangeError: Invalid typed array offset");
+                return .{};
+            } else {
+                offset = cast(int) offset_f;
+            }
         }
 
         if offset < 0 return .{};
