@@ -59,6 +59,9 @@ SKIPPED_TESTS :: string.[
 ];
 
 visitor :: (info: *File_Visit_Info, user_data: *void) {
+    state := get_temporary_storage_mark();
+    defer set_temporary_storage_mark(state);
+
     if info.is_directory return;
     if !ends_with(info.short_name, ".js") return;
 
