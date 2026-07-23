@@ -78,6 +78,7 @@ visitor :: (info: *File_Visit_Info, user_data: *void) {
     }
 
     test_code, success := read_entire_file(info.full_name);
+    defer free(test_code);
     if !success {
         print("Failed to read test: %\n", info.full_name);
         exit(1);
@@ -87,6 +88,7 @@ visitor :: (info: *File_Visit_Info, user_data: *void) {
 
     includes_code: String_Builder;
     init_string_builder(*includes_code);
+    defer free_buffers(*includes_code);
 
     header_start := find_index_from_left(test_code, "/*---");
     header_end   := find_index_from_left(test_code, "---*/");
@@ -99,12 +101,14 @@ visitor :: (info: *File_Visit_Info, user_data: *void) {
             if end > start {
                 includes_str := slice(header, start, end - start);
                 includes := split(includes_str, ",");
+                defer array_free(includes);
                 for includes {
                     include_file := trim(it);
                     if include_file.count > 0 {
                         path := tprint("%/harness/%", "modules/JavaScript/test262", include_file);
                         include_content, success := read_entire_file(path);
                         if success {
+                            defer free(include_content);
                             append(*includes_code, include_content);
                             append(*includes_code, "\n");
                         }
@@ -114,7 +118,9 @@ visitor :: (info: *File_Visit_Info, user_data: *void) {
         }
     }
 
-    full_code := tprint("%\n%\n%\n", harness_code_global, builder_to_string(*includes_code), test_code);
+    includes_string := builder_to_string(*includes_code);
+    defer free(includes_string);
+    full_code := tprint("%\n%\n%\n", harness_code_global, includes_string, test_code);
 
     print("RUN: %\n", info.full_name);
     vm := run(full_code, permissions = 0, silence_console_output = true);
