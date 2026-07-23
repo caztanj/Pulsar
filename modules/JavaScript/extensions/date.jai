@@ -61,6 +61,12 @@ date_constructor :: (vm: *Vm, this: Value, arguments: [] Value, is_new: bool) ->
         milliseconds = 0.0;
     }
 
+    if isnan(milliseconds) || isinf(milliseconds) || milliseconds > 8640000000000000.0 || milliseconds < -8640000000000000.0 {
+        milliseconds = FLOAT64_NAN;
+    } else {
+        milliseconds = cast(float64) cast(s64) milliseconds;
+    }
+
     date_object                 := allocate_object(vm);
     date_object.kind             = .DATE;
     date_object.primitive_value  = .{ type = .NUMBER, number = milliseconds };
@@ -93,56 +99,76 @@ date_get_time :: (vm: *Vm, this: Value, arguments: [] Value, is_new: bool) -> Va
 }
 
 date_get_full_year :: (vm: *Vm, this: Value, arguments: [] Value, is_new: bool) -> Value {
-    apollo   := get_apollo_from_millis(get_date_milliseconds(this));
+    millis := get_date_milliseconds(this);
+    if isnan(millis) || isinf(millis) return .{ type = .NUMBER, number = FLOAT64_NAN };
+    apollo   := get_apollo_from_millis(millis);
     calendar := to_calendar(apollo, .LOCAL);
 
     return .{ type = .NUMBER, number = cast(float64) calendar.year };
 }
 
 date_get_month :: (vm: *Vm, this: Value, arguments: [] Value, is_new: bool) -> Value {
-    apollo   := get_apollo_from_millis(get_date_milliseconds(this));
+    millis := get_date_milliseconds(this);
+    if isnan(millis) || isinf(millis) return .{ type = .NUMBER, number = FLOAT64_NAN };
+    apollo   := get_apollo_from_millis(millis);
     calendar := to_calendar(apollo, .LOCAL);
 
     return .{ type = .NUMBER, number = cast(float64) calendar.month_starting_at_0 };
 }
 
 date_get_date :: (vm: *Vm, this: Value, arguments: [] Value, is_new: bool) -> Value {
-    apollo   := get_apollo_from_millis(get_date_milliseconds(this));
+    millis := get_date_milliseconds(this);
+    if isnan(millis) || isinf(millis) return .{ type = .NUMBER, number = FLOAT64_NAN };
+    apollo   := get_apollo_from_millis(millis);
     calendar := to_calendar(apollo, .LOCAL);
 
     return .{ type = .NUMBER, number = cast(float64) (calendar.day_of_month_starting_at_0 + 1) };
 }
 
 date_get_hours :: (vm: *Vm, this: Value, arguments: [] Value, is_new: bool) -> Value {
-    apollo   := get_apollo_from_millis(get_date_milliseconds(this));
+    millis := get_date_milliseconds(this);
+    if isnan(millis) || isinf(millis) return .{ type = .NUMBER, number = FLOAT64_NAN };
+    apollo   := get_apollo_from_millis(millis);
     calendar := to_calendar(apollo, .LOCAL);
 
     return .{ type = .NUMBER, number = cast(float64) calendar.hour };
 }
 
 date_get_minutes :: (vm: *Vm, this: Value, arguments: [] Value, is_new: bool) -> Value {
-    apollo   := get_apollo_from_millis(get_date_milliseconds(this));
+    millis := get_date_milliseconds(this);
+    if isnan(millis) || isinf(millis) return .{ type = .NUMBER, number = FLOAT64_NAN };
+    apollo   := get_apollo_from_millis(millis);
     calendar := to_calendar(apollo, .LOCAL);
 
     return .{ type = .NUMBER, number = cast(float64) calendar.minute };
 }
 
 date_get_seconds :: (vm: *Vm, this: Value, arguments: [] Value, is_new: bool) -> Value {
-    apollo   := get_apollo_from_millis(get_date_milliseconds(this));
+    millis := get_date_milliseconds(this);
+    if isnan(millis) || isinf(millis) return .{ type = .NUMBER, number = FLOAT64_NAN };
+    apollo   := get_apollo_from_millis(millis);
     calendar := to_calendar(apollo, .LOCAL);
 
     return .{ type = .NUMBER, number = cast(float64) calendar.second };
 }
 
 date_get_milliseconds :: (vm: *Vm, this: Value, arguments: [] Value, is_new: bool) -> Value {
-    apollo   := get_apollo_from_millis(get_date_milliseconds(this));
+    millis := get_date_milliseconds(this);
+    if isnan(millis) || isinf(millis) return .{ type = .NUMBER, number = FLOAT64_NAN };
+    apollo   := get_apollo_from_millis(millis);
     calendar := to_calendar(apollo, .LOCAL);
 
     return .{ type = .NUMBER, number = cast(float64) calendar.millisecond };
 }
 
 date_to_string :: (vm: *Vm, this: Value, arguments: [] Value, is_new: bool) -> Value {
-    apollo   := get_apollo_from_millis(get_date_milliseconds(this));
+    millis := get_date_milliseconds(this);
+    if isnan(millis) || isinf(millis) {
+        s := "Invalid Date";
+        table_set(*vm.allocated_strings, s.data, .{ s = s, marked = false });
+        return .{ type = .STRING, s = s };
+    }
+    apollo   := get_apollo_from_millis(millis);
     calendar := to_calendar(apollo, .LOCAL);
 
     s := sprint("%-%-% %:%:%", calendar.year, calendar.month_starting_at_0 + 1, calendar.day_of_month_starting_at_0 + 1, calendar.hour, calendar.minute, calendar.second);
@@ -153,7 +179,12 @@ date_to_string :: (vm: *Vm, this: Value, arguments: [] Value, is_new: bool) -> V
 }
 
 date_to_iso_string :: (vm: *Vm, this: Value, arguments: [] Value, is_new: bool) -> Value {
-    apollo   := get_apollo_from_millis(get_date_milliseconds(this));
+    millis := get_date_milliseconds(this);
+    if isnan(millis) || isinf(millis) {
+        throw_exception(vm, "RangeError: Invalid time value");
+        return .{};
+    }
+    apollo   := get_apollo_from_millis(millis);
     calendar := to_calendar(apollo, .UTC);
 
     s := sprint("%-%-%T%:%:%.%Z", formatInt(calendar.year, minimum_digits = 4), formatInt(calendar.month_starting_at_0 + 1, minimum_digits = 2), formatInt(calendar.day_of_month_starting_at_0 + 1, minimum_digits = 2), formatInt(calendar.hour, minimum_digits = 2), formatInt(calendar.minute, minimum_digits = 2), formatInt(calendar.second, minimum_digits=2), formatInt(calendar.millisecond, minimum_digits = 3));
