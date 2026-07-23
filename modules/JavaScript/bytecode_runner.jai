@@ -2316,19 +2316,31 @@ values_bitwise_xor :: (a: Value, b: Value) -> Value {
 }
 
 values_less_than :: (a: Value, b: Value) -> bool {
-    return value_to_number(a) < value_to_number(b);
+    na := value_to_number(a);
+    nb := value_to_number(b);
+    if isnan(na) || isnan(nb) return false;
+    return na < nb;
 }
 
 values_greater_than :: (a: Value, b: Value) -> bool {
-    return value_to_number(a) > value_to_number(b);
+    na := value_to_number(a);
+    nb := value_to_number(b);
+    if isnan(na) || isnan(nb) return false;
+    return na > nb;
 }
 
 values_less_than_equal :: (a: Value, b: Value) -> bool {
-    return value_to_number(a) <= value_to_number(b);
+    na := value_to_number(a);
+    nb := value_to_number(b);
+    if isnan(na) || isnan(nb) return false;
+    return na <= nb;
 }
 
 values_greater_than_equal :: (a: Value, b: Value) -> bool {
-    return value_to_number(a) >= value_to_number(b);
+    na := value_to_number(a);
+    nb := value_to_number(b);
+    if isnan(na) || isnan(nb) return false;
+    return na >= nb;
 }
 
 values_equal :: (a: Value, b: Value) -> bool {
