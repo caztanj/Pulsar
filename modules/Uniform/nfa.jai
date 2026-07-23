@@ -315,12 +315,10 @@ add_to_queue :: (using nfa: *Nfa, q: *Thread_Queue, id0: int, c: int, ctx: strin
 	//   one entry per Nop.
 	// This reflects the maximum number of stack pushes that each can
 	// perform. (Each instruction can be processed at most once.)
-	stack_size := stack.allocated;
 	stack.count = 0;
 	array_add(*stack, make_state(id0, null));
 	t0 := t0_in;
 	while stack.count > 0 {
-		assert(stack.count < stack_size);
 		a := pop(*stack);
 
 		if (a.t != null) {
