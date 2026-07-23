@@ -206,10 +206,32 @@ number_to_fixed :: (vm: *Vm, this: Value, arguments: [] Value, is_new: bool) -> 
         number_value = this.object.primitive_value.number;
     }
 
+    if isnan(number_value) {
+        return .{ type = .STRING, s = "NaN" };
+    }
+
+    if isinf(number_value) {
+        if number_value > 0 return .{ type = .STRING, s = "Infinity" };
+        else return .{ type = .STRING, s = "-Infinity" };
+    }
+
+    if number_value == 0 {
+        number_value = 0.0;
+    }
+
     fraction_digits := 0;
     if arguments.count > 0 {
         fraction_digits_value := value_to_number(arguments[0]);
-        fraction_digits = cast(int) fraction_digits_value;
+        if isnan(fraction_digits_value) {
+            fraction_digits = 0;
+        } else {
+            fraction_digits = cast(int) fraction_digits_value;
+        }
+    }
+
+    if fraction_digits < 0 || fraction_digits > 100 {
+        throw_exception(vm, "RangeError: toFixed() digits argument must be between 0 and 100");
+        return .{};
     }
 
     result_string := sprint("%", formatFloat(number_value, width = 0, trailing_width = cast(s32) fraction_digits, zero_removal = .NO));
