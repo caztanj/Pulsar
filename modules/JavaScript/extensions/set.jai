@@ -118,16 +118,19 @@ set_for_each :: (vm: *Vm, this: Value, arguments: [] Value, is_new: bool) -> Val
 
         object := this.object;
 
-        for object.map_entries {
+        i := 0;
+        while i < object.map_entries.count {
             arguments: [3] Value = .[
-                it,
-                it,
+                object.map_entries[i],
+                object.map_entries[i],
                 this,
             ];
 
             call_value(vm, this_argument, callback, arguments);
 
             if vm.has_exception return .{};
+
+            i += 1;
         }
     }
 

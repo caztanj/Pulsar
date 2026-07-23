@@ -150,16 +150,19 @@ map_for_each :: (vm: *Vm, this: Value, arguments: [] Value, is_new: bool) -> Val
 
         object := this.object;
 
-        for 0..object.map_entries.count / 2 - 1 {
+        i := 0;
+        while i < object.map_entries.count / 2 {
             arguments: [3] Value = .[
-                object.map_entries[it * 2 + 1],
-                object.map_entries[it * 2],
+                object.map_entries[i * 2 + 1],
+                object.map_entries[i * 2],
                 this,
             ];
 
             call_value(vm, this_argument, callback, arguments);
 
             if vm.has_exception return .{};
+
+            i += 1;
         }
     }
 
