@@ -116,7 +116,7 @@ set_object_property :: (vm: *Vm, object: *Gc_Object, name: string, value: Value,
                 }
             }
 
-            if parsed < 1048576 {
+            if parsed >= 0 && parsed < 1048576 {
                 while object.elements.count <= parsed array_add(*object.elements, .{});
 
                 object.elements[parsed] = value;
