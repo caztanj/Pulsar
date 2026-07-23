@@ -170,9 +170,18 @@ number_to_string :: (vm: *Vm, this: Value, arguments: [] Value, is_new: bool) ->
     }
 
     radix := 10;
-    if arguments.count > 0 {
+    if arguments.count > 0 && arguments[0].type != .UNDEFINED {
         radix_value := value_to_number(arguments[0]);
-        radix = cast(int) radix_value;
+        if isnan(radix_value) {
+            radix = 0;
+        } else {
+            radix = cast(int) radix_value;
+        }
+    }
+
+    if radix < 2 || radix > 36 {
+        throw_exception(vm, "RangeError: toString() radix argument must be between 2 and 36");
+        return .{};
     }
 
     result_string := "";
