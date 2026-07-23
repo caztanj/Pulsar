@@ -191,9 +191,16 @@ transition_shape :: (vm: *Vm, current_shape: *Shape, property_name: string) -> *
     next_shape_pointer := table_find_pointer(*current_shape.transitions, property_name);
     if next_shape_pointer return next_shape_pointer.*, current_shape.next_offset;
 
+    if current_shape.property_names.count > 2048 {
+        throw_exception(vm, "Pulsar Limit: Objects cannot have more than 2048 properties (Dictionary mode not implemented)");
+        return current_shape, 0;
+    }
+
     new_shape := New(Shape);
 
     array_add(*vm.shapes, new_shape);
+
+    array_reserve(*new_shape.property_names, current_shape.property_names.count + 1);
 
     for current_shape.property_names {
         array_add(*new_shape.property_names, it);
