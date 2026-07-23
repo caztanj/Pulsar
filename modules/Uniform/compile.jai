@@ -17,6 +17,7 @@ compile :: (pattern: string, parse_flags := ParseFlags.LikePerl) -> Regexp, succ
 
 	if status.code != .Success {
 		log_error("Could not parse regexp \"%\": % (%)", pattern, status.code, status.error_arg);
+        uninit(*pool);
 		return regexp, false;
 	}
 	regexp.pool = pool;

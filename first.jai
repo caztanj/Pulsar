@@ -28,7 +28,6 @@ build :: () {
     plugins: [..] *Metaprogram_Plugin;
     intercept_flags: Intercept_Flags;
 
-
     is_release := array_find(remaining_args, "release");
 
     if is_release {

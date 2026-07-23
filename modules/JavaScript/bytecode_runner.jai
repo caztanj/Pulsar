@@ -2269,7 +2269,9 @@ values_addition :: (vm: *Vm, a: Value, b: Value) -> Value {
         return .{ type = .STRING, s = result };
     }
 
-    throw_exception(vm, sprint("Error: Unhandled types in values_addition: % and %\n", a.type, b.type));
+    msg := sprint("Error: Unhandled types in values_addition: % and %\n", a.type, b.type);
+    throw_exception(vm, allocate_string(vm, msg));
+    free(msg);
 
     return .{};
 }

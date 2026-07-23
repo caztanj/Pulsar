@@ -13,7 +13,7 @@ run :: (code: string, optimize := true, permissions: Permission = 0, silence_con
         if has_error {
             push_allocator(original_allocator);
             vm := New(Vm);
-            throw_exception(vm, Value.{ type = .STRING, s = copy_string(error_message) });
+            throw_exception(vm, Value.{ type = .STRING, s = allocate_string(vm, error_message) });
             return vm;
         }
 
@@ -21,7 +21,7 @@ run :: (code: string, optimize := true, permissions: Permission = 0, silence_con
         if ast.has_error {
             push_allocator(original_allocator);
             vm := New(Vm);
-            throw_exception(vm, Value.{ type = .STRING, s = copy_string(ast.error_message) });
+            throw_exception(vm, Value.{ type = .STRING, s = allocate_string(vm, ast.error_message) });
             return vm;
         }
 
@@ -31,7 +31,7 @@ run :: (code: string, optimize := true, permissions: Permission = 0, silence_con
     bytecode := generate_bytecode(ast);
     if bytecode.has_error {
         vm := New(Vm);
-        throw_exception(vm, Value.{ type = .STRING, s = copy_string(bytecode.error_message) });
+        throw_exception(vm, Value.{ type = .STRING, s = allocate_string(vm, bytecode.error_message) });
         return vm;
     }
 

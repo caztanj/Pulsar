@@ -59,7 +59,9 @@ regexp_constructor :: (vm: *Vm, this: Value, arguments: [] Value, is_new: bool) 
     
     regexp, success := Uniform.compile(pattern);
     if !success {
-        throw_exception(vm, sprint("Invalid regular expression: %", pattern));
+        msg := sprint("Invalid regular expression: %", pattern);
+        throw_exception(vm, allocate_string(vm, msg));
+        free(msg);
         return .{ type = .OBJECT, object = regexp_object };
     }
     
