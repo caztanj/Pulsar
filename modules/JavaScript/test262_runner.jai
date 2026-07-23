@@ -2,7 +2,9 @@ main :: () {
     print("\n--- Pulsar Test262 Runner ---\n\n");
 
     assert_js, assert_success := read_entire_file("modules/JavaScript/test262/harness/assert.js", log_errors = false);
+    defer free(assert_js);
     sta_js, sta_success       := read_entire_file("modules/JavaScript/test262/harness/sta.js", log_errors = false);
+    defer free(sta_js);
 
     if !assert_success || !sta_success {
         print("Error: The test262 submodule is not checked out.\n");
@@ -15,6 +17,7 @@ main :: () {
     print("Starting test execution...\n");
 
     args := get_command_line_arguments();
+    defer array_free(args);
     for i: 1..args.count-1 {
         if args[i] == "--full" {
             full_run = true;
