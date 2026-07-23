@@ -168,9 +168,19 @@ string_repeat :: (vm: *Vm, this: Value, arguments: [] Value, is_new: bool) -> Va
 
     count := 0;
 
-    if arguments.count > 0 count = cast(int) value_to_number(arguments[0]);
+    if arguments.count > 0 {
+        count_f := value_to_number(arguments[0]);
+        if isinf(count_f) || count_f < 0 {
+            throw_exception(vm, "RangeError: Invalid count value");
+            return .{};
+        }
+        if isnan(count_f) then count_f = 0;
+        count = cast(int) count_f;
+    }
 
-    if count < 0 return .{ type = .UNDEFINED };
+    if count == 0 || this.s.count == 0 {
+        return .{ type = .STRING, s = "" };
+    }
 
     builder: String_Builder;
     builder.allocator = temp;
