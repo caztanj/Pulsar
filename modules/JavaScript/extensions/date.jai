@@ -164,7 +164,7 @@ date_get_milliseconds :: (vm: *Vm, this: Value, arguments: [] Value, is_new: boo
 date_to_string :: (vm: *Vm, this: Value, arguments: [] Value, is_new: bool) -> Value {
     millis := get_date_milliseconds(this);
     if isnan(millis) || isinf(millis) {
-        s := "Invalid Date";
+        s := copy_string("Invalid Date");
         table_set(*vm.allocated_strings, s.data, .{ s = s, marked = false });
         return .{ type = .STRING, s = s };
     }
