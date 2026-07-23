@@ -547,7 +547,9 @@ compare_values_for_sort :: (vm: *Vm, v1: Value, v2: Value, compare_function: Val
 
         if vm.has_exception return 0;
 
-        return cast(int) value_to_number(result);
+        num := value_to_number(result);
+        if isnan(num) return 0;
+        return cast(int) num;
     } else {
         s1 := value_to_string(vm, v1);
         s2 := value_to_string(vm, v2);
