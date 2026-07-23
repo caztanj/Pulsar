@@ -29,6 +29,8 @@ deinit :: (program: *Bytecode_Program) {
 
     deinit(*program.property_names_hash);
 
+    if program.error_message.data free(program.error_message.data);
+
     free(program);
 }
 

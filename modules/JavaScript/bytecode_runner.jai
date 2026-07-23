@@ -2452,12 +2452,12 @@ deinit :: (vm: *Vm) {
     for vm.timer_queue array_free(it.arguments);
     array_free(vm.timer_queue);
 
+    array_free(vm.external_events);
     destroy(*vm.external_events_mutex);
     destroy(*vm.event_loop_semaphore);
 
     for * vm.builtin_prototypes it.* = null;
     for   vm.loaded_modules     free(it.path);
-
     array_free(vm.loaded_modules);
 
     vm.current_exports = null;
@@ -2582,6 +2582,7 @@ deinit :: (vm: *Vm) {
 generate_stack_trace :: (vm: *Vm, current_function: *Bytecode_Function, current_pc: *Instruction) {
     builder: String_Builder;
     init_string_builder(*builder);
+    defer free_buffers(*builder);
 
     append_stack_frame(vm, *builder, current_function, current_pc);
 
@@ -2597,6 +2598,7 @@ generate_stack_trace :: (vm: *Vm, current_function: *Bytecode_Function, current_
 get_stack_trace_string :: (vm: *Vm) -> string {
     builder: String_Builder;
     init_string_builder(*builder);
+    defer free_buffers(*builder);
 
     if vm.current_function {
         append_stack_frame(vm, *builder, vm.current_function, vm.current_pc);
