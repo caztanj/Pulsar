@@ -129,7 +129,7 @@ array_shift :: (vm: *Vm, this: Value, arguments: [] Value, is_new: bool) -> Valu
 
 array_unshift :: (vm: *Vm, this: Value, arguments: [] Value, is_new: bool) -> Value {
     if (this.type == .ARRAY || (this.type == .OBJECT && this.object.kind == .ARRAY)) && this.object {
-        for < i: arguments.count - 1..0 array_insert_at(*this.object.elements, arguments[i], 0);
+        for < i: 0..arguments.count - 1 array_insert_at(*this.object.elements, arguments[i], 0);
 
         return .{ type = .NUMBER, number = cast(float64) this.object.elements.count };
     }
