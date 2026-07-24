@@ -59,6 +59,12 @@ intl_supported_locales_of :: (vm: *Vm, this: Value, arguments: [] Value, is_new:
                         } else if element.type == .OBJECT && existing.object == element.object {
                             is_duplicate = true;
                             break;
+                        } else if element.type == .UNDEFINED {
+                            is_duplicate = true;
+                            break;
+                        } else if element.type == .NULL {
+                            is_duplicate = true;
+                            break;
                         }
                     }
                 }
