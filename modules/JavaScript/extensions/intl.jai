@@ -44,9 +44,26 @@ intl_supported_locales_of :: (vm: *Vm, this: Value, arguments: [] Value, is_new:
     if arguments.count > 0 {
         arg := arguments[0];
         if arg.type == .ARRAY && arg.object {
-            for arg.object.elements {
-                if it.type == .STRING && it.s == "zxx" continue;
-                array_add(*array.elements, it);
+            for element: arg.object.elements {
+                if element.type == .STRING && element.s == "zxx" continue;
+
+                is_duplicate := false;
+                for existing: array.elements {
+                    if existing.type == element.type {
+                        if element.type == .STRING && existing.s == element.s {
+                            is_duplicate = true;
+                            break;
+                        } else if element.type == .NUMBER && existing.number == element.number {
+                            is_duplicate = true;
+                            break;
+                        } else if existing.object == element.object {
+                            is_duplicate = true;
+                            break;
+                        }
+                    }
+                }
+
+                if !is_duplicate array_add(*array.elements, element);
             }
         } else if arg.type != .UNDEFINED {
             if arg.type == .STRING && arg.s == "zxx" {} else {
