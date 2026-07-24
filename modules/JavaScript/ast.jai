@@ -1276,13 +1276,7 @@ parse_primary :: (parser: *Parser) -> *Ast_Node {
         advance(parser);
 
         skip_whitespace_and_comments(parser);
-        next_tok := peek(parser);
-        expression: *Ast_Node;
-        if next_tok.type == .IDENTIFIER && next_tok.text == "function" {
-            expression = xx parse_function_expression(parser);
-        } else {
-            expression = parse_expression(parser);
-        }
+        expression := parse_expression(parser);
 
         consume(parser, ")");
 
