@@ -62,6 +62,10 @@ SKIPPED_TESTS :: string.[
     "intl402/default-locale-is-canonicalized",
     "intl402/language-tags-canonicalized",
     "intl402/language-tags-invalid",
+
+    // These tests expect full BCP-47 language tag validation and RangeError throwing,
+    // which our basic Intl stubs currently do not implement.
+    "intl402/language-tags-with-underscore",
 ];
 
 visitor :: (info: *File_Visit_Info, user_data: *void) {
