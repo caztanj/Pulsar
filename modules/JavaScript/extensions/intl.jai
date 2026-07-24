@@ -56,14 +56,16 @@ intl_supported_locales_of :: (vm: *Vm, this: Value, arguments: [] Value, is_new:
                         } else if element.type == .NUMBER && existing.number == element.number {
                             is_duplicate = true;
                             break;
-                        } else if existing.object == element.object {
+                        } else if element.type == .OBJECT && existing.object == element.object {
                             is_duplicate = true;
                             break;
                         }
                     }
                 }
 
-                if !is_duplicate array_add(*array.elements, element);
+                if !is_duplicate {
+                    array_add(*array.elements, element);
+                }
             }
         } else if arg.type != .UNDEFINED {
             if arg.type == .STRING && arg.s == "zxx" {} else {
