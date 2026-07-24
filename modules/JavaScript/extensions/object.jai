@@ -28,6 +28,7 @@ init_vm_object :: (vm: *Vm) {
         add_static_method(vm, object_obj, "entries",                  object_entries);
         add_static_method(vm, object_obj, "assign",                   object_assign);
         add_static_method(vm, object_obj, "getOwnPropertyNames",      object_get_own_property_names);
+        add_static_method(vm, object_obj, "isExtensible",             object_is_extensible);
 
         prototype_value := Value.{
             type   = .OBJECT,
@@ -318,6 +319,12 @@ object_get_own_property_descriptor :: (vm: *Vm, this: Value, arguments: [] Value
         if success && parsed_index >= 0 && parsed_index < object.elements.count && object.elements[parsed_index].type != .EMPTY {
             has_property   = true;
             property_value = object.elements[parsed_index];
+        } else if object.kind == .ARRAY && name == "length" {
+            has_property = true;
+            property_value = .{ type = .NUMBER, number = cast(float64) object.elements.count };
+        } else if is_typed_array(object.kind) && name == "length" {
+            has_property = true;
+            property_value = .{ type = .NUMBER, number = cast(float64) get_typed_array_length(object) };
         }
     }
 
@@ -325,14 +332,19 @@ object_get_own_property_descriptor :: (vm: *Vm, this: Value, arguments: [] Value
         descriptor := allocate_object(vm);
 
         enumerable := true;
+        configurable := true;
         if name == "cause" || name == "message" || name == "name" || name == "length" || name == "prototype" {
             enumerable = false;
+        }
+
+        if (object.kind == .ARRAY || is_typed_array(object.kind)) && name == "length" {
+            configurable = false;
         }
 
         set_object_property(vm, descriptor, "value",        property_value);
         set_object_property(vm, descriptor, "writable",     .{ type = .BOOLEAN, boolean = true });
         set_object_property(vm, descriptor, "enumerable",   .{ type = .BOOLEAN, boolean = enumerable });
-        set_object_property(vm, descriptor, "configurable", .{ type = .BOOLEAN, boolean = true });
+        set_object_property(vm, descriptor, "configurable", .{ type = .BOOLEAN, boolean = configurable });
 
         return .{ type = .OBJECT, object = descriptor };
     }
@@ -366,6 +378,15 @@ object_freeze :: (vm: *Vm, this: Value, arguments: [] Value, is_new: bool) -> Va
 object_seal :: (vm: *Vm, this: Value, arguments: [] Value, is_new: bool) -> Value {
     if arguments.count > 0 return arguments[0];
     return .{ type = .UNDEFINED };
+}
+
+object_is_extensible :: (vm: *Vm, this: Value, arguments: [] Value, is_new: bool) -> Value {
+    if arguments.count == 0 return .{ type = .BOOLEAN, boolean = false };
+    arg := arguments[0];
+    if arg.type == .OBJECT || arg.type == .ARRAY || arg.type == .FUNCTION || arg.type == .NATIVE_FUNCTION {
+        return .{ type = .BOOLEAN, boolean = true };
+    }
+    return .{ type = .BOOLEAN, boolean = false };
 }
 
 object_has_own_property :: (vm: *Vm, this: Value, arguments: [] Value, is_new: bool) -> Value {
