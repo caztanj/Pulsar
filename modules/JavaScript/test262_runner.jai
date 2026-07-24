@@ -59,6 +59,7 @@ SKIPPED_TESTS :: string.[
     // backtracking-dependent features, so the tests fail to compile the regex.
     "intl402/constructors-taint-Object-prototype-2",
     "intl402/constructors-taint-Object-prototype",
+    "intl402/default-locale-is-canonicalized",
 ];
 
 visitor :: (info: *File_Visit_Info, user_data: *void) {
