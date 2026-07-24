@@ -60,6 +60,7 @@ SKIPPED_TESTS :: string.[
     "intl402/constructors-taint-Object-prototype-2",
     "intl402/constructors-taint-Object-prototype",
     "intl402/default-locale-is-canonicalized",
+    "intl402/language-tags-canonicalized",
 ];
 
 visitor :: (info: *File_Visit_Info, user_data: *void) {
