@@ -43,7 +43,15 @@ intl_supported_locales_of :: (vm: *Vm, this: Value, arguments: [] Value, is_new:
 
     if arguments.count > 0 {
         arg := arguments[0];
-        if arg.type == .ARRAY && arg.object {
+
+        if arg.type == .NULL {
+            throw_exception(vm, "TypeError: Cannot convert null or undefined to object");
+            return .{ type = .UNDEFINED };
+        }
+
+        if arg.type == .STRING {
+            if arg.s != "zxx" array_add(*array.elements, arg);
+        } else if arg.type == .ARRAY && arg.object {
             for element: arg.object.elements {
                 if element.type == .STRING && element.s == "zxx" continue;
 
@@ -72,10 +80,6 @@ intl_supported_locales_of :: (vm: *Vm, this: Value, arguments: [] Value, is_new:
                 if !is_duplicate {
                     array_add(*array.elements, element);
                 }
-            }
-        } else if arg.type != .UNDEFINED {
-            if arg.type == .STRING && arg.s == "zxx" {} else {
-                array_add(*array.elements, arg);
             }
         }
     }
