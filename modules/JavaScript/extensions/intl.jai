@@ -7,10 +7,52 @@ init_vm_intl :: (vm: *Vm) {
         vm.current_realm.globals[index].type   = .OBJECT;
         vm.current_realm.globals[index].object = intl_object;
 
-        add_static_method(vm, intl_object, "Collator", intl_collator);
-        add_static_method(vm, intl_object, "NumberFormat", intl_collator);
-        add_static_method(vm, intl_object, "DateTimeFormat", intl_collator);
+        collator_object := allocate_object(vm);
+        collator_value := Value.{
+            type = .NATIVE_FUNCTION,
+            native_function = intl_collator,
+            object = collator_object,
+        };
+        add_static_method(vm, collator_object, "supportedLocalesOf", intl_supported_locales_of);
+        set_object_property(vm, intl_object, "Collator", collator_value);
+
+        number_format_object := allocate_object(vm);
+        number_format_value := Value.{
+            type = .NATIVE_FUNCTION,
+            native_function = intl_collator,
+            object = number_format_object,
+        };
+        add_static_method(vm, number_format_object, "supportedLocalesOf", intl_supported_locales_of);
+        set_object_property(vm, intl_object, "NumberFormat", number_format_value);
+
+        date_time_format_object := allocate_object(vm);
+        date_time_format_value := Value.{
+            type = .NATIVE_FUNCTION,
+            native_function = intl_collator,
+            object = date_time_format_object,
+        };
+        add_static_method(vm, date_time_format_object, "supportedLocalesOf", intl_supported_locales_of);
+        set_object_property(vm, intl_object, "DateTimeFormat", date_time_format_value);
     }
+}
+
+intl_supported_locales_of :: (vm: *Vm, this: Value, arguments: [] Value, is_new: bool) -> Value {
+    array := allocate_object(vm);
+    array.kind = .ARRAY;
+    array.prototype = vm.array_prototype;
+
+    if arguments.count > 0 {
+        arg := arguments[0];
+        if arg.type == .ARRAY && arg.object {
+            for arg.object.elements {
+                array_add(*array.elements, it);
+            }
+        } else if arg.type != .UNDEFINED {
+            array_add(*array.elements, arg);
+        }
+    }
+
+    return .{ type = .OBJECT, object = array };
 }
 
 intl_collator :: (vm: *Vm, this: Value, arguments: [] Value, is_new: bool) -> Value {
