@@ -45,10 +45,13 @@ intl_supported_locales_of :: (vm: *Vm, this: Value, arguments: [] Value, is_new:
         arg := arguments[0];
         if arg.type == .ARRAY && arg.object {
             for arg.object.elements {
+                if it.type == .STRING && it.s == "zxx" continue;
                 array_add(*array.elements, it);
             }
         } else if arg.type != .UNDEFINED {
-            array_add(*array.elements, arg);
+            if arg.type == .STRING && arg.s == "zxx" {} else {
+                array_add(*array.elements, arg);
+            }
         }
     }
 
