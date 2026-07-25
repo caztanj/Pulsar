@@ -2007,6 +2007,7 @@ init_common_vm_globals :: (vm: *Vm) {
     init_vm_error(vm);
     init_vm_regexp(vm);
     init_vm_symbol(vm);
+    init_vm_reflect(vm);
 }
 
 init_vm_core :: (vm: *Vm) {

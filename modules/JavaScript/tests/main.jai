@@ -55,20 +55,20 @@ main :: () {
         start_time := seconds_since_init();
         it.proc();
         elapsed_ms := (seconds_since_init() - start_time) * 1000.0;
-        
+
         if has_error {
             print("[ FAIL ] %", it.name);
             has_error_global = true;
         } else {
             print("[ PASS ] %", it.name);
         }
-        
+
         padding := 30 - it.name.count;
         if padding < 0 then padding = 0;
         for 0..padding-1 print(" ");
-        
+
         print("(% ms)\n", formatFloat(elapsed_ms, trailing_width=2, zero_removal=.NO));
-        
+
         reset_temporary_storage();
     }
 
@@ -401,6 +401,7 @@ has_error := false;
 #load "extensions/console.jai";
 #load "extensions/timer.jai";
 #load "extensions/regexp.jai";
+#load "extensions/reflect.jai";
 
 #import "Basic" () (MEMORY_DEBUGGER = DEBUG_MEMORY, TEMP_ALLOCATOR_OVERWRITE_MEMORY = false);
 #import "File";

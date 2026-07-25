@@ -117,6 +117,7 @@ Permission :: enum_flags {
 #load "extensions/regexp.jai";
 #load "extensions/symbol.jai";
 #load "extensions/function.jai";
+#load "extensions/reflect.jai";
 
 #scope_module
 
