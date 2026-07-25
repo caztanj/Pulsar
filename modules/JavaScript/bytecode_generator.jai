@@ -503,6 +503,16 @@ resolve_variable :: (generator: *Bytecode_Generator, name: string) -> Variable_L
                 if it == name {
                     index = scope.indices[it_index];
                     is_const = scope.is_const[it_index];
+                    if name == "arguments" {
+                        curr_find := generator;
+                        while curr_find {
+                            if curr_find.current_function && !(curr_find.current_function.flags & .ARROW) && !(curr_find.current_function.flags & .TOP_LEVEL) {
+                                curr_find.current_function.flags |= .USES_ARGUMENTS;
+                                break;
+                            }
+                            curr_find = curr_find.parent;
+                        }
+                    }
                     break;
                 }
             }
@@ -895,6 +905,24 @@ emit_statement :: (generator: *Bytecode_Generator, node: *Ast_Node) {
                     array_add(*nested_generator.function_scope.indices, nested_generator.locals.count - 1);
                     array_add(*nested_generator.function_scope.is_const, false);
                 }
+            }
+
+            has_arguments_param := false;
+            for function_declaration.parameters {
+                if it.kind == .IDENTIFIER {
+                    if (cast(*Ast_Identifier) it).name == "arguments" has_arguments_param = true;
+                } else if it.kind == .SPREAD_ELEMENT {
+                    if (cast(*Ast_Identifier) (cast(*Ast_Spread_Element) it).argument).name == "arguments" has_arguments_param = true;
+                }
+            }
+
+            if !has_arguments_param {
+                array_add(*nested_generator.locals, "arguments");
+                array_add(*nested_generator.function_scope.variables, "arguments");
+                array_add(*nested_generator.function_scope.indices, nested_generator.locals.count - 1);
+                array_add(*nested_generator.function_scope.is_const, false);
+                bytecode_function.arguments_register = cast(u16) (nested_generator.locals.count - 1);
+                nested_generator.next_register += 1;
             }
 
             nested_generator.current_function = bytecode_function;
@@ -2730,6 +2758,7 @@ Bytecode_Function_Flags :: enum_flags u8 {
     TOP_LEVEL;
     ARROW;
     REST_PARAMETER;
+    USES_ARGUMENTS;
 }
 
 Bytecode_Function :: struct {
@@ -2737,6 +2766,7 @@ Bytecode_Function :: struct {
 
     locals_count:    int;
     arguments_count: int;
+    arguments_register: u16;
 
     instructions: [..] Instruction;
     flags: Bytecode_Function_Flags;
@@ -3005,9 +3035,25 @@ emit_function_expression_helper :: (generator: *Bytecode_Generator, function_exp
             array_add(*nested_generator.function_scope.is_const, false);
         }
     }
+    has_arguments_param := false;
+    for function_expression.parameters {
+        if it.kind == .IDENTIFIER {
+            if (cast(*Ast_Identifier) it).name == "arguments" has_arguments_param = true;
+        } else if it.kind == .SPREAD_ELEMENT {
+            if (cast(*Ast_Identifier) (cast(*Ast_Spread_Element) it).argument).name == "arguments" has_arguments_param = true;
+        }
+    }
+
+    if !has_arguments_param {
+        array_add(*nested_generator.locals, "arguments");
+        array_add(*nested_generator.function_scope.variables, "arguments");
+        array_add(*nested_generator.function_scope.indices, nested_generator.locals.count - 1);
+        array_add(*nested_generator.function_scope.is_const, false);
+        bytecode_function.arguments_register = cast(u16) (nested_generator.locals.count - 1);
+        nested_generator.next_register += 1;
+    }
 
     nested_generator.current_function = bytecode_function;
-
     for function_expression.body.body emit_statement(*nested_generator, it);
 
     bytecode_function.locals_count = max(bytecode_function.locals_count, nested_generator.next_register);

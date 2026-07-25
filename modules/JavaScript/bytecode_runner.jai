@@ -189,6 +189,19 @@ execute_function_internal :: (vm: *Vm, initial_function: *Bytecode_Function, ini
                 }
 
                 if function.locals_count > function.arguments_count memset(registers.data + function.arguments_count, 0, (function.locals_count - function.arguments_count) * size_of(Value));
+
+                if (function.flags & .USES_ARGUMENTS) {
+                    args_obj := allocate_object(vm);
+                    args_obj.kind = .ARRAY;
+                    if !args_obj.prototype args_obj.prototype = vm.array_prototype;
+
+                    for i: 0..call_final_arguments.count-1 {
+                        array_add(*args_obj.elements, call_final_arguments[i]);
+                        write_barrier(vm, args_obj, call_final_arguments[i]);
+                    }
+
+                    registers_data[function.arguments_register] = .{ type = .OBJECT, object = args_obj };
+                }
             }
 
             constants_data       = vm.program.constants.data;
