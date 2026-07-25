@@ -141,21 +141,6 @@ aggregate_error_constructor :: (vm: *Vm, this: Value, arguments: [] Value, is_ne
         object.prototype = vm.error_prototype;
     }
 
-    errors_arg := Value.{ type = .UNDEFINED };
-    if arguments.count > 0 {
-        errors_arg = arguments[0];
-    }
-
-    list, success := iterable_to_list(vm, errors_arg);
-    if !success return .{};
-
-    errors_array := allocate_object(vm);
-    errors_array.kind = .ARRAY;
-    for list {
-        array_add(*errors_array.elements, it);
-    }
-    set_object_property(vm, object, "errors", .{ type = .ARRAY, object = errors_array });
-
     if arguments.count > 1 && arguments[1].type != .UNDEFINED {
         val := error_to_string_js_local(vm, arguments[1]);
         if val.type == .SYMBOL {
@@ -180,6 +165,21 @@ aggregate_error_constructor :: (vm: *Vm, this: Value, arguments: [] Value, is_ne
             }
         }
     }
+
+    errors_arg := Value.{ type = .UNDEFINED };
+    if arguments.count > 0 {
+        errors_arg = arguments[0];
+    }
+
+    list, success := iterable_to_list(vm, errors_arg);
+    if !success return .{};
+
+    errors_array := allocate_object(vm);
+    errors_array.kind = .ARRAY;
+    for list {
+        array_add(*errors_array.elements, it);
+    }
+    set_object_property(vm, object, "errors", .{ type = .ARRAY, object = errors_array });
 
     stack_trace := get_stack_trace_string(vm);
     set_object_property(vm, object, "stack", Value.{ type = .STRING, s = stack_trace });
