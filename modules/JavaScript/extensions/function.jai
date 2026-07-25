@@ -15,10 +15,22 @@ init_vm_function :: (vm: *Vm) {
 
         found, index := get_global_index(vm, "Function");
         if found {
-            vm.current_realm.globals[index].type = .OBJECT;
+            vm.current_realm.globals[index].type = .NATIVE_FUNCTION;
+            vm.current_realm.globals[index].native_function = function_constructor;
             vm.current_realm.globals[index].object = function_constructor_object;
         }
     }
+}
+
+function_constructor :: (vm: *Vm, this: Value, arguments: [] Value, is_new: bool) -> Value {
+    dummy := Value.{ type = .NATIVE_FUNCTION, native_function = empty_function };
+    dummy.object = allocate_object(vm);
+    dummy.object.prototype = vm.function_prototype;
+    return dummy;
+}
+
+empty_function :: (vm: *Vm, this: Value, arguments: [] Value, is_new: bool) -> Value {
+    return .{ type = .UNDEFINED };
 }
 
 function_call :: (vm: *Vm, this: Value, arguments: [] Value, is_new: bool) -> Value {
