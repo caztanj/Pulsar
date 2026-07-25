@@ -85,6 +85,31 @@ lookup_property :: (vm: *Vm, object: *Gc_Object, name: string, imm: int = -1) ->
             if found_global && vm.current_realm.globals[global_idx].type != .UNDEFINED return true, vm.current_realm.globals[global_idx];
         }
 
+        if current.kind == .PROXY {
+            offset_h, found_h := shape_lookup_property(current.shape, "handler", -1);
+            offset_t, found_t := shape_lookup_property(current.shape, "target", -1);
+            if found_h && found_t && offset_h < current.fields.count && offset_t < current.fields.count {
+                handler := current.fields[offset_h];
+                target  := current.fields[offset_t];
+
+                if handler.type == .OBJECT {
+                    found_get, get_val := lookup_property(vm, handler.object, "get");
+                    if found_get && (get_val.type == .FUNCTION || get_val.type == .NATIVE_FUNCTION) {
+                        target_arg   := target;
+                        prop_arg     := Value.{ type = .STRING, s = name };
+                        receiver_arg := Value.{ type = .OBJECT, object = object };
+                        res := call_value(vm, handler, get_val, .[target_arg, prop_arg, receiver_arg]);
+                        return true, res;
+                    }
+                }
+
+                if target.type == .OBJECT {
+                    f, v := lookup_property(vm, target.object, name);
+                    return f, v;
+                }
+            }
+        }
+
         current = current.prototype;
     }
 

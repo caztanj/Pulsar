@@ -23,12 +23,14 @@ reflect_construct :: (vm: *Vm, this: Value, arguments: [] Value, is_new: bool) -
         new_target = arguments[2];
     }
 
-    if target.type != .FUNCTION && target.type != .NATIVE_FUNCTION {
+    is_target_callable := target.type == .FUNCTION || target.type == .NATIVE_FUNCTION || (target.type == .OBJECT && target.object.kind == .PROXY);
+    if !is_target_callable {
         throw_exception(vm, "TypeError: Reflect.construct requires target to be a function");
         return .{};
     }
 
-    if new_target.type != .FUNCTION && new_target.type != .NATIVE_FUNCTION {
+    is_new_target_callable := new_target.type == .FUNCTION || new_target.type == .NATIVE_FUNCTION || (new_target.type == .OBJECT && new_target.object.kind == .PROXY);
+    if !is_new_target_callable {
         throw_exception(vm, "TypeError: Reflect.construct requires newTarget to be a function");
         return .{};
     }
@@ -54,5 +56,15 @@ reflect_construct :: (vm: *Vm, this: Value, arguments: [] Value, is_new: bool) -
         }
     }
 
-    return call_value(vm, .{}, target, extracted_args, true);
+    result := call_value(vm, .{}, target, extracted_args, true);
+
+    if result.type == .OBJECT && new_target.type == .OBJECT {
+        found_proto, proto_val := lookup_property(vm, new_target.object, "prototype");
+        if found_proto && (proto_val.type == .OBJECT || proto_val.type == .ARRAY) {
+            result.object.prototype = proto_val.object;
+            write_barrier_object(vm, result.object, proto_val.object);
+        }
+    }
+
+    return result;
 }

@@ -118,6 +118,7 @@ Permission :: enum_flags {
 #load "extensions/symbol.jai";
 #load "extensions/function.jai";
 #load "extensions/reflect.jai";
+#load "extensions/proxy.jai";
 
 #scope_module
 

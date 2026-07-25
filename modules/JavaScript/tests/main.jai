@@ -402,6 +402,7 @@ has_error := false;
 #load "extensions/timer.jai";
 #load "extensions/regexp.jai";
 #load "extensions/reflect.jai";
+#load "extensions/proxy.jai";
 
 #import "Basic" () (MEMORY_DEBUGGER = DEBUG_MEMORY, TEMP_ALLOCATOR_OVERWRITE_MEMORY = false);
 #import "File";

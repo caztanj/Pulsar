@@ -490,6 +490,7 @@ Gc_Object_Kind :: enum u8 {
     GENERATOR;
     ASYNC_EXECUTION;
     GLOBAL_PROXY;
+    PROXY;
     MAP;
     SET;
     DATE;
