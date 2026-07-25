@@ -34,6 +34,15 @@ jai first.jai - release
 jai first.jai - test262
 ```
 
+## Test 262 Coverage
+
+| Status | Count | Percentage |
+|---|---|---|
+| Passed | 10147 | 18% |
+| Failed | 43413 | 81% |
+| Skipped | 14 | 0% |
+| **Total** | **53574** | **100%** |
+
 ## Modules
 
 While building this JavaScript environment, we also developed several independent modules. Each module can be used standalone from this project and is easily embeddable into other Jai projects.

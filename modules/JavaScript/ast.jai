@@ -1276,6 +1276,19 @@ parse_primary :: (parser: *Parser) -> *Ast_Node {
         advance(parser);
 
         skip_whitespace_and_comments(parser);
+
+        next_token := peek(parser);
+        if next_token.type == .IDENTIFIER && next_token.text == "function" {
+            old_curr := parser.current;
+            func_expr := parse_function_expression(parser);
+            skip_whitespace_and_comments(parser);
+            if check(parser, ")") {
+                consume(parser, ")");
+                return xx func_expr;
+            }
+            parser.current = old_curr;
+        }
+
         expression := parse_expression(parser);
 
         consume(parser, ")");

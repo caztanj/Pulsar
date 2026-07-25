@@ -16,7 +16,6 @@ run :: (code: string, optimize := true, permissions: Permission = 0, silence_con
             throw_exception(vm, Value.{ type = .STRING, s = allocate_string(vm, error_message) });
             return vm;
         }
-
         ast = build_ast(code, tokens);
         if ast.has_error {
             push_allocator(original_allocator);

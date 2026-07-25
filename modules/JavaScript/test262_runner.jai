@@ -30,11 +30,20 @@ main :: () {
     test_dir := "modules/JavaScript/test262/test";
     visit_files(test_dir, true, null, visitor, visit_files=true, visit_directories=true);
 
+    for file: test_files {
+        run_test(file.full_name, file.short_name);
+    }
+
     print("\n--- Test Summary ---\n");
     print("Passed:  %\n", total_passed);
     print("Failed:  %\n", total_failed);
     print("Skipped: %\n", total_skipped);
-    print("Total:   %\n", total_passed + total_failed + total_skipped);
+    total := total_passed + total_failed + total_skipped;
+    print("Total:   %\n", total);
+
+    if full_run && filter_global == "" {
+        update_readme_coverage(total_passed, total_failed, total_skipped, total);
+    }
 
     if total_failed > 0 {
         exit(1);
@@ -49,6 +58,9 @@ full_run: bool;
 total_passed: int;
 total_failed: int;
 total_skipped: int;
+
+Test_File :: struct { full_name: string; short_name: string; }
+test_files: [..] Test_File;
 
 SKIPPED_TESTS :: string.[
     "built-ins/AbstractModuleSource",
@@ -87,10 +99,18 @@ visitor :: (info: *File_Visit_Info, user_data: *void) {
         }
     }
 
-    test_code, success := read_entire_file(info.full_name);
+    test_file := Test_File.{ copy_string(info.full_name), copy_string(info.short_name) };
+    array_add(*test_files, test_file);
+}
+
+run_test :: (full_name: string, short_name: string) {
+    state := get_temporary_storage_mark();
+    defer set_temporary_storage_mark(state);
+
+    test_code, success := read_entire_file(full_name);
     defer free(test_code);
     if !success {
-        print("Failed to read test: %\n", info.full_name);
+        print("Failed to read test: %\n", full_name);
         exit(1);
     }
 
@@ -132,7 +152,7 @@ visitor :: (info: *File_Visit_Info, user_data: *void) {
     defer free(includes_string);
     full_code := tprint("%\n%\n%\n", harness_code_global, includes_string, test_code);
 
-    print("RUN: %\n", info.full_name);
+    print("RUN: %\n", full_name);
     vm := run(full_code, permissions = 0, silence_console_output = true);
     defer {
         if vm.program deinit(vm.program);
@@ -141,7 +161,7 @@ visitor :: (info: *File_Visit_Info, user_data: *void) {
 
     if expected_to_fail {
         if !vm.has_exception {
-            print("FAIL: % (Expected an error but got none)\n", info.full_name);
+            print("FAIL: % (Expected an error but got none)\n", full_name);
             write_entire_file("debug_test262.js", full_code);
             total_failed += 1;
             if !full_run exit(1);
@@ -149,7 +169,7 @@ visitor :: (info: *File_Visit_Info, user_data: *void) {
         }
     } else {
         if vm.has_exception {
-            print("FAIL: %\n", info.full_name);
+            print("FAIL: %\n", full_name);
             write_entire_file("debug_test262.js", full_code);
 
             name := "Error";
@@ -174,8 +194,52 @@ visitor :: (info: *File_Visit_Info, user_data: *void) {
         }
     }
 
-    print("PASS: %\n", info.short_name);
+    print("PASS: %\n", short_name);
     total_passed += 1;
+}
+
+update_readme_coverage :: (passed: int, failed: int, skipped: int, total: int) {
+    readme, success := read_entire_file("README.md");
+    if !success {
+        print("Failed to read README.md to update coverage.\n");
+        return;
+    }
+
+    start_index := find_index_from_left(readme, "## Test 262 Coverage");
+    if start_index == -1 {
+        print("Could not find '## Test 262 Coverage' in README.md\n");
+        return;
+    }
+
+    end_index := find_index_from_left(readme, "## ", start_index + 1);
+    if end_index == -1 {
+        end_index = readme.count;
+    }
+
+    passed_pct  := ifx total > 0 then (passed * 100) / total else 0;
+    failed_pct  := ifx total > 0 then (failed * 100) / total else 0;
+    skipped_pct := ifx total > 0 then (skipped * 100) / total else 0;
+
+    table := tprint("## Test 262 Coverage\n\n| Status | Count | Percentage |\n|---|---|---|\n| Passed | % | %% |\n| Failed | % | %% |\n| Skipped | % | %% |\n| **Total** | **%** | **100%** |\n\n",
+        passed, passed_pct, "%",
+        failed, failed_pct, "%",
+        skipped, skipped_pct, "%",
+        total, "%");
+
+    part1 := readme;
+    part1.count = start_index;
+
+    part2 := readme;
+    part2.data += end_index;
+    part2.count -= end_index;
+
+    builder: String_Builder;
+    append(*builder, part1);
+    append(*builder, table);
+    append(*builder, part2);
+
+    new_readme := builder_to_string(*builder);
+    write_entire_file("README.md", new_readme);
 }
 
 #import "Basic" () (MEMORY_DEBUGGER = DEBUG_MEMORY, TEMP_ALLOCATOR_OVERWRITE_MEMORY = false);
