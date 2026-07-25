@@ -94,12 +94,10 @@ error_constructor :: (vm: *Vm, this: Value, arguments: [] Value, is_new: bool, n
     }
 
     if arguments.count > 0 && arguments[0].type != .UNDEFINED {
-        val := arguments[0];
-        if val.type == .OBJECT || val.type == .ARRAY || val.type == .FUNCTION {
-            found_to_string, to_string_val := lookup_property(vm, val.object, "toString");
-            if found_to_string && (to_string_val.type == .FUNCTION || to_string_val.type == .NATIVE_FUNCTION) {
-                val = call_value(vm, val, to_string_val, .[]);
-            }
+        val := error_to_string_js_local(vm, arguments[0]);
+        if val.type == .SYMBOL {
+            throw_exception(vm, "TypeError: Cannot convert a Symbol value to a string");
+            return .{};
         }
         message := value_to_string(vm, val);
         set_object_property(vm, object, "message", Value.{ type = .STRING, s = message });
@@ -159,12 +157,10 @@ aggregate_error_constructor :: (vm: *Vm, this: Value, arguments: [] Value, is_ne
     set_object_property(vm, object, "errors", .{ type = .ARRAY, object = errors_array });
 
     if arguments.count > 1 && arguments[1].type != .UNDEFINED {
-        val := arguments[1];
-        if val.type == .OBJECT || val.type == .ARRAY || val.type == .FUNCTION {
-            found_to_string, to_string_val := lookup_property(vm, val.object, "toString");
-            if found_to_string && (to_string_val.type == .FUNCTION || to_string_val.type == .NATIVE_FUNCTION) {
-                val = call_value(vm, val, to_string_val, .[]);
-            }
+        val := error_to_string_js_local(vm, arguments[1]);
+        if val.type == .SYMBOL {
+            throw_exception(vm, "TypeError: Cannot convert a Symbol value to a string");
+            return .{};
         }
         message := value_to_string(vm, val);
         set_object_property(vm, object, "message", Value.{ type = .STRING, s = message });
@@ -276,4 +272,40 @@ iterable_to_list :: (vm: *Vm, iterable: Value) -> [..] Value, bool {
     }
 
     return result, true;
+}
+
+error_to_string_js_local :: (vm: *Vm, input: Value) -> Value {
+    if input.type != .OBJECT && input.type != .ARRAY && input.type != .FUNCTION && input.type != .NATIVE_FUNCTION return input;
+
+    found_sym, sym_index := get_global_index(vm, "Symbol");
+    if found_sym {
+        found_to_prim, to_prim_sym_val := lookup_property(vm, vm.current_realm.globals[sym_index].object, "toPrimitive");
+        if found_to_prim && to_prim_sym_val.type == .SYMBOL {
+            symbol_key := get_symbol_string_key(*to_prim_sym_val);
+            found_method, method_val := lookup_property(vm, input.object, symbol_key);
+            if found_method && (method_val.type == .FUNCTION || method_val.type == .NATIVE_FUNCTION) {
+                hint := Value.{ type = .STRING, s = "string" };
+                res := call_value(vm, input, method_val, .[hint]);
+                return res;
+            } else if found_method && method_val.type != .UNDEFINED && method_val.type != .NULL {
+                throw_exception(vm, "TypeError: Symbol.toPrimitive is not a function");
+                return .{};
+            }
+        }
+    }
+
+    found_to_string, to_string_val := lookup_property(vm, input.object, "toString");
+    if found_to_string && (to_string_val.type == .FUNCTION || to_string_val.type == .NATIVE_FUNCTION) {
+        res := call_value(vm, input, to_string_val, .[]);
+        if res.type != .OBJECT && res.type != .ARRAY && res.type != .FUNCTION && res.type != .NATIVE_FUNCTION return res;
+    }
+
+    found_value_of, value_of_val := lookup_property(vm, input.object, "valueOf");
+    if found_value_of && (value_of_val.type == .FUNCTION || value_of_val.type == .NATIVE_FUNCTION) {
+        res := call_value(vm, input, value_of_val, .[]);
+        if res.type != .OBJECT && res.type != .ARRAY && res.type != .FUNCTION && res.type != .NATIVE_FUNCTION return res;
+    }
+
+    throw_exception(vm, "TypeError: Cannot convert object to primitive value");
+    return .{};
 }

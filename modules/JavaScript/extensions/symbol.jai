@@ -32,6 +32,12 @@ init_vm_symbol :: (vm: *Vm) {
         iterator_symbol.primitive_value = .{ type = .STRING, s = "Symbol.iterator" };
         iterator_symbol_value := Value.{ type = .SYMBOL, object = iterator_symbol, symbol_object = iterator_symbol };
         add_static_property(vm, symbol_object, "iterator", iterator_symbol_value);
+
+        to_primitive_symbol := allocate_object(vm);
+        to_primitive_symbol.kind = .SYMBOL;
+        to_primitive_symbol.primitive_value = .{ type = .STRING, s = "Symbol.toPrimitive" };
+        to_primitive_symbol_value := Value.{ type = .SYMBOL, object = to_primitive_symbol, symbol_object = to_primitive_symbol };
+        add_static_property(vm, symbol_object, "toPrimitive", to_primitive_symbol_value);
     }
 }
 
