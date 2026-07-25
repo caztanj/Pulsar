@@ -103,6 +103,25 @@ mark_roots :: (vm: *Vm, visited_environments: *Table(*Environment, bool), $is_mi
     }
 
     for vm.builtin_prototypes mark_object(vm, it, visited_environments, is_minor);
+
+    if !is_minor {
+        vm.root_shape.marked = true;
+
+        if vm.program {
+            for func: vm.program.functions {
+                for *instruction: func.instructions {
+                    for i: 0..instruction.inline_cache.count - 1 {
+                        if instruction.inline_cache.shapes[i] {
+                            instruction.inline_cache.shapes[i].marked = true;
+                        }
+                        if instruction.inline_cache.target_shapes[i] {
+                            instruction.inline_cache.target_shapes[i].marked = true;
+                        }
+                    }
+                }
+            }
+        }
+    }
 }
 
 mark_object :: (vm: *Vm, object: *Gc_Object, visited_environments: *Table(*Environment, bool), $is_minor: bool = false) {

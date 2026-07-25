@@ -179,8 +179,12 @@ set_is_subset_of :: (vm: *Vm, this: Value, arguments: [] Value, is_new: bool) ->
         other_has = get_property_or_undefined(vm, other.object, "has");
     }
 
-    for this.object.map_entries {
-        call_args: [1] Value = .[ it ];
+    initial_size := this.object.map_entries.count;
+    i := 0;
+    while i < initial_size && i < this.object.map_entries.count {
+        element := this.object.map_entries[i];
+
+        call_args: [1] Value = .[ element ];
         result := call_value(vm, other, other_has, call_args);
 
         if vm.has_exception return .{};
@@ -199,6 +203,8 @@ set_is_subset_of :: (vm: *Vm, this: Value, arguments: [] Value, is_new: bool) ->
         if !is_true {
             return .{ type = .BOOLEAN, boolean = false };
         }
+
+        i += 1;
     }
 
     return .{ type = .BOOLEAN, boolean = true };
