@@ -93,12 +93,17 @@ error_constructor :: (vm: *Vm, this: Value, arguments: [] Value, is_new: bool, n
         object.prototype = vm.error_prototype;
     }
 
-    message := "";
-    if arguments.count > 0 {
-        message = value_to_string(vm, arguments[0]);
+    if arguments.count > 0 && arguments[0].type != .UNDEFINED {
+        val := arguments[0];
+        if val.type == .OBJECT || val.type == .ARRAY || val.type == .FUNCTION {
+            found_to_string, to_string_val := lookup_property(vm, val.object, "toString");
+            if found_to_string && (to_string_val.type == .FUNCTION || to_string_val.type == .NATIVE_FUNCTION) {
+                val = call_value(vm, val, to_string_val, .[]);
+            }
+        }
+        message := value_to_string(vm, val);
+        set_object_property(vm, object, "message", Value.{ type = .STRING, s = message });
     }
-
-    set_object_property(vm, object, "message", Value.{ type = .STRING, s = message });
 
     stack_trace := get_stack_trace_string(vm);
     set_object_property(vm, object, "stack", Value.{ type = .STRING, s = stack_trace });
@@ -153,11 +158,17 @@ aggregate_error_constructor :: (vm: *Vm, this: Value, arguments: [] Value, is_ne
     }
     set_object_property(vm, object, "errors", .{ type = .ARRAY, object = errors_array });
 
-    message := "";
     if arguments.count > 1 && arguments[1].type != .UNDEFINED {
-        message = value_to_string(vm, arguments[1]);
+        val := arguments[1];
+        if val.type == .OBJECT || val.type == .ARRAY || val.type == .FUNCTION {
+            found_to_string, to_string_val := lookup_property(vm, val.object, "toString");
+            if found_to_string && (to_string_val.type == .FUNCTION || to_string_val.type == .NATIVE_FUNCTION) {
+                val = call_value(vm, val, to_string_val, .[]);
+            }
+        }
+        message := value_to_string(vm, val);
+        set_object_property(vm, object, "message", Value.{ type = .STRING, s = message });
     }
-    set_object_property(vm, object, "message", Value.{ type = .STRING, s = message });
 
     if arguments.count > 2 {
         options := arguments[2];
