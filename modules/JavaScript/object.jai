@@ -152,6 +152,15 @@ set_object_property :: (vm: *Vm, object: *Gc_Object, name: string, value: Value,
             }
         }
     }
+
+    if object.kind == .GLOBAL_PROXY {
+        found, index := get_global_index(vm, name);
+        if found {
+            vm.current_realm.globals[index] = value;
+            return;
+        }
+    }
+
     if name == "length" || name == "name" {
         current := object;
         is_func := false;

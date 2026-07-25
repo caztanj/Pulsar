@@ -325,6 +325,12 @@ object_get_own_property_descriptor :: (vm: *Vm, this: Value, arguments: [] Value
         } else if is_typed_array(object.kind) && name == "length" {
             has_property = true;
             property_value = .{ type = .NUMBER, number = cast(float64) get_typed_array_length(object) };
+        } else if object.kind == .GLOBAL_PROXY {
+            found_global, global_idx := get_global_index(vm, name);
+            if found_global && vm.current_realm.globals[global_idx].type != .UNDEFINED {
+                has_property = true;
+                property_value = vm.current_realm.globals[global_idx];
+            }
         }
     }
 
@@ -335,6 +341,9 @@ object_get_own_property_descriptor :: (vm: *Vm, this: Value, arguments: [] Value
         configurable := true;
         if name == "cause" || name == "message" || name == "name" || name == "length" || name == "prototype" {
             enumerable = false;
+        }
+        if object.kind == .GLOBAL_PROXY {
+            enumerable = false; // Built-ins are non-enumerable on global object
         }
 
         if (object.kind == .ARRAY || is_typed_array(object.kind)) && name == "length" {
@@ -416,6 +425,13 @@ object_has_own_property :: (vm: *Vm, this: Value, arguments: [] Value, is_new: b
     if object.kind == .ARRAY && name == "length" return .{ type = .BOOLEAN, boolean = true };
     if is_typed_array(object.kind) && name == "length" return .{ type = .BOOLEAN, boolean = true };
 
+    if object.kind == .GLOBAL_PROXY {
+        found_global, global_idx := get_global_index(vm, name);
+        if found_global && vm.current_realm.globals[global_idx].type != .UNDEFINED {
+            return .{ type = .BOOLEAN, boolean = true };
+        }
+    }
+
     return .{ type = .BOOLEAN, boolean = false };
 }
 
@@ -443,10 +459,17 @@ object_property_is_enumerable :: (vm: *Vm, this: Value, arguments: [] Value, is_
         }
     }
 
+    if obj.kind == .GLOBAL_PROXY {
+        found_global, global_idx := get_global_index(vm, name);
+        if found_global && vm.current_realm.globals[global_idx].type != .UNDEFINED {
+            found = true;
+        }
+    }
+
     if !found return .{ type = .BOOLEAN, boolean = false };
 
     enumerable := true;
-    if name == "cause" || name == "message" || name == "name" || name == "length" || name == "prototype" {
+    if name == "cause" || name == "message" || name == "name" || name == "length" || name == "prototype" || obj.kind == .GLOBAL_PROXY {
         enumerable = false;
     }
 

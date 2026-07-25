@@ -2886,6 +2886,14 @@ Promise_Status :: enum {
 }
 
 delete_property :: (vm: *Vm, object: *Gc_Object, name: string) -> bool {
+    if object.kind == .GLOBAL_PROXY {
+        found, index := get_global_index(vm, name);
+        if found {
+            vm.current_realm.globals[index] = .{ type = .UNDEFINED };
+            return true;
+        }
+    }
+
     if object.shape {
         offset_pointer := table_find_pointer(*object.shape.property_offsets, name);
         if offset_pointer && offset_pointer.* < object.fields.count {
