@@ -130,9 +130,13 @@ intl_collator :: (vm: *Vm, this: Value, arguments: [] Value, is_new: bool) -> Va
             if argument.object.elements.count > 0 {
                 locale = argument.object.elements[0];
             }
-        } else {
+        } else if argument.type != .UNDEFINED {
             locale = argument;
         }
+    }
+
+    if locale.type == .UNDEFINED {
+        locale = .{ type = .STRING, s = "en-US" };
     }
 
     add_static_method(vm, object, "resolvedOptions", intl_resolved_options);
