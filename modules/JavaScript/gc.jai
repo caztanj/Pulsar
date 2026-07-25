@@ -59,11 +59,12 @@ allocate_object :: (vm: *Vm) -> *Gc_Object {
         object.fields.count                 = 0;
         object.elements.count               = 0;
         object.kind                         = .PLAIN;
-        object.realm                        = null;
+        object.realm                        = vm.current_realm;
         object.shape                        = vm.root_shape;
         object.primitive_value              = .{};
     } else {
         object       = New(Gc_Object);
+        object.realm = vm.current_realm;
         object.shape = vm.root_shape;
     }
 

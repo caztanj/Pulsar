@@ -132,13 +132,32 @@ error_constructor_AggregateError :: (vm: *Vm, this: Value, arguments: [] Value, 
 aggregate_error_constructor :: (vm: *Vm, this: Value, arguments: [] Value, is_new: bool) -> Value {
     object := allocate_object(vm);
 
-    found_property, index := get_global_index(vm, "AggregateError");
-    if found_property {
-        found_prototype, prototype_value := lookup_property(vm, vm.current_realm.globals[index].object, "prototype");
-        if prototype_value.type == .OBJECT object.prototype = prototype_value.object;
-        else object.prototype = vm.error_prototype;
-    } else {
-        object.prototype = vm.error_prototype;
+    has_custom_proto := false;
+    if is_new && (this.type == .FUNCTION || this.type == .NATIVE_FUNCTION || (this.type == .OBJECT && this.object.kind == .PROXY)) {
+        found_proto, proto_val := lookup_property(vm, this.object, "prototype");
+        if found_proto && (proto_val.type == .OBJECT || proto_val.type == .ARRAY) {
+            object.prototype = proto_val.object;
+            has_custom_proto = true;
+        }
+    }
+
+    if !has_custom_proto {
+        realm := vm.current_realm;
+        if is_new && (this.type == .FUNCTION || this.type == .NATIVE_FUNCTION) {
+            if this.object && this.object.realm realm = this.object.realm;
+        }
+
+        found_property, index := get_global_index(vm, "AggregateError");
+        if found_property {
+            found_prototype, prototype_value := lookup_property(vm, realm.globals[index].object, "prototype");
+            if prototype_value.type == .OBJECT || prototype_value.type == .ARRAY {
+                object.prototype = prototype_value.object;
+            } else {
+                object.prototype = vm.error_prototype;
+            }
+        } else {
+            object.prototype = vm.error_prototype;
+        }
     }
 
     if arguments.count > 1 && arguments[1].type != .UNDEFINED {

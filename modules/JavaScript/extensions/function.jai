@@ -24,8 +24,30 @@ init_vm_function :: (vm: *Vm) {
 
 function_constructor :: (vm: *Vm, this: Value, arguments: [] Value, is_new: bool) -> Value {
     dummy := Value.{ type = .NATIVE_FUNCTION, native_function = empty_function };
-    dummy.object = allocate_object(vm);
-    dummy.object.prototype = vm.function_prototype;
+
+    if is_new && this.type == .OBJECT {
+        dummy.object = this.object;
+    } else {
+        dummy.object = allocate_object(vm);
+    }
+
+    if vm.current_native_callee.type == .NATIVE_FUNCTION && vm.current_native_callee.object {
+        dummy.object.realm = vm.current_native_callee.object.realm;
+
+        if !is_new || this.type != .OBJECT {
+            found, prototype_value := lookup_property(vm, vm.current_native_callee.object, "prototype");
+            if found && (prototype_value.type == .OBJECT || prototype_value.type == .ARRAY) {
+                dummy.object.prototype = prototype_value.object;
+            } else {
+                dummy.object.prototype = vm.function_prototype;
+            }
+        }
+    } else {
+        if !is_new || this.type != .OBJECT {
+            dummy.object.prototype = vm.function_prototype;
+        }
+    }
+
     return dummy;
 }
 

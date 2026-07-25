@@ -56,15 +56,7 @@ reflect_construct :: (vm: *Vm, this: Value, arguments: [] Value, is_new: bool) -
         }
     }
 
-    result := call_value(vm, .{}, target, extracted_args, true);
-
-    if result.type == .OBJECT && new_target.type == .OBJECT {
-        found_proto, proto_val := lookup_property(vm, new_target.object, "prototype");
-        if found_proto && (proto_val.type == .OBJECT || proto_val.type == .ARRAY) {
-            result.object.prototype = proto_val.object;
-            write_barrier_object(vm, result.object, proto_val.object);
-        }
-    }
+    result := call_value(vm, new_target, target, extracted_args, true);
 
     return result;
 }

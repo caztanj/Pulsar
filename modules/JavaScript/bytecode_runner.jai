@@ -1927,7 +1927,7 @@ call_value :: inline (vm: *Vm, this: Value, callee: Value, arguments: [] Value, 
         result := execute_function(vm, callee.function.function, final_arguments, effective_this, null, callee.function.environment);
 
         if is_new {
-            if result.type == .OBJECT || result.type == .ARRAY return result;
+            if result.type == .OBJECT || result.type == .ARRAY || result.type == .FUNCTION || result.type == .NATIVE_FUNCTION return result;
             return effective_this;
         }
 
@@ -1959,7 +1959,7 @@ call_value :: inline (vm: *Vm, this: Value, callee: Value, arguments: [] Value, 
         result := callee.native_function(vm, effective_this, final_arguments, is_new);
 
         if is_new {
-            if result.type == .OBJECT || result.type == .ARRAY return result;
+            if result.type == .OBJECT || result.type == .ARRAY || result.type == .FUNCTION || result.type == .NATIVE_FUNCTION return result;
             return effective_this;
         }
 
