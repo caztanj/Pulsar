@@ -53,6 +53,11 @@ intl_supported_locales_of :: (vm: *Vm, this: Value, arguments: [] Value, is_new:
             if arg.s != "zxx" array_add(*array.elements, arg);
         } else if arg.type == .ARRAY && arg.object {
             for element: arg.object.elements {
+                if element.type != .STRING && element.type != .OBJECT && element.type != .ARRAY {
+                    throw_exception(vm, "TypeError: Locale list elements must be strings or objects");
+                    return .{ type = .UNDEFINED };
+                }
+
                 if element.type == .STRING && element.s == "zxx" continue;
 
                 is_duplicate := false;
