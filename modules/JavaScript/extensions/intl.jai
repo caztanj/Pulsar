@@ -84,6 +84,34 @@ intl_supported_locales_of :: (vm: *Vm, this: Value, arguments: [] Value, is_new:
         }
     }
 
+    if arguments.count > 1 {
+        options := arguments[1];
+        if options.type == .OBJECT || options.type == .ARRAY {
+            if options.object {
+                found, matcher_val := lookup_property(vm, options.object, "localeMatcher");
+                if found && matcher_val.type != .UNDEFINED {
+                    matcher_str := "";
+                    if matcher_val.type == .OBJECT || matcher_val.type == .ARRAY {
+                        found_to_string, to_string_val := lookup_property(vm, matcher_val.object, "toString");
+                        if found_to_string && (to_string_val.type == .FUNCTION || to_string_val.type == .NATIVE_FUNCTION) {
+                            res := call_value(vm, matcher_val, to_string_val, .[]);
+                            matcher_str = value_to_string(vm, res);
+                        } else {
+                            matcher_str = value_to_string(vm, matcher_val);
+                        }
+                    } else {
+                        matcher_str = value_to_string(vm, matcher_val);
+                    }
+
+                    if matcher_str != "lookup" && matcher_str != "best fit" {
+                        throw_exception(vm, sprint("RangeError: Invalid localeMatcher value %", matcher_str));
+                        return .{ type = .UNDEFINED };
+                    }
+                }
+            }
+        }
+    }
+
     return .{ type = .OBJECT, object = array };
 }
 
