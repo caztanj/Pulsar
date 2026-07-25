@@ -127,6 +127,23 @@ set_object_property :: (vm: *Vm, object: *Gc_Object, name: string, value: Value,
             }
         }
     }
+    if name == "length" || name == "name" {
+        current := object;
+        is_func := false;
+        while current {
+            if current == vm.function_prototype {
+                is_func = true;
+                break;
+            }
+            current = current.prototype;
+        }
+        if is_func {
+            if object.shape {
+                offset, found := shape_lookup_property(object.shape, name, -1);
+                if found return;
+            }
+        }
+    }
 
     if !ends_with(name, "__getter__") && !ends_with(name, "__setter__") {
         setter_name := tprint("%__setter__", name);

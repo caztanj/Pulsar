@@ -296,7 +296,7 @@ object_get_own_property_descriptor :: (vm: *Vm, this: Value, arguments: [] Value
 
     target_value := arguments[0];
 
-    if (target_value.type != .OBJECT && target_value.type != .ARRAY) || !target_value.object return .{ type = .UNDEFINED };
+    if (target_value.type != .OBJECT && target_value.type != .ARRAY && target_value.type != .FUNCTION && target_value.type != .NATIVE_FUNCTION) || !target_value.object return .{ type = .UNDEFINED };
 
     name   := value_to_string(vm, arguments[1]);
     object := target_value.object;
@@ -341,8 +341,13 @@ object_get_own_property_descriptor :: (vm: *Vm, this: Value, arguments: [] Value
             configurable = false;
         }
 
+        writable := true;
+        if (target_value.type == .FUNCTION || target_value.type == .NATIVE_FUNCTION) && (name == "length" || name == "name") {
+            writable = false;
+        }
+
         set_object_property(vm, descriptor, "value",        property_value);
-        set_object_property(vm, descriptor, "writable",     .{ type = .BOOLEAN, boolean = true });
+        set_object_property(vm, descriptor, "writable",     .{ type = .BOOLEAN, boolean = writable });
         set_object_property(vm, descriptor, "enumerable",   .{ type = .BOOLEAN, boolean = enumerable });
         set_object_property(vm, descriptor, "configurable", .{ type = .BOOLEAN, boolean = configurable });
 
@@ -390,7 +395,7 @@ object_is_extensible :: (vm: *Vm, this: Value, arguments: [] Value, is_new: bool
 }
 
 object_has_own_property :: (vm: *Vm, this: Value, arguments: [] Value, is_new: bool) -> Value {
-    if (this.type != .OBJECT && this.type != .ARRAY) || !this.object return .{ type = .BOOLEAN, boolean = false };
+    if (this.type != .OBJECT && this.type != .ARRAY && this.type != .FUNCTION && this.type != .NATIVE_FUNCTION) || !this.object return .{ type = .BOOLEAN, boolean = false };
     if arguments.count == 0 return .{ type = .BOOLEAN, boolean = false };
 
     name   := value_to_string(vm, arguments[0]);
@@ -408,6 +413,8 @@ object_has_own_property :: (vm: *Vm, this: Value, arguments: [] Value, is_new: b
     if success && parsed_index >= 0 && parsed_index < object.elements.count && object.elements[parsed_index].type != .EMPTY {
         return .{ type = .BOOLEAN, boolean = true };
     }
+    if object.kind == .ARRAY && name == "length" return .{ type = .BOOLEAN, boolean = true };
+    if is_typed_array(object.kind) && name == "length" return .{ type = .BOOLEAN, boolean = true };
 
     return .{ type = .BOOLEAN, boolean = false };
 }

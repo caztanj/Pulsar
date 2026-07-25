@@ -37,6 +37,10 @@ init_vm_error :: (vm: *Vm) {
             name_value := Value.{ type = .STRING, s = it };
             set_object_property(vm, error_constructor_object, "name", name_value);
 
+            length := 1;
+            if it == "AggregateError" length = 2;
+            set_object_property(vm, error_constructor_object, "length", Value.{ type = .NUMBER, number = cast(float64) length });
+
             vm.current_realm.globals[index].object = error_constructor_object;
 
             specific_error_prototype := vm.error_prototype;
@@ -49,7 +53,16 @@ init_vm_error :: (vm: *Vm) {
                 set_object_property(vm, specific_error_prototype, "message", Value.{ type = .STRING, s = "" });
             }
 
-            error_constructor_object.prototype = vm.object_prototype;
+            if it == "Error" {
+                error_constructor_object.prototype = vm.function_prototype;
+            } else {
+                found_error, error_index := get_global_index(vm, "Error");
+                if found_error {
+                    error_constructor_object.prototype = vm.current_realm.globals[error_index].object;
+                } else {
+                    error_constructor_object.prototype = vm.function_prototype;
+                }
+            }
 
             prototype_value := Value.{
                 type   = .OBJECT,
