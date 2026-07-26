@@ -673,7 +673,7 @@ execute_function_internal :: (vm: *Vm, initial_function: *Bytecode_Function, ini
                             symbol_name := get_symbol_string_key(property);
                             registers_data[instruction.dest] = get_property_or_undefined(vm, object, symbol_name);
                         } else {
-                            registers_data[instruction.dest] = .{ type = .UNDEFINED };
+                            registers_data[instruction.dest] = get_property_or_undefined(vm, object, value_to_string(vm, property.*));
                         }
                     } else if value.type == .STRING {
                         if property.type == .NUMBER {
@@ -745,8 +745,10 @@ execute_function_internal :: (vm: *Vm, initial_function: *Bytecode_Function, ini
                                     write_barrier(vm, object, value);
                                 }
                             } else {
-                                set_object_property(vm, object, value_to_string(vm, property), value);
+                                set_object_property(vm, object, value_to_string(vm, property.*), value);
                             }
+                        } else {
+                            set_object_property(vm, object, value_to_string(vm, property.*), value);
                         }
                     }
 
