@@ -673,7 +673,7 @@ execute_function_internal :: (vm: *Vm, initial_function: *Bytecode_Function, ini
                             symbol_name := get_symbol_string_key(property);
                             registers_data[instruction.dest] = get_property_or_undefined(vm, object, symbol_name);
                         } else {
-                            registers_data[instruction.dest] = get_property_or_undefined(vm, object, value_to_string(vm, property.*));
+                            registers_data[instruction.dest] = get_property_or_undefined(vm, object, abstract_to_string(vm, property.*));
                         }
                     } else if value.type == .STRING {
                         if property.type == .NUMBER {
@@ -745,10 +745,10 @@ execute_function_internal :: (vm: *Vm, initial_function: *Bytecode_Function, ini
                                     write_barrier(vm, object, value);
                                 }
                             } else {
-                                set_object_property(vm, object, value_to_string(vm, property.*), value);
+                                set_object_property(vm, object, abstract_to_string(vm, property.*), value);
                             }
                         } else {
-                            set_object_property(vm, object, value_to_string(vm, property.*), value);
+                            set_object_property(vm, object, abstract_to_string(vm, property.*), value);
                         }
                     }
 
@@ -2180,6 +2180,35 @@ value_to_number :: inline (value: Value) -> float64 {
     }
 
     return not_a_number_value;
+}
+
+abstract_to_string :: (vm: *Vm, value: Value) -> string {
+    if value.type == .OBJECT || value.type == .ARRAY || value.type == .GENERATOR || value.type == .FUNCTION || value.type == .NATIVE_FUNCTION {
+        current_obj := ifx value.type == .GENERATOR value.generator_object else value.object;
+
+        if current_obj {
+            found_to_string, to_string_val := lookup_property(vm, current_obj, "toString");
+            if found_to_string && (to_string_val.type == .FUNCTION || to_string_val.type == .NATIVE_FUNCTION) {
+                res := call_value(vm, value, to_string_val, .[]);
+                if res.type != .OBJECT && res.type != .ARRAY && res.type != .GENERATOR && res.type != .FUNCTION && res.type != .NATIVE_FUNCTION {
+                    return value_to_string(vm, res);
+                }
+            }
+
+            found_value_of, value_of_val := lookup_property(vm, current_obj, "valueOf");
+            if found_value_of && (value_of_val.type == .FUNCTION || value_of_val.type == .NATIVE_FUNCTION) {
+                res := call_value(vm, value, value_of_val, .[]);
+                if res.type != .OBJECT && res.type != .ARRAY && res.type != .GENERATOR && res.type != .FUNCTION && res.type != .NATIVE_FUNCTION {
+                    return value_to_string(vm, res);
+                }
+            }
+
+            throw_exception(vm, "TypeError: Cannot convert object to primitive value");
+            return "";
+        }
+    }
+
+    return value_to_string(vm, value);
 }
 
 value_to_string :: (vm: *Vm, value: Value) -> string {
