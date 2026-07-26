@@ -3,6 +3,7 @@ init_vm_array :: (vm: *Vm) {
 
     if found {
         array_object := allocate_object(vm);
+        array_object.prototype = vm.function_prototype;
 
         vm.current_realm.globals[array_index].type            = .NATIVE_FUNCTION;
         vm.current_realm.globals[array_index].native_function = array_constructor_impl;
@@ -55,6 +56,9 @@ init_vm_array :: (vm: *Vm) {
 
         add_static_property(vm, array_object,    "prototype",   prototype_value);
         add_static_property(vm, array_prototype, "constructor", vm.current_realm.globals[array_index]);
+
+        set_object_property(vm, array_object, "length", .{ type = .NUMBER, number = 1.0 });
+        set_object_property(vm, array_object, "name",   .{ type = .STRING, s = "Array" });
     }
 }
 
