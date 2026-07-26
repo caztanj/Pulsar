@@ -13,7 +13,10 @@ init_vm_data_view :: (vm: *Vm) {
 
         data_view_object := allocate_object(vm);
         vm.current_realm.globals[index].object = data_view_object;
-        data_view_object.prototype = vm.data_view_prototype;
+        data_view_object.prototype = vm.function_prototype;
+
+        set_object_property(vm, data_view_object, "name",   Value.{ type = .STRING, s = "DataView" });
+        set_object_property(vm, data_view_object, "length", Value.{ type = .NUMBER, number = 1 });
 
         prototype_value := Value.{
             type   = .OBJECT,

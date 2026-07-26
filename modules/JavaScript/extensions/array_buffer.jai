@@ -13,7 +13,10 @@ init_vm_array_buffer :: (vm: *Vm) {
 
         array_buffer_object := allocate_object(vm);
         vm.current_realm.globals[index].object = array_buffer_object;
-        array_buffer_object.prototype = vm.array_buffer_prototype;
+        array_buffer_object.prototype = vm.function_prototype;
+
+        set_object_property(vm, array_buffer_object, "name",   Value.{ type = .STRING, s = "ArrayBuffer" });
+        set_object_property(vm, array_buffer_object, "length", Value.{ type = .NUMBER, number = 1 });
 
         prototype_value := Value.{
             type   = .OBJECT,
