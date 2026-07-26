@@ -72,6 +72,23 @@ array_buffer_constructor :: (vm: *Vm, this: Value, arguments: [] Value, is_new: 
         }
     }
 
+    if arguments.count > 1 && arguments[1].type == .OBJECT && arguments[1].object {
+        found_max, max_val := lookup_property(vm, arguments[1].object, "maxByteLength");
+        if vm.has_exception return .{};
+
+        if found_max && max_val.type != .UNDEFINED {
+            max_len_f := value_to_number(max_val);
+            if isnan(max_len_f) || isinf(max_len_f) || max_len_f < 0 {
+                throw_exception(vm, "RangeError: Invalid maxByteLength");
+                return .{};
+            }
+            if max_len_f > 2147483647 {
+                throw_exception(vm, "RangeError: ArrayBuffer maxByteLength allocation limit exceeded");
+                return .{};
+            }
+        }
+    }
+
     data_ptr := alloc(length);
     memset(data_ptr, 0, length);
 
