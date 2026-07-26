@@ -430,6 +430,33 @@ generate_bytecode :: (ast: *Ast_Program, program: *Bytecode_Program = null) -> *
 
     main_function.locals_count = max(main_function.locals_count, generator.next_register);
 
+    while generator.program.deferred_functions.count > 0 {
+        def := pop(*generator.program.deferred_functions);
+        if def.node.kind == .FUNCTION_EXPRESSION {
+            function_expression := cast(*Ast_Function_Expression) def.node;
+            for function_expression.body.body emit_statement(def.generator, it);
+            def.bytecode_function.locals_count = max(def.bytecode_function.locals_count, def.generator.next_register);
+            for def.generator.locals array_add(*def.bytecode_function.locals, it);
+        } else if def.node.kind == .ARROW_FUNCTION_EXPRESSION {
+            arrow_expression := cast(*Ast_Arrow_Function_Expression) def.node;
+            if arrow_expression.body.kind == .BLOCK_STATEMENT {
+                block_statement := cast(*Ast_Block_Statement) arrow_expression.body;
+                for block_statement.body emit_statement(def.generator, it);
+            } else {
+                register := emit_expression(def.generator, arrow_expression.body, true);
+                instruction := Instruction.{ op_code = .RETURN, arg1 = register };
+                emit_instruction(def.generator, instruction);
+            }
+            def.bytecode_function.locals_count = max(def.bytecode_function.locals_count, def.generator.next_register);
+            for def.generator.locals array_add(*def.bytecode_function.locals, it);
+        } else if def.node.kind == .FUNCTION_DECLARATION {
+            function_declaration := cast(*Ast_Function_Declaration) def.node;
+            for function_declaration.body.body emit_statement(def.generator, it);
+            def.bytecode_function.locals_count = max(def.bytecode_function.locals_count, def.generator.next_register);
+            for def.generator.locals array_add(*def.bytecode_function.locals, it);
+        }
+    }
+
     if generator.has_error {
         generator.program.has_error = true;
         generator.program.error_message = generator.error_message;
@@ -462,6 +489,33 @@ generate_module_bytecode :: (ast: *Ast_Program, program: *Bytecode_Program, name
     for ast.statements emit_statement(*generator, it);
 
     module_function.locals_count = max(module_function.locals_count, generator.next_register);
+
+    while generator.program.deferred_functions.count > 0 {
+        def := pop(*generator.program.deferred_functions);
+        if def.node.kind == .FUNCTION_EXPRESSION {
+            function_expression := cast(*Ast_Function_Expression) def.node;
+            for function_expression.body.body emit_statement(def.generator, it);
+            def.bytecode_function.locals_count = max(def.bytecode_function.locals_count, def.generator.next_register);
+            for def.generator.locals array_add(*def.bytecode_function.locals, it);
+        } else if def.node.kind == .ARROW_FUNCTION_EXPRESSION {
+            arrow_expression := cast(*Ast_Arrow_Function_Expression) def.node;
+            if arrow_expression.body.kind == .BLOCK_STATEMENT {
+                block_statement := cast(*Ast_Block_Statement) arrow_expression.body;
+                for block_statement.body emit_statement(def.generator, it);
+            } else {
+                register := emit_expression(def.generator, arrow_expression.body, true);
+                instruction := Instruction.{ op_code = .RETURN, arg1 = register };
+                emit_instruction(def.generator, instruction);
+            }
+            def.bytecode_function.locals_count = max(def.bytecode_function.locals_count, def.generator.next_register);
+            for def.generator.locals array_add(*def.bytecode_function.locals, it);
+        } else if def.node.kind == .FUNCTION_DECLARATION {
+            function_declaration := cast(*Ast_Function_Declaration) def.node;
+            for function_declaration.body.body emit_statement(def.generator, it);
+            def.bytecode_function.locals_count = max(def.bytecode_function.locals_count, def.generator.next_register);
+            for def.generator.locals array_add(*def.bytecode_function.locals, it);
+        }
+    }
 
     if generator.has_error {
         generator.program.has_error = true;
@@ -930,11 +984,9 @@ emit_statement :: (generator: *Bytecode_Generator, node: *Ast_Node) {
 
             nested_generator.current_function = bytecode_function;
 
-            for function_declaration.body.body emit_statement(*nested_generator, it);
-
-            bytecode_function.locals_count = max(bytecode_function.locals_count, nested_generator.next_register);
-
-            for nested_generator.locals array_add(*bytecode_function.locals, it);
+            nested_generator_ptr := New(Bytecode_Generator,, temp);
+            nested_generator_ptr.* = nested_generator;
+            array_add(*generator.program.deferred_functions, .{ bytecode_function, cast(*Ast_Node) function_declaration, nested_generator_ptr });
 
             array_add(*generator.program.functions, bytecode_function);
 
@@ -2786,6 +2838,12 @@ Bytecode_Function :: struct {
     locals: [..] string;
 }
 
+Deferred_Function :: struct {
+    bytecode_function: *Bytecode_Function;
+    node: *Ast_Node;
+    generator: *Bytecode_Generator;
+}
+
 Bytecode_Program :: struct {
     functions:      [..] *Bytecode_Function;
     constants:      [..] Value;
@@ -2796,6 +2854,8 @@ Bytecode_Program :: struct {
 
     has_error:     bool;
     error_message: string;
+
+    deferred_functions: [..] Deferred_Function;
 }
 
 
@@ -3066,11 +3126,10 @@ emit_function_expression_helper :: (generator: *Bytecode_Generator, function_exp
     }
 
     nested_generator.current_function = bytecode_function;
-    for function_expression.body.body emit_statement(*nested_generator, it);
 
-    bytecode_function.locals_count = max(bytecode_function.locals_count, nested_generator.next_register);
-
-    for nested_generator.locals array_add(*bytecode_function.locals, it);
+    nested_generator_ptr := New(Bytecode_Generator,, temp);
+    nested_generator_ptr.* = nested_generator;
+    array_add(*generator.program.deferred_functions, .{ bytecode_function, cast(*Ast_Node) function_expression, nested_generator_ptr });
 
     array_add(*generator.program.functions, bytecode_function);
 
@@ -3133,6 +3192,14 @@ emit_arrow_function_expression_helper :: (generator: *Bytecode_Generator, arrow_
 
     nested_generator.current_function = bytecode_function;
 
+    nested_generator_ptr := New(Bytecode_Generator,, temp);
+    nested_generator_ptr.* = nested_generator;
+    array_add(*generator.program.deferred_functions, .{ bytecode_function, cast(*Ast_Node) arrow_expression, nested_generator_ptr });
+
+    array_add(*generator.program.functions, bytecode_function);
+
+    function_index := generator.program.functions.count - 1;
+
     if arrow_expression.body.kind == .BLOCK_STATEMENT {
         block_statement := cast(*Ast_Block_Statement) arrow_expression.body;
 
@@ -3151,10 +3218,6 @@ emit_arrow_function_expression_helper :: (generator: *Bytecode_Generator, arrow_
     bytecode_function.locals_count = max(bytecode_function.locals_count, nested_generator.next_register);
 
     for nested_generator.locals array_add(*bytecode_function.locals, it);
-
-    array_add(*generator.program.functions, bytecode_function);
-
-    function_index := generator.program.functions.count - 1;
 
     register := allocate_register(generator, destination_register);
 
