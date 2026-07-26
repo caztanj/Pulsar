@@ -47,10 +47,6 @@ array_buffer_constructor :: (vm: *Vm, this: Value, arguments: [] Value, is_new: 
             throw_exception(vm, "RangeError: Invalid ArrayBuffer length");
             return .{};
         }
-        if length > 2147483647 {
-            throw_exception(vm, "RangeError: ArrayBuffer allocation limit exceeded");
-            return .{};
-        }
     }
 
     max_length := -1;
@@ -95,6 +91,11 @@ array_buffer_constructor :: (vm: *Vm, this: Value, arguments: [] Value, is_new: 
         }
     }
     object.kind = .ARRAY_BUFFER;
+
+    if length > 2147483647 {
+        throw_exception(vm, "RangeError: ArrayBuffer allocation limit exceeded");
+        return .{};
+    }
 
     data_ptr := alloc(length);
     memset(data_ptr, 0, length);
