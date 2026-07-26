@@ -436,6 +436,31 @@ object_has_own_property :: (vm: *Vm, this: Value, arguments: [] Value, is_new: b
 }
 
 object_to_string :: (vm: *Vm, this: Value, arguments: [] Value, is_new: bool) -> Value {
+    if this.type == .UNDEFINED return .{ type = .STRING, s = "[object Undefined]" };
+    if this.type == .NULL      return .{ type = .STRING, s = "[object Null]" };
+
+    if this.type == .NUMBER          return .{ type = .STRING, s = "[object Number]" };
+    if this.type == .STRING          return .{ type = .STRING, s = "[object String]" };
+    if this.type == .BOOLEAN         return .{ type = .STRING, s = "[object Boolean]" };
+    if this.type == .ARRAY           return .{ type = .STRING, s = "[object Array]" };
+    if this.type == .FUNCTION        return .{ type = .STRING, s = "[object Function]" };
+    if this.type == .NATIVE_FUNCTION return .{ type = .STRING, s = "[object Function]" };
+    if this.type == .GENERATOR       return .{ type = .STRING, s = "[object Generator]" };
+    if this.type == .SYMBOL          return .{ type = .STRING, s = "[object Symbol]" };
+
+    if this.type == .OBJECT && this.object {
+        kind := this.object.kind;
+        if kind == .ARRAY           return .{ type = .STRING, s = "[object Array]" };
+        if kind == .DATE            return .{ type = .STRING, s = "[object Date]" };
+        if kind == .REGEXP          return .{ type = .STRING, s = "[object RegExp]" };
+        if kind == .BOOLEAN_WRAPPER return .{ type = .STRING, s = "[object Boolean]" };
+        if kind == .NUMBER_WRAPPER  return .{ type = .STRING, s = "[object Number]" };
+        if kind == .STRING_WRAPPER  return .{ type = .STRING, s = "[object String]" };
+        if kind == .PROMISE         return .{ type = .STRING, s = "[object Promise]" };
+        if kind == .MAP             return .{ type = .STRING, s = "[object Map]" };
+        if kind == .SET             return .{ type = .STRING, s = "[object Set]" };
+    }
+
     return .{ type = .STRING, s = "[object Object]" };
 }
 
