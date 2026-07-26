@@ -34,25 +34,6 @@ array_buffer_constructor :: (vm: *Vm, this: Value, arguments: [] Value, is_new: 
         return .{};
     }
 
-    object: *Gc_Object;
-    if this.type == .OBJECT {
-        object = this.object;
-    } else {
-        object = allocate_object(vm);
-        if this.type == .FUNCTION || this.type == .NATIVE_FUNCTION {
-            found, prototype_value := lookup_property(vm, this.object, "prototype");
-            if vm.has_exception return .{};
-            if prototype_value.type == .OBJECT {
-                object.prototype = prototype_value.object;
-            } else {
-                object.prototype = vm.array_buffer_prototype;
-            }
-        } else {
-            object.prototype = vm.array_buffer_prototype;
-        }
-    }
-    object.kind = .ARRAY_BUFFER;
-
     length := 0;
     if arguments.count > 0 {
         arg := arguments[0];
@@ -72,6 +53,7 @@ array_buffer_constructor :: (vm: *Vm, this: Value, arguments: [] Value, is_new: 
         }
     }
 
+    max_length := -1;
     if arguments.count > 1 && arguments[1].type == .OBJECT && arguments[1].object {
         found_max, max_val := lookup_property(vm, arguments[1].object, "maxByteLength");
         if vm.has_exception return .{};
@@ -86,8 +68,33 @@ array_buffer_constructor :: (vm: *Vm, this: Value, arguments: [] Value, is_new: 
                 throw_exception(vm, "RangeError: ArrayBuffer maxByteLength allocation limit exceeded");
                 return .{};
             }
+            max_length = cast(int) max_len_f;
         }
     }
+
+    if max_length >= 0 && length > max_length {
+        throw_exception(vm, "RangeError: ArrayBuffer length is larger than maxByteLength");
+        return .{};
+    }
+
+    object: *Gc_Object;
+    if this.type == .OBJECT {
+        object = this.object;
+    } else {
+        object = allocate_object(vm);
+        if this.type == .FUNCTION || this.type == .NATIVE_FUNCTION {
+            found, prototype_value := lookup_property(vm, this.object, "prototype");
+            if vm.has_exception return .{};
+            if prototype_value.type == .OBJECT {
+                object.prototype = prototype_value.object;
+            } else {
+                object.prototype = vm.array_buffer_prototype;
+            }
+        } else {
+            object.prototype = vm.array_buffer_prototype;
+        }
+    }
+    object.kind = .ARRAY_BUFFER;
 
     data_ptr := alloc(length);
     memset(data_ptr, 0, length);
