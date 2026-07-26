@@ -509,6 +509,7 @@ Gc_Object_Kind :: enum u8 {
     ARRAY_BUFFER;
     REGEXP;
     SYMBOL;
+    DATA_VIEW;
 }
 
 Gc_Object :: struct {

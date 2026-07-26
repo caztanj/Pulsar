@@ -2014,6 +2014,7 @@ init_common_vm_globals :: (vm: *Vm) {
     init_vm_reflect(vm);
     init_vm_proxy(vm);
     init_vm_array_buffer(vm);
+    init_vm_data_view(vm);
 }
 
 init_vm_core :: (vm: *Vm) {
@@ -2873,6 +2874,7 @@ Vm :: struct {
             symbol_prototype:  *Gc_Object;
             function_prototype:*Gc_Object;
             array_buffer_prototype:*Gc_Object;
+            data_view_prototype:   *Gc_Object;
         };
     };
 
