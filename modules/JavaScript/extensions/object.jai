@@ -5,9 +5,10 @@ init_vm_object :: (vm: *Vm) {
         vm.object_prototype = allocate_object(vm);
         vm.object_prototype.prototype = null;
 
-        add_instance_method(vm, vm.object_prototype, "toString",       object_to_string);
-        add_instance_method(vm, vm.object_prototype, "hasOwnProperty", object_has_own_property);
+        add_instance_method(vm, vm.object_prototype, "toString",             object_to_string);
+        add_instance_method(vm, vm.object_prototype, "hasOwnProperty",       object_has_own_property);
         add_instance_method(vm, vm.object_prototype, "propertyIsEnumerable", object_property_is_enumerable);
+        add_instance_method(vm, vm.object_prototype, "isPrototypeOf",        object_is_prototype_of);
     }
 
     if found {
@@ -37,6 +38,25 @@ init_vm_object :: (vm: *Vm) {
 
         add_static_property(vm, object_obj, "prototype", prototype_value);
     }
+}
+
+object_is_prototype_of :: (vm: *Vm, this: Value, arguments: [] Value, is_new: bool) -> Value {
+    if arguments.count == 0 return .{ type = .BOOLEAN, boolean = false };
+
+    arg := arguments[0];
+    if arg.type != .OBJECT && arg.type != .ARRAY && arg.type != .FUNCTION && arg.type != .NATIVE_FUNCTION && arg.type != .GENERATOR return .{ type = .BOOLEAN, boolean = false };
+    if !arg.object return .{ type = .BOOLEAN, boolean = false };
+
+    if this.type != .OBJECT && this.type != .ARRAY && this.type != .FUNCTION && this.type != .NATIVE_FUNCTION && this.type != .GENERATOR return .{ type = .BOOLEAN, boolean = false };
+    if !this.object return .{ type = .BOOLEAN, boolean = false };
+
+    current := arg.object.prototype;
+    while current {
+        if current == this.object return .{ type = .BOOLEAN, boolean = true };
+        current = current.prototype;
+    }
+
+    return .{ type = .BOOLEAN, boolean = false };
 }
 
 object_set_prototype :: (vm: *Vm, this: Value, arguments: [] Value, is_new: bool) -> Value {
