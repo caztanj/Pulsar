@@ -161,6 +161,25 @@ set_object_property :: (vm: *Vm, object: *Gc_Object, name: string, value: Value,
         }
     }
 
+    if name == "length" && object.kind == .ARRAY {
+        len_val := value_to_number(value);
+        len := cast(int) len_val;
+        if len >= 0 && len < 4294967295 && cast(float64) len == len_val {
+            old_count := object.elements.count;
+            if len < old_count {
+                object.elements.count = len;
+            } else if len > old_count {
+                while object.elements.count < len {
+                    array_add(*object.elements, .{ type = .EMPTY });
+                }
+            }
+            return;
+        } else {
+            throw_exception(vm, "RangeError: Invalid array length");
+            return;
+        }
+    }
+
     if name == "length" || name == "name" {
         current := object;
         is_func := false;
