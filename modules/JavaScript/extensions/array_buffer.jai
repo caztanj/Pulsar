@@ -5,6 +5,7 @@ init_vm_array_buffer :: (vm: *Vm) {
         vm.array_buffer_prototype = allocate_object(vm);
         vm.array_buffer_prototype.prototype = vm.object_prototype;
         add_instance_method(vm, vm.array_buffer_prototype, "byteLength__getter__", array_buffer_byte_length_getter);
+        add_instance_method(vm, vm.array_buffer_prototype, "resizable__getter__",  array_buffer_resizable_getter);
     }
 
     if found {
@@ -110,6 +111,10 @@ array_buffer_constructor :: (vm: *Vm, this: Value, arguments: [] Value, is_new: 
 
     object.primitive_value = .{ type = .STRING, s = s };
 
+    if max_length >= 0 {
+        array_add(*object.elements, .{ type = .NUMBER, number = cast(float64) max_length });
+    }
+
     return .{ type = .OBJECT, object = object };
 }
 
@@ -120,4 +125,14 @@ array_buffer_byte_length_getter :: (vm: *Vm, this: Value, arguments: [] Value, i
     }
 
     return .{ type = .NUMBER, number = cast(float64) this.object.primitive_value.s.count };
+}
+
+array_buffer_resizable_getter :: (vm: *Vm, this: Value, arguments: [] Value, is_new: bool) -> Value {
+    if this.type != .OBJECT || this.object.kind != .ARRAY_BUFFER {
+        throw_exception(vm, "TypeError: get resizable called on incompatible receiver");
+        return .{};
+    }
+
+    is_resizable := this.object.elements.count > 0;
+    return .{ type = .BOOLEAN, boolean = is_resizable };
 }
