@@ -2187,6 +2187,11 @@ value_to_number :: inline (value: Value) -> float64 {
 }
 
 abstract_to_number :: (vm: *Vm, value: Value) -> float64 {
+    if value.type == .SYMBOL {
+        throw_exception(vm, "TypeError: Cannot convert a Symbol value to a number");
+        return not_a_number_value;
+    }
+
     if value.type != .OBJECT && value.type != .ARRAY && value.type != .GENERATOR && value.type != .FUNCTION && value.type != .NATIVE_FUNCTION {
         return value_to_number(value);
     }
