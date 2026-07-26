@@ -2187,7 +2187,21 @@ value_to_string :: (vm: *Vm, value: Value) -> string {
         case .UNDEFINED; return "undefined";
         case .NULL;      return "null";
         case .STRING;    return value.s;
-        case .NUMBER;    return tprint("%", value.number);
+        case .NUMBER;
+            if isnan(value.number) {
+                return "NaN";
+            }
+            if isinf(value.number) {
+                if value.number > 0 {
+                    return "Infinity";
+                } else {
+                    return "-Infinity";
+                }
+            }
+            if value.number == 0 {
+                return "0";
+            }
+            return tprint("%", value.number);
         case .BOOLEAN;   return ifx value.boolean "true" else "false";
         case .SYMBOL;
             if value.symbol_object.primitive_value.type == .STRING {
