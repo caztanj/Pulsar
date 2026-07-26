@@ -62,6 +62,7 @@ number_constructor :: (vm: *Vm, this: Value, arguments: [] Value, is_new: bool) 
     if is_new {
         number_object := allocate_object(vm);
 
+        number_object.kind            = .NUMBER_WRAPPER;
         number_object.primitive_value = .{ type = .NUMBER, number = number_value };
         number_object.prototype       = vm.number_prototype;
 

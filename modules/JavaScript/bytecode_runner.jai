@@ -2213,6 +2213,8 @@ value_to_string :: (vm: *Vm, value: Value) -> string {
         case .OBJECT;
             if value.object.kind == .PROMISE         return "[object Promise]";
             if value.object.kind == .BOOLEAN_WRAPPER return ifx value.object.primitive_value.boolean "true" else "false";
+            if value.object.kind == .NUMBER_WRAPPER  return value_to_string(vm, value.object.primitive_value);
+            if value.object.kind == .STRING_WRAPPER  return value_to_string(vm, value.object.primitive_value);
             if value.object.kind == .GENERATOR       return "[object Generator]";
 
             return "[object Object]";

@@ -53,6 +53,7 @@ string_constructor :: (vm: *Vm, this: Value, arguments: [] Value, is_new: bool) 
     if is_new {
         string_object := allocate_object(vm);
 
+        string_object.kind            = .STRING_WRAPPER;
         string_object.primitive_value = .{ type = .STRING, s = string_value };
         string_object.prototype       = vm.string_prototype;
 
