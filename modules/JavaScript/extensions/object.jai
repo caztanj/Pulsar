@@ -12,10 +12,15 @@ init_vm_object :: (vm: *Vm) {
     }
 
     if found {
+        vm.current_realm.globals[index].type = .NATIVE_FUNCTION;
+        vm.current_realm.globals[index].native_function = object_constructor;
+
         object_obj := allocate_object(vm);
-        object_obj.prototype = null;
-        vm.current_realm.globals[index].type = .OBJECT;
+        object_obj.prototype = vm.function_prototype;
         vm.current_realm.globals[index].object = object_obj;
+
+        set_object_property(vm, object_obj, "name",   Value.{ type = .STRING, s = "Object" });
+        set_object_property(vm, object_obj, "length", Value.{ type = .NUMBER, number = 1 });
 
         add_static_method(vm, object_obj, "setPrototypeOf",           object_set_prototype);
         add_static_method(vm, object_obj, "getPrototypeOf",           object_get_prototype_of);
@@ -31,13 +36,20 @@ init_vm_object :: (vm: *Vm) {
         add_static_method(vm, object_obj, "getOwnPropertyNames",      object_get_own_property_names);
         add_static_method(vm, object_obj, "isExtensible",             object_is_extensible);
 
-        prototype_value := Value.{
-            type   = .OBJECT,
-            object = vm.object_prototype,
-        };
-
-        add_static_property(vm, object_obj, "prototype", prototype_value);
+        add_static_property(vm, object_obj, "prototype", Value.{ type = .OBJECT, object = vm.object_prototype });
     }
+}
+
+object_constructor :: (vm: *Vm, this: Value, arguments: [] Value, is_new: bool) -> Value {
+    if arguments.count > 0 && arguments[0].type != .UNDEFINED && arguments[0].type != .NULL {
+        if arguments[0].type == .OBJECT || arguments[0].type == .ARRAY || arguments[0].type == .FUNCTION || arguments[0].type == .NATIVE_FUNCTION {
+            return arguments[0];
+        }
+    }
+
+    obj := allocate_object(vm);
+    obj.prototype = vm.object_prototype;
+    return .{ type = .OBJECT, object = obj };
 }
 
 object_is_prototype_of :: (vm: *Vm, this: Value, arguments: [] Value, is_new: bool) -> Value {
