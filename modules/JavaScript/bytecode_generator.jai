@@ -485,10 +485,9 @@ allocate_register :: inline (generator: *Bytecode_Generator, destination_registe
 }
 
 get_local_index :: (generator: *Bytecode_Generator, name: string) -> int {
-    for generator.locals {
-        if it == name {
-            return it_index;
-        }
+    location := resolve_variable(generator, name);
+    if location.type == .LOCAL {
+        return location.index;
     }
 
     return -1;
@@ -1100,12 +1099,7 @@ emit_statement :: (generator: *Bytecode_Generator, node: *Ast_Node) {
 
                     local_index := -1;
 
-                    for generator.locals {
-                        if it == identifier.name {
-                            local_index = it_index;
-                            break;
-                        }
-                    }
+                    local_index = get_local_index(generator, identifier.name);
 
                     if local_index != -1 {
                         literal_number := cast(*Ast_Literal_Number) binary_expression.right;
@@ -1249,6 +1243,19 @@ emit_statement :: (generator: *Bytecode_Generator, node: *Ast_Node) {
 
             generator.next_register += 1;
 
+            iterator_index_register := generator.next_register;
+            generator.next_register += 1;
+
+            const_index := generator.program.constants.count;
+            array_add(*generator.program.constants, .{ type = .NUMBER, number = 0.0 });
+
+            init_index_instruction := Instruction.{
+                op_code = .LOAD_CONST,
+                dest    = iterator_index_register,
+                imm     = cast(s32) const_index,
+            };
+            array_add(*generator.current_function.instructions, init_index_instruction);
+
             loop_start_pc := generator.current_function.instructions.count;
 
             loop_context := Loop_Context.{
@@ -1263,6 +1270,7 @@ emit_statement :: (generator: *Bytecode_Generator, node: *Ast_Node) {
                 op_code = .ITERATOR_NEXT,
                 dest    = value_register,
                 arg1    = iterable_register,
+                arg2    = iterator_index_register,
             };
 
             next_instruction_index := generator.current_function.instructions.count;

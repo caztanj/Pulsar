@@ -1530,16 +1530,25 @@ execute_function_internal :: (vm: *Vm, initial_function: *Bytecode_Function, ini
 
                 case .ITERATOR_NEXT;
                     iterable := *registers_data[instruction.arg1];
+                    index_reg := *registers_data[instruction.arg2];
 
                     if (iterable.type == .ARRAY || (iterable.type == .OBJECT && iterable.object.kind == .ARRAY)) && iterable.object {
                         object := iterable.object;
-                        index  := 0;
-
-                        if object.primitive_value.type == .NUMBER index = cast(int) object.primitive_value.number;
+                        index  := cast(int) index_reg.number;
 
                         if index < object.elements.count {
                             registers_data[instruction.dest] = object.elements[index];
-                            object.primitive_value = .{ type = .NUMBER, number = cast(float64) (index + 1) };
+                            index_reg.number += 1.0;
+                        } else {
+                            pc_pointer = instructions_pointer + instruction.imm;
+                        }
+                    } else if iterable.type == .OBJECT && is_typed_array(iterable.object.kind) && iterable.object {
+                        object := iterable.object;
+                        index  := cast(int) index_reg.number;
+
+                        if index < get_typed_array_length(object) {
+                            registers_data[instruction.dest] = .{ type = .NUMBER, number = get_typed_array_element(object, index) };
+                            index_reg.number += 1.0;
                         } else {
                             pc_pointer = instructions_pointer + instruction.imm;
                         }
