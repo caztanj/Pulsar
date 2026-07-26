@@ -553,8 +553,8 @@ resolve_variable :: (generator: *Bytecode_Generator, name: string) -> Variable_L
     is_const := false;
 
     current := generator;
+    scope := current.current_scope;
     while current {
-        scope := current.current_scope;
         while scope {
             for < scope.variables {
                 if it == name {
@@ -579,6 +579,7 @@ resolve_variable :: (generator: *Bytecode_Generator, name: string) -> Variable_L
 
         if index != -1 break;
 
+        scope = current.captured_scope;
         current = current.parent;
         level  += 1;
     }
@@ -930,6 +931,7 @@ emit_statement :: (generator: *Bytecode_Generator, node: *Ast_Node) {
             nested_generator := Bytecode_Generator.{
                 current_scope = new_function_scope,
                 function_scope = new_function_scope,
+                captured_scope = generator.current_scope,
                 program              = generator.program,
                 parent               = generator,
                 next_register        = cast(u16) function_declaration.parameters.count,
@@ -2877,6 +2879,7 @@ Bytecode_Generator :: struct {
 
     current_scope:    *Lexical_Scope;
     function_scope:   *Lexical_Scope;
+    captured_scope:   *Lexical_Scope;
 
     next_register: u16;
 
@@ -3074,6 +3077,7 @@ emit_function_expression_helper :: (generator: *Bytecode_Generator, function_exp
     nested_generator := Bytecode_Generator.{
         current_scope = new_function_scope,
         function_scope = new_function_scope,
+        captured_scope = generator.current_scope,
         program              = generator.program,
         parent               = generator,
         next_register        = cast(u16) function_expression.parameters.count,
@@ -3156,6 +3160,7 @@ emit_arrow_function_expression_helper :: (generator: *Bytecode_Generator, arrow_
     nested_generator := Bytecode_Generator.{
         current_scope = new_function_scope,
         function_scope = new_function_scope,
+        captured_scope = generator.current_scope,
         program              = generator.program,
         parent               = generator,
         next_register        = cast(u16) arrow_expression.parameters.count,
@@ -3199,25 +3204,6 @@ emit_arrow_function_expression_helper :: (generator: *Bytecode_Generator, arrow_
     array_add(*generator.program.functions, bytecode_function);
 
     function_index := generator.program.functions.count - 1;
-
-    if arrow_expression.body.kind == .BLOCK_STATEMENT {
-        block_statement := cast(*Ast_Block_Statement) arrow_expression.body;
-
-        for block_statement.body emit_statement(*nested_generator, it);
-    } else {
-        register := emit_expression(*nested_generator, arrow_expression.body);
-
-        instruction := Instruction.{
-            op_code = .RETURN,
-            arg1    = register,
-        };
-
-        array_add(*bytecode_function.instructions, instruction);
-    }
-
-    bytecode_function.locals_count = max(bytecode_function.locals_count, nested_generator.next_register);
-
-    for nested_generator.locals array_add(*bytecode_function.locals, it);
 
     register := allocate_register(generator, destination_register);
 
