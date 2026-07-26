@@ -4,8 +4,9 @@ init_vm_array :: (vm: *Vm) {
     if found {
         array_object := allocate_object(vm);
 
-        vm.current_realm.globals[array_index].type   = .OBJECT;
-        vm.current_realm.globals[array_index].object = array_object;
+        vm.current_realm.globals[array_index].type            = .NATIVE_FUNCTION;
+        vm.current_realm.globals[array_index].native_function = array_constructor_impl;
+        vm.current_realm.globals[array_index].object          = array_object;
 
         array_prototype: *Gc_Object;
 
@@ -55,6 +56,42 @@ init_vm_array :: (vm: *Vm) {
         add_static_property(vm, array_object,    "prototype",   prototype_value);
         add_static_property(vm, array_prototype, "constructor", vm.current_realm.globals[array_index]);
     }
+}
+
+array_constructor_impl :: (vm: *Vm, this: Value, arguments: [] Value, is_new: bool) -> Value {
+    result_object           := allocate_object(vm);
+    result_object.kind       = .ARRAY;
+    result_object.prototype  = vm.array_prototype;
+
+    if arguments.count == 0 {
+        return .{ type = .ARRAY, object = result_object };
+    }
+
+    if arguments.count == 1 {
+        arg := arguments[0];
+        if arg.type == .NUMBER {
+            len := arg.number;
+            if len < 0 || len >= 4294967295 || len != cast(float64) cast(u32) len {
+                throw_exception(vm, "RangeError: Invalid array length");
+                return .{};
+            }
+
+            array_resize(*result_object.elements, cast(int) len);
+            for 0..cast(int)len-1 {
+                result_object.elements[it] = .{ type = .EMPTY };
+            }
+            return .{ type = .ARRAY, object = result_object };
+        } else {
+            array_add(*result_object.elements, arg);
+            return .{ type = .ARRAY, object = result_object };
+        }
+    }
+
+    for arguments {
+        array_add(*result_object.elements, it);
+    }
+
+    return .{ type = .ARRAY, object = result_object };
 }
 
 array_is_array :: (vm: *Vm, this: Value, arguments: [] Value, is_new: bool) -> Value {
