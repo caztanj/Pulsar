@@ -166,7 +166,7 @@ number_to_string :: (vm: *Vm, this: Value, arguments: [] Value, is_new: bool) ->
 
     if this.type == .NUMBER {
         number_value = this.number;
-    } else if this.type == .OBJECT && this.object.kind == .PLAIN && this.object.primitive_value.type == .NUMBER {
+    } else if this.type == .OBJECT && (this.object.kind == .PLAIN || this.object.kind == .NUMBER_WRAPPER) && this.object.primitive_value.type == .NUMBER {
         number_value = this.object.primitive_value.number;
     }
 
