@@ -2186,6 +2186,40 @@ value_to_number :: inline (value: Value) -> float64 {
     return not_a_number_value;
 }
 
+abstract_to_number :: (vm: *Vm, value: Value) -> float64 {
+    if value.type != .OBJECT && value.type != .ARRAY && value.type != .GENERATOR && value.type != .FUNCTION && value.type != .NATIVE_FUNCTION {
+        return value_to_number(value);
+    }
+
+    current_obj := ifx value.type == .GENERATOR value.generator_object else value.object;
+    if current_obj {
+        found_value_of, value_of_val := lookup_property(vm, current_obj, "valueOf");
+        if vm.has_exception return not_a_number_value;
+        if found_value_of && (value_of_val.type == .FUNCTION || value_of_val.type == .NATIVE_FUNCTION) {
+            res := call_value(vm, value, value_of_val, .[]);
+            if vm.has_exception return not_a_number_value;
+            if res.type != .OBJECT && res.type != .ARRAY && res.type != .GENERATOR && res.type != .FUNCTION && res.type != .NATIVE_FUNCTION {
+                return value_to_number(res);
+            }
+        }
+
+        found_to_string, to_string_val := lookup_property(vm, current_obj, "toString");
+        if vm.has_exception return not_a_number_value;
+        if found_to_string && (to_string_val.type == .FUNCTION || to_string_val.type == .NATIVE_FUNCTION) {
+            res := call_value(vm, value, to_string_val, .[]);
+            if vm.has_exception return not_a_number_value;
+            if res.type != .OBJECT && res.type != .ARRAY && res.type != .GENERATOR && res.type != .FUNCTION && res.type != .NATIVE_FUNCTION {
+                return value_to_number(res);
+            }
+        }
+
+        throw_exception(vm, "TypeError: Cannot convert object to primitive value");
+        return not_a_number_value;
+    }
+    return not_a_number_value;
+}
+
+
 abstract_to_string :: (vm: *Vm, value: Value) -> string {
     if value.type == .OBJECT || value.type == .ARRAY || value.type == .GENERATOR || value.type == .FUNCTION || value.type == .NATIVE_FUNCTION {
         current_obj := ifx value.type == .GENERATOR value.generator_object else value.object;

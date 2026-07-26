@@ -37,7 +37,9 @@ array_buffer_constructor :: (vm: *Vm, this: Value, arguments: [] Value, is_new: 
     length := 0;
     if arguments.count > 0 {
         arg := arguments[0];
-        length_f := value_to_number(arg);
+        length_f := abstract_to_number(vm, arg);
+        if vm.has_exception return .{};
+
         if isnan(length_f) || isinf(length_f) || length_f < 0 {
             throw_exception(vm, "RangeError: Invalid ArrayBuffer length");
             return .{};
@@ -55,7 +57,9 @@ array_buffer_constructor :: (vm: *Vm, this: Value, arguments: [] Value, is_new: 
         if vm.has_exception return .{};
 
         if found_max && max_val.type != .UNDEFINED {
-            max_len_f := value_to_number(max_val);
+            max_len_f := abstract_to_number(vm, max_val);
+            if vm.has_exception return .{};
+
             if isnan(max_len_f) || isinf(max_len_f) || max_len_f < 0 {
                 throw_exception(vm, "RangeError: Invalid maxByteLength");
                 return .{};
