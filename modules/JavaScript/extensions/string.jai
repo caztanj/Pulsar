@@ -23,6 +23,8 @@ init_vm_string :: (vm: *Vm) {
         add_instance_method(vm, vm.string_prototype, "trimStart",   string_trim_start);
         add_instance_method(vm, vm.string_prototype, "trimEnd",     string_trim_end);
         add_instance_method(vm, vm.string_prototype, "at",          string_at);
+        add_instance_method(vm, vm.string_prototype, "toString",    string_to_string);
+        add_instance_method(vm, vm.string_prototype, "valueOf",     string_value_of);
     }
 
     if found {
@@ -440,3 +442,18 @@ string_at :: (vm: *Vm, this: Value, arguments: [] Value, is_new: bool) -> Value 
     return .{ type = .STRING, s = allocated_result };
 }
 
+string_to_string :: (vm: *Vm, this: Value, arguments: [] Value, is_new: bool) -> Value {
+    if this.type == .OBJECT && this.object.kind == .STRING_WRAPPER return this.object.primitive_value;
+    if this.type == .STRING return this;
+
+    throw_exception(vm, "TypeError: String.prototype.toString requires that 'this' be a String");
+    return .{};
+}
+
+string_value_of :: (vm: *Vm, this: Value, arguments: [] Value, is_new: bool) -> Value {
+    if this.type == .OBJECT && this.object.kind == .STRING_WRAPPER return this.object.primitive_value;
+    if this.type == .STRING return this;
+
+    throw_exception(vm, "TypeError: String.prototype.valueOf requires that 'this' be a String");
+    return .{};
+}
