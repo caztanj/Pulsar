@@ -30,6 +30,25 @@ array_buffer_constructor :: (vm: *Vm, this: Value, arguments: [] Value, is_new: 
         return .{};
     }
 
+    object: *Gc_Object;
+    if this.type == .OBJECT {
+        object = this.object;
+    } else {
+        object = allocate_object(vm);
+        if this.type == .FUNCTION || this.type == .NATIVE_FUNCTION {
+            found, prototype_value := lookup_property(vm, this.object, "prototype");
+            if vm.has_exception return .{};
+            if prototype_value.type == .OBJECT {
+                object.prototype = prototype_value.object;
+            } else {
+                object.prototype = vm.array_buffer_prototype;
+            }
+        } else {
+            object.prototype = vm.array_buffer_prototype;
+        }
+    }
+    object.kind = .ARRAY_BUFFER;
+
     length := 0;
     if arguments.count > 0 {
         arg := arguments[0];
@@ -48,10 +67,6 @@ array_buffer_constructor :: (vm: *Vm, this: Value, arguments: [] Value, is_new: 
             return .{};
         }
     }
-
-    object := allocate_object(vm);
-    object.kind = .ARRAY_BUFFER;
-    object.prototype = vm.array_buffer_prototype;
 
     data_ptr := alloc(length);
     memset(data_ptr, 0, length);

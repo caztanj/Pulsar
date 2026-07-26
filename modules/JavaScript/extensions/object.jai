@@ -294,7 +294,7 @@ object_define_property :: (vm: *Vm, this: Value, arguments: [] Value, is_new: bo
 
     target_value := arguments[0];
 
-    if (target_value.type != .OBJECT && target_value.type != .ARRAY) || !target_value.object return target_value;
+    if (target_value.type != .OBJECT && target_value.type != .ARRAY && target_value.type != .FUNCTION && target_value.type != .NATIVE_FUNCTION) || !target_value.object return target_value;
 
     name             := value_to_string(vm, arguments[1]);
     descriptor_value := arguments[2];

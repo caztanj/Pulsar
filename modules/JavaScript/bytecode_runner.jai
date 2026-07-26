@@ -1960,6 +1960,8 @@ call_value :: inline (vm: *Vm, this: Value, callee: Value, arguments: [] Value, 
         vm.current_native_callee = callee;
         result := callee.native_function(vm, effective_this, final_arguments, is_new);
 
+        if vm.has_exception return .{};
+
         if is_new {
             if result.type == .OBJECT || result.type == .ARRAY || result.type == .FUNCTION || result.type == .NATIVE_FUNCTION return result;
             return effective_this;
