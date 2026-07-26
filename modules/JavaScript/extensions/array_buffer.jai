@@ -44,10 +44,10 @@ array_buffer_constructor :: (vm: *Vm, this: Value, arguments: [] Value, is_new: 
         if isnan(length_f) {
             length_f = 0;
         } else if !isinf(length_f) {
-            length_f = floor(abs(length_f)) * ifx length_f < 0 then -1.0 else 1.0;
+            length_f = cast(float64) cast(s64) length_f;
         }
 
-        if length_f < 0 || isinf(length_f) {
+        if length_f < 0 || isinf(length_f) || length_f > 9007199254740991 {
             throw_exception(vm, "RangeError: Invalid ArrayBuffer length");
             return .{};
         }
@@ -66,10 +66,10 @@ array_buffer_constructor :: (vm: *Vm, this: Value, arguments: [] Value, is_new: 
             if isnan(max_len_f) {
                 max_len_f = 0;
             } else if !isinf(max_len_f) {
-                max_len_f = floor(abs(max_len_f)) * ifx max_len_f < 0 then -1.0 else 1.0;
+                max_len_f = cast(float64) cast(s64) max_len_f;
             }
 
-            if max_len_f < 0 || isinf(max_len_f) {
+            if max_len_f < 0 || isinf(max_len_f) || max_len_f > 9007199254740991 {
                 throw_exception(vm, "RangeError: Invalid maxByteLength");
                 return .{};
             }
