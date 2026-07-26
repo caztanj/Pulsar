@@ -52,7 +52,13 @@ lookup_property :: (vm: *Vm, object: *Gc_Object, name: string, imm: int = -1) ->
             }
         } else {
             if name == "length" {
-                if current.kind == .ARRAY return true, .{ type = .NUMBER, number = cast(float64) current.elements.count };
+                if current.kind == .ARRAY {
+                    len := cast(float64) current.elements.count;
+                    if cast(float64) current.array_length > len {
+                        len = cast(float64) current.array_length;
+                    }
+                    return true, .{ type = .NUMBER, number = len };
+                }
                 if is_typed_array(current.kind) return true, .{ type = .NUMBER, number = cast(float64) get_typed_array_length(current) };
             }
             if name == "size" {
@@ -133,6 +139,12 @@ set_object_property :: (vm: *Vm, object: *Gc_Object, name: string, value: Value,
         parsed, success := parse_int(*name_copy);
 
         if success {
+            if object.kind == .ARRAY {
+                if parsed >= cast(int) object.array_length && parsed < 4294967295 {
+                    object.array_length = cast(u32) (parsed + 1);
+                }
+            }
+
             if is_typed_array(object.kind) {
                 len := get_typed_array_length(object);
                 if parsed >= 0 && parsed < len {
@@ -164,14 +176,20 @@ set_object_property :: (vm: *Vm, object: *Gc_Object, name: string, value: Value,
     if name == "length" && object.kind == .ARRAY {
         len_val := value_to_number(value);
         len := cast(int) len_val;
-        if len >= 0 && len < 4294967295 && cast(float64) len == len_val {
-            old_count := object.elements.count;
-            if len < old_count {
-                object.elements.count = len;
-            } else if len > old_count {
-                while object.elements.count < len {
-                    array_add(*object.elements, .{ type = .EMPTY });
+        if len >= 0 && len <= 4294967295 && cast(float64) len == len_val {
+            old_len_f := cast(float64) object.elements.count;
+            if cast(float64) object.array_length > old_len_f {
+                old_len_f = cast(float64) object.array_length;
+            }
+            old_len := cast(int) old_len_f;
+
+            if len < old_len {
+                object.array_length = cast(u32) len;
+                if len < object.elements.count {
+                    object.elements.count = len;
                 }
+            } else if len > old_len {
+                object.array_length = cast(u32) len;
             }
             return;
         } else {

@@ -528,6 +528,8 @@ Gc_Object :: struct {
     realm: *Realm;
 
     union {
+        array_length: u32;
+
         primitive_value: Value;
 
         map_entries: [..] Value;
