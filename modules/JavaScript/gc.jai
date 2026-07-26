@@ -506,6 +506,7 @@ Gc_Object_Kind :: enum u8 {
     FLOAT32_ARRAY;
     FLOAT64_ARRAY;
     UINT8_CLAMPED_ARRAY;
+    ARRAY_BUFFER;
     REGEXP;
     SYMBOL;
 }

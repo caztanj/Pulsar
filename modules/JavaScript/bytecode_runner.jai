@@ -2011,6 +2011,7 @@ init_common_vm_globals :: (vm: *Vm) {
     init_vm_symbol(vm);
     init_vm_reflect(vm);
     init_vm_proxy(vm);
+    init_vm_array_buffer(vm);
 }
 
 init_vm_core :: (vm: *Vm) {
@@ -2848,7 +2849,7 @@ Vm :: struct {
     root_shape:    *Shape;
 
     union {
-        builtin_prototypes: [18] *Gc_Object;
+        builtin_prototypes: [19] *Gc_Object;
         struct {
             object_prototype:  *Gc_Object;
             number_prototype:  *Gc_Object;
@@ -2869,6 +2870,7 @@ Vm :: struct {
             regexp_prototype:  *Gc_Object;
             symbol_prototype:  *Gc_Object;
             function_prototype:*Gc_Object;
+            array_buffer_prototype:*Gc_Object;
         };
     };
 

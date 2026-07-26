@@ -111,6 +111,7 @@ Permission :: enum_flags {
 #load "extensions/set.jai";
 #load "extensions/string.jai";
 #load "extensions/typed_array.jai";
+#load "extensions/array_buffer.jai";
 #load "extensions/timer.jai";
 #load "extensions/error.jai";
 #load "extensions/regexp.jai";
