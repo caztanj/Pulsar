@@ -41,15 +41,17 @@ array_buffer_constructor :: (vm: *Vm, this: Value, arguments: [] Value, is_new: 
         length_f := abstract_to_number(vm, arg);
         if vm.has_exception return .{};
 
-        if isnan(length_f) || isinf(length_f) || length_f < 0 {
+        if isnan(length_f) {
+            length_f = 0;
+        } else if !isinf(length_f) {
+            length_f = floor(abs(length_f)) * ifx length_f < 0 then -1.0 else 1.0;
+        }
+
+        if length_f < 0 || isinf(length_f) {
             throw_exception(vm, "RangeError: Invalid ArrayBuffer length");
             return .{};
         }
         length = cast(int) length_f;
-        if cast(float64) length != length_f {
-            throw_exception(vm, "RangeError: Invalid ArrayBuffer length");
-            return .{};
-        }
     }
 
     max_length := -1;
@@ -61,7 +63,13 @@ array_buffer_constructor :: (vm: *Vm, this: Value, arguments: [] Value, is_new: 
             max_len_f := abstract_to_number(vm, max_val);
             if vm.has_exception return .{};
 
-            if isnan(max_len_f) || isinf(max_len_f) || max_len_f < 0 {
+            if isnan(max_len_f) {
+                max_len_f = 0;
+            } else if !isinf(max_len_f) {
+                max_len_f = floor(abs(max_len_f)) * ifx max_len_f < 0 then -1.0 else 1.0;
+            }
+
+            if max_len_f < 0 || isinf(max_len_f) {
                 throw_exception(vm, "RangeError: Invalid maxByteLength");
                 return .{};
             }
