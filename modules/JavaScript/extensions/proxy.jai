@@ -25,12 +25,12 @@ proxy_constructor :: (vm: *Vm, this: Value, arguments: [] Value, is_new: bool) -
     target := arguments[0];
     handler := arguments[1];
 
-    if target.type != .OBJECT && target.type != .FUNCTION && target.type != .ARRAY {
+    if target.type != .OBJECT && target.type != .FUNCTION && target.type != .NATIVE_FUNCTION && target.type != .ARRAY {
         throw_exception(vm, "TypeError: Cannot create proxy with a non-object as target");
         return .{};
     }
 
-    if handler.type != .OBJECT && handler.type != .FUNCTION && handler.type != .ARRAY {
+    if handler.type != .OBJECT && handler.type != .FUNCTION && handler.type != .NATIVE_FUNCTION && handler.type != .ARRAY {
         throw_exception(vm, "TypeError: Cannot create proxy with a non-object as handler");
         return .{};
     }
