@@ -260,7 +260,7 @@ object_get_prototype_of :: (vm: *Vm, this: Value, arguments: [] Value, is_new: b
 
     target_value := arguments[0];
 
-    if (target_value.type != .OBJECT && target_value.type != .ARRAY) || !target_value.object return .{ type = .UNDEFINED };
+    if (target_value.type != .OBJECT && target_value.type != .ARRAY && target_value.type != .FUNCTION && target_value.type != .NATIVE_FUNCTION) || !target_value.object return .{ type = .UNDEFINED };
 
     prototype := target_value.object.prototype;
 

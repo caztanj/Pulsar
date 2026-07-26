@@ -2367,6 +2367,13 @@ values_equal :: (a: Value, b: Value) -> bool {
 }
 
 values_strict_equal :: (a: Value, b: Value) -> bool {
+    is_object_a := a.type == .OBJECT || a.type == .ARRAY || a.type == .FUNCTION || a.type == .NATIVE_FUNCTION || a.type == .GENERATOR || a.type == .SYMBOL;
+    is_object_b := b.type == .OBJECT || b.type == .ARRAY || b.type == .FUNCTION || b.type == .NATIVE_FUNCTION || b.type == .GENERATOR || b.type == .SYMBOL;
+
+    if is_object_a && is_object_b {
+        return a.object != null && a.object == b.object;
+    }
+
     if a.type != b.type return false;
 
     if #complete a.type == {
@@ -2374,14 +2381,15 @@ values_strict_equal :: (a: Value, b: Value) -> bool {
         case .NULL;            return true;
         case .NUMBER;          return a.number               == b.number;
         case .BOOLEAN;         return a.boolean              == b.boolean;
-        case .OBJECT;          return a.object               == b.object;
-        case .ARRAY;           return a.object               == b.object;
-        case .FUNCTION;        return a.function.function    == b.function.function;
-        case .NATIVE_FUNCTION; return a.native_function      == b.native_function;
         case .STRING;          return a.s                    == b.s;
-        case .GENERATOR;       return a.generator_object     == b.generator_object;
-        case .SYMBOL;          return a.symbol_object        == b.symbol_object;
         case .EMPTY;           return true;
+
+        case .OBJECT;          return false;
+        case .ARRAY;           return false;
+        case .FUNCTION;        return false;
+        case .NATIVE_FUNCTION; return false;
+        case .GENERATOR;       return false;
+        case .SYMBOL;          return false;
     }
 
     return false;
