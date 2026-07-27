@@ -1387,6 +1387,19 @@ emit_statement :: (generator: *Bytecode_Generator, node: *Ast_Node) {
             value_register := generator.next_register;
             generator.next_register += 1;
 
+            iterator_index_register := generator.next_register;
+            generator.next_register += 1;
+
+            const_index := generator.program.constants.count;
+            array_add(*generator.program.constants, .{ type = .NUMBER, number = 0.0 });
+
+            init_index_instruction := Instruction.{
+                op_code = .LOAD_CONST,
+                dest    = iterator_index_register,
+                imm     = cast(s32) const_index,
+            };
+            array_add(*generator.current_function.instructions, init_index_instruction);
+
             loop_start_pc := generator.current_function.instructions.count;
 
             loop_context := Loop_Context.{
@@ -1401,6 +1414,7 @@ emit_statement :: (generator: *Bytecode_Generator, node: *Ast_Node) {
                 op_code = .ITERATOR_NEXT,
                 dest    = value_register,
                 arg1    = iterable_register,
+                arg2    = iterator_index_register,
             };
 
             next_instruction_index := generator.current_function.instructions.count;
