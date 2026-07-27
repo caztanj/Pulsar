@@ -363,6 +363,8 @@ collect_garbage_minor :: (vm: *Vm) {
             } else if unreachable.kind == .REGEXP {
                 Uniform.uninit(*unreachable.regexp);
             } else if is_typed_array(unreachable.kind) {
+                if unreachable.primitive_value.s.data && !unreachable.viewed_array_buffer free(unreachable.primitive_value.s.data);
+            } else if unreachable.kind == .ARRAY_BUFFER {
                 if unreachable.primitive_value.s.data free(unreachable.primitive_value.s.data);
             }
 
@@ -452,6 +454,8 @@ collect_garbage_major :: (vm: *Vm) {
                 } else if unreachable.kind == .REGEXP {
                     Uniform.uninit(*unreachable.regexp);
                 } else if is_typed_array(unreachable.kind) {
+                    if unreachable.primitive_value.s.data && !unreachable.viewed_array_buffer free(unreachable.primitive_value.s.data);
+                } else if unreachable.kind == .ARRAY_BUFFER {
                     if unreachable.primitive_value.s.data free(unreachable.primitive_value.s.data);
                 }
 

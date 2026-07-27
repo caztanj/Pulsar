@@ -2616,6 +2616,8 @@ deinit :: (vm: *Vm) {
             } else if current_object.kind == .REGEXP {
                 Uniform.uninit(*current_object.regexp);
             } else if is_typed_array(current_object.kind) {
+                if current_object.primitive_value.s.data && !current_object.viewed_array_buffer free(current_object.primitive_value.s.data);
+            } else if current_object.kind == .ARRAY_BUFFER {
                 if current_object.primitive_value.s.data free(current_object.primitive_value.s.data);
             }
 
