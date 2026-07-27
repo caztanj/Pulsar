@@ -2233,7 +2233,6 @@ abstract_to_number :: (vm: *Vm, value: Value) -> float64 {
     return not_a_number_value;
 }
 
-
 abstract_to_string :: (vm: *Vm, value: Value) -> string {
     if value.type == .OBJECT || value.type == .ARRAY || value.type == .GENERATOR || value.type == .FUNCTION || value.type == .NATIVE_FUNCTION {
         current_obj := ifx value.type == .GENERATOR value.generator_object else value.object;
@@ -2807,9 +2806,11 @@ is_typed_array :: inline (kind: Gc_Object_Kind) -> bool {
 
 get_typed_array_length :: inline (object: *Gc_Object) -> int {
     length := object.primitive_value.s.count;
+
     if object.kind == .UINT16_ARRAY || object.kind == .INT16_ARRAY return length / 2;
     if object.kind == .UINT32_ARRAY || object.kind == .INT32_ARRAY || object.kind == .FLOAT32_ARRAY return length / 4;
     if object.kind == .FLOAT64_ARRAY return length / 8;
+
     return length;
 }
 
@@ -2825,6 +2826,7 @@ get_typed_array_element :: inline (object: *Gc_Object, index: int) -> float64 {
         case .FLOAT32_ARRAY;       return cast(float64) (cast(*float32) object.primitive_value.s.data)[index];
         case .FLOAT64_ARRAY;       return cast(float64) (cast(*float64) object.primitive_value.s.data)[index];
     }
+
     return 0.0;
 }
 

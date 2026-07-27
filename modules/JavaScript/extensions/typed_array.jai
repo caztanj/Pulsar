@@ -79,7 +79,7 @@ typed_array_constructor_impl :: (vm: *Vm, this: Value, arguments: [] Value, is_n
 
     object := allocate_object(vm);
     object.kind = kind;
-    
+
     if kind == {
         case .UINT8_ARRAY;         object.prototype = vm.uint8_array_prototype;
         case .INT8_ARRAY;          object.prototype = vm.int8_array_prototype;
@@ -109,6 +109,12 @@ typed_array_constructor_impl :: (vm: *Vm, this: Value, arguments: [] Value, is_n
             buffer := cast(*u8) alloc(length * element_size);
             memset(buffer, 0, length * element_size);
             object.primitive_value = .{ type = .STRING, s = string.{ length * element_size, buffer } };
+        } else if arg.type == .OBJECT && arg.object != null && arg.object.kind == .ARRAY_BUFFER {
+            ab := arg.object;
+            byte_length := ab.primitive_value.s.count;
+            length = byte_length / element_size;
+            object.viewed_array_buffer = ab;
+            object.primitive_value = ab.primitive_value;
         } else if arg.type == .ARRAY || (arg.type == .OBJECT && (arg.object.kind == .ARRAY || is_typed_array(arg.object.kind))) {
             if is_typed_array(arg.object.kind) {
                 length = get_typed_array_length(arg.object);
@@ -177,37 +183,86 @@ typed_array_set :: (vm: *Vm, this: Value, arguments: [] Value, is_new: bool) -> 
 
 typed_array_subarray :: (vm: *Vm, this: Value, arguments: [] Value, is_new: bool) -> Value {
     if this.type == .OBJECT && is_typed_array(this.object.kind) && this.object {
-        start := 0;
-        end := get_typed_array_length(this.object);
+        src_obj := this.object;
 
-        if arguments.count > 0 && arguments[0].type == .NUMBER {
-            start = cast(int) arguments[0].number;
-            if start < 0 start = max(0, end + start);
-            if start > end start = end;
+        total_length := get_typed_array_length(src_obj);
+        start := 0;
+        end   := total_length;
+
+        if arguments.count > 0 {
+            begin_arg := arguments[0];
+            begin_num: float64;
+
+            if begin_arg.type == .NUMBER {
+                begin_num = begin_arg.number;
+            } else if begin_arg.type == .UNDEFINED {
+                begin_num = 0;
+            } else {
+                begin_num = abstract_to_number(vm, begin_arg);
+                if vm.has_exception return .{};
+
+                if is_detached_buffer(src_obj) {
+                    throw_exception(vm, "TypeError: ArrayBuffer was detached during argument evaluation");
+                    return .{};
+                }
+            }
+
+            if !isnan(begin_num) {
+                start = cast(int) begin_num;
+                if start < 0 start = max(0, total_length + start);
+                if start > total_length start = total_length;
+            }
         }
 
-        if arguments.count > 1 && arguments[1].type == .NUMBER {
-            end = cast(int) arguments[1].number;
-            if end < 0 end = max(0, get_typed_array_length(this.object) + end);
-            if end > get_typed_array_length(this.object) end = get_typed_array_length(this.object);
+        if arguments.count > 1 {
+            end_arg := arguments[1];
+            end_num: float64;
+
+            if end_arg.type == .NUMBER {
+                end_num = end_arg.number;
+            } else if end_arg.type == .UNDEFINED {
+                end_num = cast(float64) total_length;
+            } else {
+                end_num = abstract_to_number(vm, end_arg);
+                if vm.has_exception return .{};
+
+                if is_detached_buffer(src_obj) {
+                    throw_exception(vm, "TypeError: ArrayBuffer was detached during argument evaluation");
+                    return .{};
+                }
+            }
+
+            if !isnan(end_num) {
+                end = cast(int) end_num;
+                if end < 0 end = max(0, total_length + end);
+                if end > total_length end = total_length;
+            } else {
+                end = 0;
+            }
         }
 
         if start > end start = end;
+
         length := end - start;
 
-        element_size := this.object.primitive_value.s.count / get_typed_array_length(this.object);
+        byte_count := src_obj.primitive_value.s.count;
+        element_size := 1;
+        if total_length > 0 element_size = byte_count / total_length;
 
         object := allocate_object(vm);
-        object.kind = this.object.kind;
-        object.prototype = this.object.prototype;
+        object.kind = src_obj.kind;
+        object.prototype = src_obj.prototype;
 
         buffer := cast(*u8) alloc(length * element_size);
-        if length > 0 memcpy(buffer, this.object.primitive_value.s.data + start * element_size, length * element_size);
+        if length > 0 && src_obj.primitive_value.s.data != null {
+            memcpy(buffer, src_obj.primitive_value.s.data + start * element_size, length * element_size);
+        }
 
         object.primitive_value = .{ type = .STRING, s = string.{ length * element_size, buffer } };
 
         return .{ type = .OBJECT, object = object };
     }
+
     return .{ type = .UNDEFINED };
 }
 
@@ -343,8 +398,7 @@ typed_array_filter :: (vm: *Vm, this: Value, arguments: [] Value, is_new: bool) 
 
         temp_buffer := cast(*u8) alloc(length * element_size);
         defer free(temp_buffer);
-        
-        // We will construct a temporary typed array wrapping temp_buffer to easily set elements
+
         temp_obj: Gc_Object;
         temp_obj.kind = this.object.kind;
         temp_obj.primitive_value = .{ type = .STRING, s = string.{ length * element_size, temp_buffer } };
@@ -425,4 +479,17 @@ typed_array_for_each :: (vm: *Vm, this: Value, arguments: [] Value, is_new: bool
         }
     }
     return .{ type = .UNDEFINED };
+}
+
+is_detached_buffer :: (object: *Gc_Object) -> bool {
+    if !object return true;
+
+    target := object;
+    if is_typed_array(object.kind) {
+        if object.viewed_array_buffer {
+            target = object.viewed_array_buffer;
+        }
+    }
+
+    return target.is_detached;
 }

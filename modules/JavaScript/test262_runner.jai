@@ -12,7 +12,7 @@ main :: () {
         exit(1);
     }
 
-    harness_code_global = tprint("%\n%\nvar $262 = { createRealm: function() { var r = new Realm(); return { global: r.import('globalThis') }; } };\n", assert_js, sta_js);
+    harness_code_global = tprint("%\n%\nvar $262 = { createRealm: function() { var r = new Realm(); return { global: r.import('globalThis') }; }, detachArrayBuffer: __detachArrayBuffer__ };\n", assert_js, sta_js);
 
     print("Starting test execution...\n");
 

@@ -274,7 +274,7 @@ sweep_shapes :: (vm: *Vm) {
             to_remove.count = 0;
         }
     }
-    
+
     array_free(to_remove);
 
     surviving_shapes: [..] *Shape;
@@ -513,16 +513,18 @@ Gc_Object_Kind :: enum u8 {
 }
 
 Gc_Object :: struct {
-    marked: bool;
-    is_old: bool;
+    marked:            bool;
+    is_old:            bool;
     in_remembered_set: bool;
+    is_detached:       bool;
+
     kind:   Gc_Object_Kind;
 
     next: *Gc_Object;
 
     prototype: *Gc_Object;
 
-    fields: [..] Value;
+    fields:   [..] Value;
     elements: [..] Value;
 
     shape: *Shape;
@@ -553,6 +555,8 @@ Gc_Object :: struct {
 
         regexp: Uniform.Regexp;
     };
+
+    viewed_array_buffer: *Gc_Object;
 }
 
 Gc :: struct {
@@ -573,4 +577,3 @@ Gc :: struct {
 
     environment_pool:  *Environment;
 }
-

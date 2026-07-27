@@ -8,6 +8,12 @@ init_vm_array_buffer :: (vm: *Vm) {
         add_instance_method(vm, vm.array_buffer_prototype, "resizable__getter__",  array_buffer_resizable_getter);
     }
 
+    detach_found, detach_index := get_global_index(vm, "__detachArrayBuffer__");
+    if detach_found {
+        vm.current_realm.globals[detach_index].type            = .NATIVE_FUNCTION;
+        vm.current_realm.globals[detach_index].native_function = array_buffer_detach;
+    }
+
     if found {
         vm.current_realm.globals[index].type            = .NATIVE_FUNCTION;
         vm.current_realm.globals[index].native_function = array_buffer_constructor;
@@ -132,7 +138,33 @@ array_buffer_byte_length_getter :: (vm: *Vm, this: Value, arguments: [] Value, i
         return .{};
     }
 
+    if this.object.is_detached return .{ type = .NUMBER, number = 0 };
+
     return .{ type = .NUMBER, number = cast(float64) this.object.primitive_value.s.count };
+}
+
+array_buffer_detach :: (vm: *Vm, this: Value, arguments: [] Value, is_new: bool) -> Value {
+    if arguments.count == 0 || arguments[0].type != .OBJECT || arguments[0].object == null {
+        throw_exception(vm, "TypeError: detachArrayBuffer requires an ArrayBuffer argument");
+        return .{};
+    }
+
+    buffer_object := arguments[0].object;
+
+    if is_typed_array(buffer_object.kind) {
+        if buffer_object.viewed_array_buffer buffer_object = buffer_object.viewed_array_buffer;
+    }
+
+    if buffer_object.kind != .ARRAY_BUFFER {
+        throw_exception(vm, "TypeError: detachArrayBuffer requires an ArrayBuffer argument");
+        return .{};
+    }
+
+    buffer_object.is_detached             = true;
+    buffer_object.primitive_value.s.data  = null;
+    buffer_object.primitive_value.s.count = 0;
+
+    return .{ type = .UNDEFINED };
 }
 
 array_buffer_resizable_getter :: (vm: *Vm, this: Value, arguments: [] Value, is_new: bool) -> Value {
@@ -142,5 +174,6 @@ array_buffer_resizable_getter :: (vm: *Vm, this: Value, arguments: [] Value, is_
     }
 
     is_resizable := this.object.elements.count > 0;
+
     return .{ type = .BOOLEAN, boolean = is_resizable };
 }
