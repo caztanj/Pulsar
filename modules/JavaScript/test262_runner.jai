@@ -216,9 +216,9 @@ update_readme_coverage :: (passed: int, failed: int, skipped: int, total: int) {
         end_index = readme.count;
     }
 
-    passed_pct  := ifx total > 0 then (passed * 100) / total else 0;
-    failed_pct  := ifx total > 0 then (failed * 100) / total else 0;
-    skipped_pct := ifx total > 0 then (skipped * 100) / total else 0;
+    passed_pct  := ifx total > 0 then floor(passed * 100.0 / total + 0.5) else 0;
+    failed_pct  := ifx total > 0 then floor(failed * 100.0 / total + 0.5) else 0;
+    skipped_pct := ifx total > 0 then floor(skipped * 100.0 / total + 0.5) else 0;
 
     table := tprint("## Test 262 Coverage\n\n| Status | Count | Percentage |\n|---|---|---|\n| Passed | % | %% |\n| Failed | % | %% |\n| Skipped | % | %% |\n| **Total** | **%** | **100%** |\n\n",
         passed, passed_pct, "%",
