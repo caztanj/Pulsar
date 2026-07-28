@@ -402,6 +402,8 @@ generate_bytecode :: (ast: *Ast_Program, program: *Bytecode_Program = null) -> *
         array_add(*generator.program.globals, "Proxy");
         array_add(*generator.program.globals, "ArrayBuffer");
         array_add(*generator.program.globals, "DataView");
+        array_add(*generator.program.globals, "DisposableStack");
+        array_add(*generator.program.globals, "AsyncDisposableStack");
     }
 
     main_function: *Bytecode_Function;

@@ -2024,6 +2024,7 @@ init_common_vm_globals :: (vm: *Vm) {
     init_vm_proxy(vm);
     init_vm_array_buffer(vm);
     init_vm_data_view(vm);
+    init_vm_disposable_stack(vm);
 }
 
 init_vm_core :: (vm: *Vm) {
@@ -2929,6 +2930,9 @@ Vm :: struct {
             data_view_prototype:   *Gc_Object;
         };
     };
+
+    disposable_stack_prototype:       *Gc_Object;
+    async_disposable_stack_prototype: *Gc_Object;
 
     program:         *Bytecode_Program;
 
