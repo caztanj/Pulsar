@@ -50,21 +50,35 @@ init_vm_disposable_stack :: (vm: *Vm) {
     }
 }
 
+get_prototype_from_constructor :: (vm: *Vm, new_target: Value, default_proto: *Gc_Object) -> (ok: bool, proto: *Gc_Object) {
+    new_target_obj: *Gc_Object;
+
+    if new_target.type == .OBJECT || new_target.type == .FUNCTION || new_target.type == .NATIVE_FUNCTION {
+        new_target_obj = new_target.object;
+    }
+
+    if new_target_obj {
+        found, proto_val := lookup_property(vm, new_target_obj, "prototype");
+        if vm.has_exception return false, null;
+        if found && (proto_val.type == .OBJECT || proto_val.type == .ARRAY) && proto_val.object {
+            return true, proto_val.object;
+        }
+    }
+
+    return true, default_proto;
+}
+
 disposable_stack_constructor :: (vm: *Vm, this: Value, arguments: [] Value, is_new: bool) -> Value {
     if !is_new {
         throw_exception(vm, "TypeError: Constructor DisposableStack requires 'new'");
         return .{};
     }
 
-    object: *Gc_Object;
+    ok, proto := get_prototype_from_constructor(vm, this, vm.disposable_stack_prototype);
+    if !ok return .{};
 
-    if this.type == .OBJECT && this.object {
-        object = this.object;
-    } else {
-        object = allocate_object(vm);
-    }
-
-    object.prototype = vm.disposable_stack_prototype;
+    object := allocate_object(vm);
+    object.prototype = proto;
 
     return .{ type = .OBJECT, object = object };
 }
@@ -75,15 +89,11 @@ async_disposable_stack_constructor :: (vm: *Vm, this: Value, arguments: [] Value
         return .{};
     }
 
-    object: *Gc_Object;
+    ok, proto := get_prototype_from_constructor(vm, this, vm.async_disposable_stack_prototype);
+    if !ok return .{};
 
-    if this.type == .OBJECT && this.object {
-        object = this.object;
-    } else {
-        object = allocate_object(vm);
-    }
-
-    object.prototype = vm.async_disposable_stack_prototype;
+    object := allocate_object(vm);
+    object.prototype = proto;
 
     return .{ type = .OBJECT, object = object };
 }

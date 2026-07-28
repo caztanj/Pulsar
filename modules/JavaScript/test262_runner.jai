@@ -162,7 +162,7 @@ run_test :: (full_name: string, short_name: string) {
     if expected_to_fail {
         if !vm.has_exception {
             print("FAIL: % (Expected an error but got none)\n", full_name);
-            write_entire_file("debug_test262.js", full_code);
+            if !full_run write_entire_file("debug_test262.js", full_code);
             total_failed += 1;
             if !full_run exit(1);
             return;
@@ -170,7 +170,7 @@ run_test :: (full_name: string, short_name: string) {
     } else {
         if vm.has_exception {
             print("FAIL: %\n", full_name);
-            write_entire_file("debug_test262.js", full_code);
+            if !full_run write_entire_file("debug_test262.js", full_code);
 
             name := "Error";
             msg := "";
