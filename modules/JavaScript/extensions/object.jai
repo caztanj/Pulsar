@@ -386,12 +386,12 @@ object_get_own_property_descriptor :: (vm: *Vm, this: Value, arguments: [] Value
             enumerable = false; // Built-ins are non-enumerable on global object
         }
 
-        if (object.kind == .ARRAY || is_typed_array(object.kind)) && name == "length" {
+        if ((object.kind == .ARRAY || is_typed_array(object.kind)) && name == "length") || ((target_value.type == .FUNCTION || target_value.type == .NATIVE_FUNCTION) && name == "prototype") {
             configurable = false;
         }
 
         writable := true;
-        if (target_value.type == .FUNCTION || target_value.type == .NATIVE_FUNCTION) && (name == "length" || name == "name") {
+        if (target_value.type == .FUNCTION || target_value.type == .NATIVE_FUNCTION) && (name == "length" || name == "name" || name == "prototype") {
             writable = false;
         }
 

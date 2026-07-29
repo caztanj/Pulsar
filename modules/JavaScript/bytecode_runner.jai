@@ -3008,6 +3008,15 @@ Promise_Status :: enum {
 }
 
 delete_property :: (vm: *Vm, object: *Gc_Object, name: string) -> bool {
+    if (object.kind == .ARRAY || is_typed_array(object.kind)) && name == "length" {
+        return false;
+    }
+    if name == "prototype" {
+        if object.prototype == vm.function_prototype || (object.realm && object.realm.globals.count > 0) {
+            return false;
+        }
+    }
+
     if object.kind == .GLOBAL_PROXY {
         found, index := get_global_index(vm, name);
         if found {

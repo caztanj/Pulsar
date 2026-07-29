@@ -198,7 +198,7 @@ set_object_property :: (vm: *Vm, object: *Gc_Object, name: string, value: Value,
         }
     }
 
-    if name == "length" || name == "name" {
+    if name == "length" || name == "name" || name == "prototype" {
         current := object;
         is_func := false;
         while current {
