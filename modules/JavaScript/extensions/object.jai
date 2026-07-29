@@ -298,6 +298,14 @@ object_get_prototype_of :: (vm: *Vm, this: Value, arguments: [] Value, is_new: b
 
     if !prototype return .{ type = .NULL };
 
+    if prototype.realm {
+        for g: prototype.realm.globals {
+            if (g.type == .NATIVE_FUNCTION || g.type == .FUNCTION) && g.object == prototype {
+                return g;
+            }
+        }
+    }
+
     return .{ type = .OBJECT, object = prototype };
 }
 

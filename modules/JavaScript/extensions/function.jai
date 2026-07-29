@@ -21,6 +21,27 @@ init_vm_function :: (vm: *Vm) {
 
             set_object_property(vm, vm.function_prototype, "constructor", vm.current_realm.globals[index]);
         }
+
+        vm.async_function_prototype = allocate_object(vm);
+        vm.async_function_prototype.prototype = vm.function_prototype;
+
+        async_function_constructor_object := allocate_object(vm);
+        async_function_constructor_object.prototype = function_constructor_object;
+
+        async_func_val := Value.{
+            type = .NATIVE_FUNCTION,
+            native_function = function_constructor,
+            object = async_function_constructor_object,
+        };
+
+        set_object_property(vm, async_function_constructor_object, "prototype", Value.{ type = .OBJECT, object = vm.async_function_prototype });
+        set_object_property(vm, async_function_constructor_object, "name", Value.{ type = .STRING, s = "AsyncFunction" });
+        set_object_property(vm, async_function_constructor_object, "length", Value.{ type = .NUMBER, number = 1 });
+
+        set_object_property(vm, vm.async_function_prototype, "constructor", async_func_val);
+
+        symbol_tag_val := Value.{ type = .STRING, s = "AsyncFunction" };
+        set_object_property(vm, vm.async_function_prototype, "Symbol.toStringTag", symbol_tag_val);
     }
 }
 

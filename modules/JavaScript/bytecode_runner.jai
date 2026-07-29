@@ -310,12 +310,16 @@ execute_function_internal :: (vm: *Vm, initial_function: *Bytecode_Function, ini
                     loaded_function := vm.program.functions[instruction.imm];
 
                     function_object           := allocate_object(vm);
-                    function_object.prototype  = vm.function_prototype;
+                    if loaded_function.flags & .ASYNC {
+                        function_object.prototype = vm.async_function_prototype;
+                    } else {
+                        function_object.prototype = vm.function_prototype;
+                    }
 
                     registers_data[instruction.dest].object = function_object;
                     set_object_property(vm, function_object, "name", .{ type = .STRING, s = loaded_function.name });
 
-                    if !(loaded_function.flags & .ARROW) {
+                    if !(loaded_function.flags & .ARROW) && !(loaded_function.flags & .ASYNC) {
                         prototype_object           := allocate_object(vm);
                         prototype_object.prototype  = vm.object_prototype;
 
@@ -2926,6 +2930,7 @@ Vm :: struct {
             regexp_prototype:  *Gc_Object;
             symbol_prototype:  *Gc_Object;
             function_prototype:*Gc_Object;
+            async_function_prototype: *Gc_Object;
             array_buffer_prototype:*Gc_Object;
             data_view_prototype:   *Gc_Object;
         };
