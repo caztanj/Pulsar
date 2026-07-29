@@ -338,7 +338,12 @@ object_get_own_property_descriptor :: (vm: *Vm, this: Value, arguments: [] Value
 
     if (target_value.type != .OBJECT && target_value.type != .ARRAY && target_value.type != .FUNCTION && target_value.type != .NATIVE_FUNCTION) || !target_value.object return .{ type = .UNDEFINED };
 
-    name   := value_to_string(vm, arguments[1]);
+    name: string;
+    if arguments[1].type == .SYMBOL {
+        name = get_symbol_string_key(*arguments[1]);
+    } else {
+        name = value_to_string(vm, arguments[1]);
+    }
     object := target_value.object;
 
     has_property := false;
@@ -379,7 +384,7 @@ object_get_own_property_descriptor :: (vm: *Vm, this: Value, arguments: [] Value
 
         enumerable := true;
         configurable := true;
-        if name == "cause" || name == "message" || name == "name" || name == "length" || name == "prototype" {
+        if name == "cause" || name == "message" || name == "name" || name == "length" || name == "prototype" || starts_with(name, "@@") {
             enumerable = false;
         }
         if object.kind == .GLOBAL_PROXY {
@@ -394,7 +399,7 @@ object_get_own_property_descriptor :: (vm: *Vm, this: Value, arguments: [] Value
         if (target_value.type == .FUNCTION || target_value.type == .NATIVE_FUNCTION) && (name == "length" || name == "name") {
             writable = false;
         }
-        if target_value.type == .NATIVE_FUNCTION && name == "prototype" {
+        if (target_value.type == .NATIVE_FUNCTION && name == "prototype") || name == "@@Symbol.toStringTag" {
             writable = false;
         }
 

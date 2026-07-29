@@ -198,6 +198,13 @@ set_object_property :: (vm: *Vm, object: *Gc_Object, name: string, value: Value,
         }
     }
 
+    if name == "@@Symbol.toStringTag" {
+        if object.shape {
+            offset, found := shape_lookup_property(object.shape, name, -1);
+            if found return;
+        }
+    }
+
     if name == "length" || name == "name" {
         current := object;
         is_func := false;

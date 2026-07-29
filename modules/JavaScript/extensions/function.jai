@@ -42,7 +42,7 @@ init_vm_function :: (vm: *Vm) {
         set_object_property(vm, vm.async_function_prototype, "constructor", async_func_val);
 
         symbol_tag_val := Value.{ type = .STRING, s = "AsyncFunction" };
-        set_object_property(vm, vm.async_function_prototype, "Symbol.toStringTag", symbol_tag_val);
+        set_object_property(vm, vm.async_function_prototype, "@@Symbol.toStringTag", symbol_tag_val);
     }
 }
 

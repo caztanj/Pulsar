@@ -38,6 +38,12 @@ init_vm_symbol :: (vm: *Vm) {
         to_primitive_symbol.primitive_value = .{ type = .STRING, s = "Symbol.toPrimitive" };
         to_primitive_symbol_value := Value.{ type = .SYMBOL, object = to_primitive_symbol, symbol_object = to_primitive_symbol };
         add_static_property(vm, symbol_object, "toPrimitive", to_primitive_symbol_value);
+
+        to_string_tag_symbol := allocate_object(vm);
+        to_string_tag_symbol.kind = .SYMBOL;
+        to_string_tag_symbol.primitive_value = .{ type = .STRING, s = "Symbol.toStringTag" };
+        to_string_tag_symbol_value := Value.{ type = .SYMBOL, object = to_string_tag_symbol, symbol_object = to_string_tag_symbol };
+        add_static_property(vm, symbol_object, "toStringTag", to_string_tag_symbol_value);
     }
 }
 
