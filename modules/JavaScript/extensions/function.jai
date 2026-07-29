@@ -27,6 +27,7 @@ init_vm_function :: (vm: *Vm) {
 
         async_function_constructor_object := allocate_object(vm);
         async_function_constructor_object.prototype = function_constructor_object;
+        vm.async_function_constructor_object = async_function_constructor_object;
 
         async_func_val := Value.{
             type = .NATIVE_FUNCTION,

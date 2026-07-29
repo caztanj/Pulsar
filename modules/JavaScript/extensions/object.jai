@@ -391,7 +391,10 @@ object_get_own_property_descriptor :: (vm: *Vm, this: Value, arguments: [] Value
         }
 
         writable := true;
-        if (target_value.type == .FUNCTION || target_value.type == .NATIVE_FUNCTION) && (name == "length" || name == "name" || name == "prototype") {
+        if (target_value.type == .FUNCTION || target_value.type == .NATIVE_FUNCTION) && (name == "length" || name == "name") {
+            writable = false;
+        }
+        if target_value.type == .NATIVE_FUNCTION && name == "prototype" {
             writable = false;
         }
 

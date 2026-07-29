@@ -198,7 +198,7 @@ set_object_property :: (vm: *Vm, object: *Gc_Object, name: string, value: Value,
         }
     }
 
-    if name == "length" || name == "name" || name == "prototype" {
+    if name == "length" || name == "name" {
         current := object;
         is_func := false;
         while current {
@@ -209,6 +209,27 @@ set_object_property :: (vm: *Vm, object: *Gc_Object, name: string, value: Value,
             current = current.prototype;
         }
         if is_func {
+            if object.shape {
+                offset, found := shape_lookup_property(object.shape, name, -1);
+                if found return;
+            }
+        }
+    }
+
+    if name == "prototype" {
+        is_native_func := false;
+        if object.realm {
+            for g: object.realm.globals {
+                if g.type == .NATIVE_FUNCTION && g.object == object {
+                    is_native_func = true;
+                    break;
+                }
+            }
+        }
+        if !is_native_func && vm.async_function_constructor_object && object == vm.async_function_constructor_object {
+            is_native_func = true;
+        }
+        if is_native_func {
             if object.shape {
                 offset, found := shape_lookup_property(object.shape, name, -1);
                 if found return;

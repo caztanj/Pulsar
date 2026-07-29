@@ -2931,6 +2931,7 @@ Vm :: struct {
             symbol_prototype:  *Gc_Object;
             function_prototype:*Gc_Object;
             async_function_prototype: *Gc_Object;
+            async_function_constructor_object: *Gc_Object;
             array_buffer_prototype:*Gc_Object;
             data_view_prototype:   *Gc_Object;
         };
