@@ -1639,6 +1639,12 @@ parse_function_expression :: (parser: *Parser) -> *Ast_Function_Expression {
         skip_whitespace_and_comments(parser);
     }
 
+    if peek(parser).type == .IDENTIFIER {
+        identifier_token := consume(parser, .IDENTIFIER);
+        node.identifier = create_identifier(identifier_token);
+        skip_whitespace_and_comments(parser);
+    }
+
     consume(parser, "(");
 
     if !check(parser, ")") {
@@ -2617,6 +2623,7 @@ Ast_New_Expression :: struct {
 Ast_Function_Expression :: struct {
     using base: Ast_Node;
 
+    identifier: *Ast_Identifier;
     parameters: [..] *Ast_Node;
     body:       *Ast_Block_Statement;
 

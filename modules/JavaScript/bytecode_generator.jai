@@ -3103,7 +3103,11 @@ emit_function_expression_helper :: (generator: *Bytecode_Generator, function_exp
 
     bytecode_function := New(Bytecode_Function);
 
-    bytecode_function.name            = copy_string("anonymous");
+    if function_expression.identifier {
+        bytecode_function.name            = copy_string(function_expression.identifier.name);
+    } else {
+        bytecode_function.name            = copy_string("anonymous");
+    }
     bytecode_function.arguments_count = function_expression.parameters.count;
     if function_expression.is_generator bytecode_function.flags |= .GENERATOR;
     if function_expression.is_async bytecode_function.flags |= .ASYNC;

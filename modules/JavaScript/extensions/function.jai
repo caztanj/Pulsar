@@ -18,6 +18,8 @@ init_vm_function :: (vm: *Vm) {
             vm.current_realm.globals[index].type = .NATIVE_FUNCTION;
             vm.current_realm.globals[index].native_function = function_constructor;
             vm.current_realm.globals[index].object = function_constructor_object;
+
+            set_object_property(vm, vm.function_prototype, "constructor", vm.current_realm.globals[index]);
         }
     }
 }
@@ -47,6 +49,21 @@ function_constructor :: (vm: *Vm, this: Value, arguments: [] Value, is_new: bool
             dummy.object.prototype = vm.function_prototype;
         }
     }
+
+    param_count := 0;
+    if arguments.count > 1 {
+        for i: 0..arguments.count - 2 {
+            s := value_to_string(vm, arguments[i]);
+            parts := split(s, ",");
+            defer array_free(parts);
+            for parts {
+                trimmed := trim(it);
+                if trimmed.count > 0 param_count += 1;
+            }
+        }
+    }
+
+    set_object_property(vm, dummy.object, "length", Value.{ type = .NUMBER, number = cast(float64) param_count });
 
     return dummy;
 }
