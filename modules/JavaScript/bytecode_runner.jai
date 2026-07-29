@@ -1879,6 +1879,14 @@ call_value :: inline (vm: *Vm, this: Value, callee: Value, arguments: [] Value, 
     final_arguments.count = count;
 
     if callee.type == .FUNCTION {
+        if is_new {
+            flags := callee.function.function.flags;
+            if (flags & .ASYNC) || (flags & .ARROW) || (flags & .GENERATOR) {
+                throw_exception(vm, "TypeError: Function is not a constructor");
+                return .{};
+            }
+        }
+
         if (callee.function.function.flags & .GENERATOR) {
             generator_object                := allocate_object(vm);
             generator_object.kind            = .GENERATOR;
@@ -1948,6 +1956,13 @@ call_value :: inline (vm: *Vm, this: Value, callee: Value, arguments: [] Value, 
 
         return result;
     } else if callee.type == .NATIVE_FUNCTION {
+        if is_new {
+            if callee.object && callee.object.prototype == vm.async_function_prototype {
+                throw_exception(vm, "TypeError: AsyncFunction instances are not constructors");
+                return .{};
+            }
+        }
+
         effective_this := this;
 
         if effective_this.type == .UNDEFINED {
