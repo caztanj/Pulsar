@@ -387,7 +387,7 @@ generate_bytecode :: (ast: *Ast_Program, program: *Bytecode_Program = null) -> *
         add_global(*generator, "Set", is_declared = true);
         add_global(*generator, "WeakMap", is_declared = true);
         add_global(*generator, "WeakSet", is_declared = true);
-        add_global(*generator, "ArrayBuffer", is_declared = true);
+        add_global(*generator, "ArrayBuffer", is_declared = false);
         add_global(*generator, "DataView", is_declared = true);
         add_global(*generator, "Float32Array", is_declared = true);
         add_global(*generator, "Float64Array", is_declared = true);
@@ -431,7 +431,7 @@ generate_bytecode :: (ast: *Ast_Program, program: *Bytecode_Program = null) -> *
         add_global(*generator, "Reflect", is_declared = true);
         add_global(*generator, "Proxy", is_declared = true);
         add_global(*generator, "DisposableStack", is_declared = true);
-        add_global(*generator, "AsyncDisposableStack", is_declared = true);
+        add_global(*generator, "AsyncDisposableStack", is_declared = false);
     }
 
     main_function: *Bytecode_Function;
