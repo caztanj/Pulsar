@@ -2167,6 +2167,7 @@ init_common_vm_globals :: (vm: *Vm) {
     init_vm_array_buffer(vm);
     init_vm_data_view(vm);
     init_vm_disposable_stack(vm);
+    init_vm_atomics(vm);
 }
 
 init_vm_core :: (vm: *Vm) {

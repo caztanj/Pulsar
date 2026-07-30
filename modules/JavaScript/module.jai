@@ -121,6 +121,7 @@ Permission :: enum_flags {
 #load "extensions/reflect.jai";
 #load "extensions/proxy.jai";
 #load "extensions/disposable_stack.jai";
+#load "extensions/atomics.jai";
 
 #scope_module
 
