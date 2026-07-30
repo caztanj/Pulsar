@@ -43,6 +43,8 @@ init_vm_function :: (vm: *Vm) {
 
         symbol_tag_val := Value.{ type = .STRING, s = "AsyncFunction" };
         set_object_property(vm, vm.async_function_prototype, "@@Symbol.toStringTag", symbol_tag_val);
+
+        vm.current_realm.async_function_prototype = vm.async_function_prototype;
     }
 }
 
@@ -198,7 +200,19 @@ function_constructor :: (vm: *Vm, this: Value, arguments: [] Value, is_new: bool
     loaded_func := vm.program.functions[target_func_idx];
     func_obj := allocate_object(vm);
     if is_async {
-        func_obj.prototype = vm.async_function_prototype;
+        target_proto: *Gc_Object = vm.async_function_prototype;
+        if (this.type == .FUNCTION || this.type == .NATIVE_FUNCTION) && this.object {
+            found_proto, proto_val := lookup_property(vm, this.object, "prototype");
+            if found_proto && (proto_val.type == .OBJECT || proto_val.type == .ARRAY) && proto_val.object {
+                target_proto = proto_val.object;
+            } else {
+                new_target_realm := this.object.realm;
+                if new_target_realm && new_target_realm.async_function_prototype {
+                    target_proto = new_target_realm.async_function_prototype;
+                }
+            }
+        }
+        func_obj.prototype = target_proto;
     } else {
         func_obj.prototype = vm.function_prototype;
     }

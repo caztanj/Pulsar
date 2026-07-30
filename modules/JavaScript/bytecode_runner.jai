@@ -2137,7 +2137,60 @@ init_vm_core :: (vm: *Vm) {
 eval_stub :: (vm: *Vm, this: Value, arguments: [] Value, is_new: bool) -> Value {
     if arguments.count == 0 return .{ type = .UNDEFINED };
     if arguments[0].type != .STRING return arguments[0];
-    return .{ type = .UNDEFINED };
+
+    code := arguments[0].s;
+
+    has_error, error_msg, tokens := tokenize(code);
+    if has_error {
+        throw_exception(vm, tprint("SyntaxError: %", error_msg));
+        return .{};
+    }
+
+    ast := build_ast(code, tokens);
+    if ast.has_error {
+        throw_exception(vm, tprint("SyntaxError: %", ast.error_message));
+        return .{};
+    }
+
+    old_globals_count := vm.program.globals.count;
+
+    eval_func: *Bytecode_Function;
+    {
+        push_allocator(context.default_allocator);
+        eval_func = generate_module_bytecode(ast, vm.program, "eval");
+    }
+
+    if vm.program.has_error {
+        throw_exception(vm, tprint("SyntaxError: %", vm.program.error_message));
+        vm.program.has_error = false;
+        vm.program.error_message = "";
+        return .{};
+    }
+
+    if vm.program.globals.count > old_globals_count {
+        for r: vm.realms {
+            if r.globals.count < vm.program.globals.count {
+                old_count := r.globals.count;
+                new_count := vm.program.globals.count;
+                new_globals: [] Value;
+                {
+                    push_allocator(context.default_allocator);
+                    new_globals = NewArray(new_count, Value);
+                }
+                memcpy(new_globals.data, r.globals.data, old_count * size_of(Value));
+                for i: old_count..new_count-1 {
+                    is_declared := i < vm.program.declared_globals.count && vm.program.declared_globals[i];
+                    new_globals[i] = ifx is_declared then Value.{ type = .UNDEFINED } else Value.{ type = .EMPTY };
+                }
+                r.globals = new_globals;
+            }
+        }
+    }
+
+    if !eval_func return .{ type = .UNDEFINED };
+
+    result := execute_function(vm, eval_func, .[], .{});
+    return result;
 }
 
 realm_constructor :: (vm: *Vm, this: Value, final_arguments: [] Value, is_new: bool) -> Value {
@@ -2158,6 +2211,8 @@ realm_constructor :: (vm: *Vm, this: Value, final_arguments: [] Value, is_new: b
     vm.current_realm = realm;
 
     init_common_vm_globals(vm);
+
+    realm.async_function_prototype = vm.async_function_prototype;
 
     vm.current_realm = old_realm;
 
@@ -2937,6 +2992,7 @@ Microtask :: struct {
 
 Realm :: struct {
     globals: [] Value;
+    async_function_prototype: *Gc_Object;
 }
 
 Module_Entry :: struct {

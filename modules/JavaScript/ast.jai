@@ -1293,6 +1293,14 @@ parse_primary :: (parser: *Parser) -> *Ast_Node {
 
         expression := parse_expression(parser);
 
+        skip_whitespace_and_comments(parser);
+        while check(parser, ",") {
+            match(parser, ",");
+            skip_whitespace_and_comments(parser);
+            expression = parse_assignment(parser);
+            skip_whitespace_and_comments(parser);
+        }
+
         consume(parser, ")");
 
         return expression;
