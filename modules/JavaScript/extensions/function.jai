@@ -6,45 +6,11 @@ init_vm_function :: (vm: *Vm) {
         add_instance_method(vm, vm.function_prototype, "call", function_call);
         add_instance_method(vm, vm.function_prototype, "bind", function_bind);
 
-        function_constructor_object := allocate_object(vm);
-        function_constructor_object.prototype = vm.function_prototype;
-
-        set_object_property(vm, function_constructor_object, "prototype", Value.{ type = .OBJECT, object = vm.function_prototype });
-        set_object_property(vm, vm.function_prototype, "constructor", Value.{ type = .OBJECT, object = function_constructor_object });
-        set_object_property(vm, function_constructor_object, "name", Value.{ type = .STRING, s = "Function" });
-
-        found, index := get_global_index(vm, "Function");
-        if found {
-            vm.current_realm.globals[index].type = .NATIVE_FUNCTION;
-            vm.current_realm.globals[index].native_function = function_constructor;
-            vm.current_realm.globals[index].object = function_constructor_object;
-
-            set_object_property(vm, vm.function_prototype, "constructor", vm.current_realm.globals[index]);
-        }
-
         vm.async_function_prototype = allocate_object(vm);
         vm.async_function_prototype.prototype = vm.function_prototype;
 
-        async_function_constructor_object := allocate_object(vm);
-        async_function_constructor_object.prototype = function_constructor_object;
-        vm.async_function_constructor_object = async_function_constructor_object;
-
-        async_func_val := Value.{
-            type = .NATIVE_FUNCTION,
-            native_function = function_constructor,
-            object = async_function_constructor_object,
-        };
-
-        set_object_property(vm, async_function_constructor_object, "prototype", Value.{ type = .OBJECT, object = vm.async_function_prototype });
-        set_object_property(vm, async_function_constructor_object, "name", Value.{ type = .STRING, s = "AsyncFunction" });
-        set_object_property(vm, async_function_constructor_object, "length", Value.{ type = .NUMBER, number = 1 });
-
-        set_object_property(vm, vm.async_function_prototype, "constructor", async_func_val);
-
         symbol_tag_val := Value.{ type = .STRING, s = "AsyncFunction" };
         set_object_property(vm, vm.async_function_prototype, "@@Symbol.toStringTag", symbol_tag_val);
-
-        vm.current_realm.async_function_prototype = vm.async_function_prototype;
 
         vm.generator_function_prototype = allocate_object(vm);
         vm.generator_function_prototype.prototype = vm.function_prototype;
@@ -52,25 +18,7 @@ init_vm_function :: (vm: *Vm) {
         generator_prototype := allocate_object(vm);
         generator_prototype.prototype = vm.object_prototype;
         set_object_property(vm, vm.generator_function_prototype, "prototype", Value.{ type = .OBJECT, object = generator_prototype });
-
-        generator_function_constructor_object := allocate_object(vm);
-        generator_function_constructor_object.prototype = function_constructor_object;
-        vm.generator_function_constructor_object = generator_function_constructor_object;
-
-        gen_func_val := Value.{
-            type = .NATIVE_FUNCTION,
-            native_function = function_constructor,
-            object = generator_function_constructor_object,
-        };
-
-        set_object_property(vm, generator_function_constructor_object, "prototype", Value.{ type = .OBJECT, object = vm.generator_function_prototype });
-        set_object_property(vm, generator_function_constructor_object, "name", Value.{ type = .STRING, s = "GeneratorFunction" });
-        set_object_property(vm, generator_function_constructor_object, "length", Value.{ type = .NUMBER, number = 1 });
-
-        set_object_property(vm, vm.generator_function_prototype, "constructor", gen_func_val);
         set_object_property(vm, vm.generator_function_prototype, "@@Symbol.toStringTag", Value.{ type = .STRING, s = "GeneratorFunction" });
-
-        vm.current_realm.generator_function_prototype = vm.generator_function_prototype;
 
         vm.async_generator_function_prototype = allocate_object(vm);
         vm.async_generator_function_prototype.prototype = vm.function_prototype;
@@ -78,32 +26,88 @@ init_vm_function :: (vm: *Vm) {
         async_generator_prototype := allocate_object(vm);
         async_generator_prototype.prototype = vm.object_prototype;
         set_object_property(vm, vm.async_generator_function_prototype, "prototype", Value.{ type = .OBJECT, object = async_generator_prototype });
+        set_object_property(vm, vm.async_generator_function_prototype, "@@Symbol.toStringTag", Value.{ type = .STRING, s = "AsyncGeneratorFunction" });
+    }
 
-        async_generator_function_constructor_object := allocate_object(vm);
-        async_generator_function_constructor_object.prototype = function_constructor_object;
-        vm.async_generator_function_constructor_object = async_generator_function_constructor_object;
+    vm.current_realm.async_function_prototype = vm.async_function_prototype;
+    vm.current_realm.generator_function_prototype = vm.generator_function_prototype;
+    vm.current_realm.async_generator_function_prototype = vm.async_generator_function_prototype;
 
-        async_gen_func_val := Value.{
+    function_constructor_object := allocate_object(vm);
+    function_constructor_object.prototype = vm.function_prototype;
+    vm.function_constructor_object = function_constructor_object;
+
+    set_object_property(vm, function_constructor_object, "prototype", Value.{ type = .OBJECT, object = vm.function_prototype });
+    set_object_property(vm, function_constructor_object, "name", Value.{ type = .STRING, s = "Function" });
+
+    found, index := get_global_index(vm, "Function");
+    if found {
+        vm.current_realm.globals[index] = Value.{
             type = .NATIVE_FUNCTION,
             native_function = function_constructor,
-            object = async_generator_function_constructor_object,
+            object = function_constructor_object,
         };
-
-        set_object_property(vm, async_generator_function_constructor_object, "prototype", Value.{ type = .OBJECT, object = vm.async_generator_function_prototype });
-        set_object_property(vm, async_generator_function_constructor_object, "name", Value.{ type = .STRING, s = "AsyncGeneratorFunction" });
-        set_object_property(vm, async_generator_function_constructor_object, "length", Value.{ type = .NUMBER, number = 1 });
-
-        set_object_property(vm, vm.async_generator_function_prototype, "constructor", async_gen_func_val);
-        set_object_property(vm, vm.async_generator_function_prototype, "@@Symbol.toStringTag", Value.{ type = .STRING, s = "AsyncGeneratorFunction" });
-
-        vm.current_realm.async_generator_function_prototype = vm.async_generator_function_prototype;
+        set_object_property(vm, vm.function_prototype, "constructor", vm.current_realm.globals[index]);
     }
+
+    async_function_constructor_object := allocate_object(vm);
+    async_function_constructor_object.prototype = function_constructor_object;
+    vm.async_function_constructor_object = async_function_constructor_object;
+
+    async_func_val := Value.{
+        type = .NATIVE_FUNCTION,
+        native_function = function_constructor,
+        object = async_function_constructor_object,
+    };
+    set_object_property(vm, async_function_constructor_object, "prototype", Value.{ type = .OBJECT, object = vm.async_function_prototype });
+    set_object_property(vm, async_function_constructor_object, "name", Value.{ type = .STRING, s = "AsyncFunction" });
+    set_object_property(vm, async_function_constructor_object, "length", Value.{ type = .NUMBER, number = 1 });
+
+    set_object_property(vm, vm.async_function_prototype, "constructor", async_func_val);
+
+    generator_function_constructor_object := allocate_object(vm);
+    generator_function_constructor_object.prototype = function_constructor_object;
+    vm.generator_function_constructor_object = generator_function_constructor_object;
+
+    gen_func_val := Value.{
+        type = .NATIVE_FUNCTION,
+        native_function = function_constructor,
+        object = generator_function_constructor_object,
+    };
+
+    set_object_property(vm, generator_function_constructor_object, "prototype", Value.{ type = .OBJECT, object = vm.generator_function_prototype });
+    set_object_property(vm, generator_function_constructor_object, "name", Value.{ type = .STRING, s = "GeneratorFunction" });
+    set_object_property(vm, generator_function_constructor_object, "length", Value.{ type = .NUMBER, number = 1 });
+
+    set_object_property(vm, vm.generator_function_prototype, "constructor", gen_func_val);
+
+    async_generator_function_constructor_object := allocate_object(vm);
+    async_generator_function_constructor_object.prototype = function_constructor_object;
+    vm.async_generator_function_constructor_object = async_generator_function_constructor_object;
+
+    async_gen_func_val := Value.{
+        type = .NATIVE_FUNCTION,
+        native_function = function_constructor,
+        object = async_generator_function_constructor_object,
+    };
+
+    set_object_property(vm, async_generator_function_constructor_object, "prototype", Value.{ type = .OBJECT, object = vm.async_generator_function_prototype });
+    set_object_property(vm, async_generator_function_constructor_object, "name", Value.{ type = .STRING, s = "AsyncGeneratorFunction" });
+    set_object_property(vm, async_generator_function_constructor_object, "length", Value.{ type = .NUMBER, number = 1 });
+
+    set_object_property(vm, vm.async_generator_function_prototype, "constructor", async_gen_func_val);
 }
 
 function_constructor :: (vm: *Vm, this: Value, arguments: [] Value, is_new: bool) -> Value {
-    is_async_gen := (vm.current_native_callee.type == .NATIVE_FUNCTION && vm.current_native_callee.object == vm.async_generator_function_constructor_object);
-    is_async := is_async_gen || (vm.current_native_callee.type == .NATIVE_FUNCTION && vm.current_native_callee.object == vm.async_function_constructor_object);
-    is_gen := is_async_gen || (vm.current_native_callee.type == .NATIVE_FUNCTION && vm.current_native_callee.object == vm.generator_function_constructor_object);
+    callee_name := "";
+    if vm.current_native_callee.type == .NATIVE_FUNCTION && vm.current_native_callee.object {
+        found_name, name_val := lookup_property(vm, vm.current_native_callee.object, "name");
+        if found_name && name_val.type == .STRING callee_name = name_val.s;
+    }
+
+    is_async_gen := (callee_name == "AsyncGeneratorFunction");
+    is_async := is_async_gen || (callee_name == "AsyncFunction");
+    is_gen := is_async_gen || (callee_name == "GeneratorFunction");
 
     body_str := "";
     params_str := "";
@@ -198,8 +202,11 @@ function_constructor :: (vm: *Vm, this: Value, arguments: [] Value, is_new: bool
                         push_allocator(context.default_allocator);
                         new_globals = NewArray(new_count, Value);
                     }
-                    memcpy(new_globals.data, r.globals.data, old_count * size_of(Value));
-                    memset(new_globals.data + old_count, 0, (new_count - old_count) * size_of(Value));
+                    if old_count > 0 memcpy(new_globals.data, r.globals.data, old_count * size_of(Value));
+                    for i: old_count..new_count-1 {
+                        is_declared := i < vm.program.declared_globals.count && vm.program.declared_globals[i];
+                        new_globals[i] = ifx is_declared then Value.{ type = .UNDEFINED } else Value.{ type = .EMPTY };
+                    }
                     r.globals = new_globals;
                 }
             }
@@ -240,7 +247,9 @@ function_constructor :: (vm: *Vm, this: Value, arguments: [] Value, is_new: bool
         f := vm.program.functions[f_idx];
         for * inst: f.instructions {
             if inst.op_code == {
-                case .LOAD_CONST;
+                case .LOAD_CONST; #through;
+                case .ADD_CONST; #through;
+                case .SUB_CONST;
                     if inst.imm < const_map.count inst.imm = cast(u16) const_map[inst.imm];
                 case .LOAD_GLOBAL; #through;
                 case .STORE_GLOBAL;

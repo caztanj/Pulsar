@@ -124,6 +124,12 @@ execute_function_internal :: (vm: *Vm, initial_function: *Bytecode_Function, ini
     generator            := initial_generator;
     parent_env           := initial_parent_env;
 
+    old_realm := vm.current_realm;
+    if generator && generator.realm {
+        vm.current_realm = generator.realm;
+    }
+    defer vm.current_realm = old_realm;
+
     env: *Environment;
 
     registers:      [] Value;
@@ -540,10 +546,10 @@ execute_function_internal :: (vm: *Vm, initial_function: *Bytecode_Function, ini
                         property_name := vm.program.property_names[instruction.imm];
 
                         if object.kind == .GLOBAL_PROXY {
-                            found, global_index := get_global_index(vm, property_name);
+                            global_index := get_or_add_global_index(vm, property_name);
+                            target_realm := ifx object.realm then object.realm else vm.current_realm;
 
-                            if found vm.current_realm.globals[global_index] = registers_data[instruction.arg1];
-                            else                                              set_object_property(vm, object, property_name, registers_data[instruction.arg1]);
+                            target_realm.globals[global_index] = registers_data[instruction.arg1];
                         } else {
                             pic_set_field :: (vm: *Vm, object: *Gc_Object, offset: s32, value: Value) #expand {
                                 if offset < object.fields.count {
@@ -636,9 +642,10 @@ execute_function_internal :: (vm: *Vm, initial_function: *Bytecode_Function, ini
 
                         if current && current.kind == .GLOBAL_PROXY {
                             found, global_index := get_global_index(vm, property_name);
+                            target_realm := ifx current.realm then current.realm else vm.current_realm;
 
-                            if found && vm.current_realm.globals[global_index].type != .EMPTY {
-                                registers_data[instruction.dest] = vm.current_realm.globals[global_index];
+                            if found && target_realm.globals[global_index].type != .EMPTY {
+                                registers_data[instruction.dest] = target_realm.globals[global_index];
                                 if property_name == "globalThis" && registers_data[instruction.dest].type == .OBJECT {
                                     registers_data[instruction.dest].object.kind = .GLOBAL_PROXY;
                                 }
@@ -965,7 +972,14 @@ execute_function_internal :: (vm: *Vm, initial_function: *Bytecode_Function, ini
                         if found && (target_protototype_value.type == .OBJECT || target_protototype_value.type == .ARRAY) && target_protototype_value.object {
                             target_prototype := target_protototype_value.object;
 
-                            current := ifx (left.type == .OBJECT || left.type == .ARRAY || left.type == .FUNCTION) left.object else null;
+                            current: *Gc_Object;
+                            if left.type == {
+                                case .OBJECT;          current = left.object;
+                                case .ARRAY;           current = left.object;
+                                case .FUNCTION;        current = left.object;
+                                case .NATIVE_FUNCTION; current = left.object;
+                                case .GENERATOR;       current = left.generator_object;
+                            }
 
                             while current {
                                 current = current.prototype;
@@ -1954,6 +1968,7 @@ call_value :: inline (vm: *Vm, this: Value, callee: Value, arguments: [] Value, 
 
         if (callee.function.function.flags & .GENERATOR) {
             generator_object                := allocate_object(vm);
+            if callee.object && callee.object.realm generator_object.realm = callee.object.realm;
             generator_object.kind            = .GENERATOR;
             generator_object.generator_func  = callee.function.function;
             generator_object.generator_pc    = 0;
@@ -1978,6 +1993,7 @@ call_value :: inline (vm: *Vm, this: Value, callee: Value, arguments: [] Value, 
             promise_value := promise_constructor(vm, .{}, .[], true);
 
             async_object                := allocate_object(vm);
+            if callee.object && callee.object.realm async_object.realm = callee.object.realm;
             async_object.kind            = .ASYNC_EXECUTION;
             async_object.generator_func  = callee.function.function;
             async_object.generator_pc    = 0;
@@ -2077,6 +2093,31 @@ get_global_index :: (vm: *Vm, name: string) -> found: bool, index: int {
     return false, 0;
 }
 
+get_or_add_global_index :: (vm: *Vm, name: string) -> int {
+    found, index := get_global_index(vm, name);
+    if found return index;
+
+    array_add(*vm.program.globals, copy_string(name));
+    new_index := vm.program.globals.count - 1;
+    for r: vm.realms {
+        if r.globals.count < vm.program.globals.count {
+            old_count := r.globals.count;
+            new_count := vm.program.globals.count;
+            new_globals: [] Value;
+            {
+                push_allocator(context.default_allocator);
+                new_globals = NewArray(new_count, Value);
+            }
+            if old_count > 0 memcpy(new_globals.data, r.globals.data, old_count * size_of(Value));
+            for i: old_count..new_count-1 {
+                new_globals[i] = Value.{ type = .EMPTY };
+            }
+            r.globals = new_globals;
+        }
+    }
+    return new_index;
+}
+
 init_common_vm_globals :: (vm: *Vm) {
     init_vm_core(vm);
     init_vm_object(vm);
@@ -2161,6 +2202,15 @@ init_vm_core :: (vm: *Vm) {
 eval_stub :: (vm: *Vm, this: Value, arguments: [] Value, is_new: bool) -> Value {
     if arguments.count == 0 return .{ type = .UNDEFINED };
     if arguments[0].type != .STRING return arguments[0];
+
+    eval_realm := vm.current_realm;
+    if this.type == .OBJECT && this.object && this.object.realm {
+        eval_realm = this.object.realm;
+    }
+
+    old_realm := vm.current_realm;
+    vm.current_realm = eval_realm;
+    defer vm.current_realm = old_realm;
 
     code := arguments[0].s;
 
@@ -3115,6 +3165,7 @@ Vm :: struct {
             regexp_prototype:  *Gc_Object;
             symbol_prototype:  *Gc_Object;
             function_prototype:*Gc_Object;
+            function_constructor_object: *Gc_Object;
             async_function_prototype: *Gc_Object;
             async_function_constructor_object: *Gc_Object;
             generator_function_prototype: *Gc_Object;

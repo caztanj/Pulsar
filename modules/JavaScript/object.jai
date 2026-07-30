@@ -80,15 +80,16 @@ lookup_property :: (vm: *Vm, object: *Gc_Object, name: string, imm: int = -1) ->
                 }
             }
 
+            if current.kind == .GLOBAL_PROXY {
+                found_global, global_idx := get_global_index(vm, name);
+                target_realm := ifx current.realm then current.realm else vm.current_realm;
+                if found_global && target_realm.globals[global_idx].type != .EMPTY return true, target_realm.globals[global_idx];
+            }
+
             if current.shape {
                 offset, found := shape_lookup_property(current.shape, name, imm);
                 if found && offset < current.fields.count && current.fields[offset].type != .EMPTY return true, current.fields[offset];
             }
-        }
-
-        if current.kind == .GLOBAL_PROXY {
-            found_global, global_idx := get_global_index(vm, name);
-            if found_global && vm.current_realm.globals[global_idx].type != .EMPTY return true, vm.current_realm.globals[global_idx];
         }
 
         if current.kind == .PROXY {
@@ -166,11 +167,10 @@ set_object_property :: (vm: *Vm, object: *Gc_Object, name: string, value: Value,
     }
 
     if object.kind == .GLOBAL_PROXY {
-        found, index := get_global_index(vm, name);
-        if found {
-            vm.current_realm.globals[index] = value;
-            return;
-        }
+        index := get_or_add_global_index(vm, name);
+        target_realm := ifx object.realm then object.realm else vm.current_realm;
+        target_realm.globals[index] = value;
+        return;
     }
 
     if name == "length" && object.kind == .ARRAY {

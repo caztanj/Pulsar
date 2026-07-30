@@ -56,15 +56,29 @@ object_is_prototype_of :: (vm: *Vm, this: Value, arguments: [] Value, is_new: bo
     if arguments.count == 0 return .{ type = .BOOLEAN, boolean = false };
 
     arg := arguments[0];
-    if arg.type != .OBJECT && arg.type != .ARRAY && arg.type != .FUNCTION && arg.type != .NATIVE_FUNCTION && arg.type != .GENERATOR return .{ type = .BOOLEAN, boolean = false };
-    if !arg.object return .{ type = .BOOLEAN, boolean = false };
+    arg_obj: *Gc_Object;
+    if arg.type == {
+        case .OBJECT;          arg_obj = arg.object;
+        case .ARRAY;           arg_obj = arg.object;
+        case .FUNCTION;        arg_obj = arg.object;
+        case .NATIVE_FUNCTION; arg_obj = arg.object;
+        case .GENERATOR;       arg_obj = arg.generator_object;
+    }
+    if !arg_obj return .{ type = .BOOLEAN, boolean = false };
 
-    if this.type != .OBJECT && this.type != .ARRAY && this.type != .FUNCTION && this.type != .NATIVE_FUNCTION && this.type != .GENERATOR return .{ type = .BOOLEAN, boolean = false };
-    if !this.object return .{ type = .BOOLEAN, boolean = false };
+    this_obj: *Gc_Object;
+    if this.type == {
+        case .OBJECT;          this_obj = this.object;
+        case .ARRAY;           this_obj = this.object;
+        case .FUNCTION;        this_obj = this.object;
+        case .NATIVE_FUNCTION; this_obj = this.object;
+        case .GENERATOR;       this_obj = this.generator_object;
+    }
+    if !this_obj return .{ type = .BOOLEAN, boolean = false };
 
-    current := arg.object.prototype;
+    current := arg_obj.prototype;
     while current {
-        if current == this.object return .{ type = .BOOLEAN, boolean = true };
+        if current == this_obj return .{ type = .BOOLEAN, boolean = true };
         current = current.prototype;
     }
 
@@ -292,9 +306,17 @@ object_get_prototype_of :: (vm: *Vm, this: Value, arguments: [] Value, is_new: b
 
     target_value := arguments[0];
 
-    if (target_value.type != .OBJECT && target_value.type != .ARRAY && target_value.type != .FUNCTION && target_value.type != .NATIVE_FUNCTION) || !target_value.object return .{ type = .UNDEFINED };
+    target_obj: *Gc_Object;
+    if target_value.type == {
+        case .OBJECT;          target_obj = target_value.object;
+        case .ARRAY;           target_obj = target_value.object;
+        case .FUNCTION;        target_obj = target_value.object;
+        case .NATIVE_FUNCTION; target_obj = target_value.object;
+        case .GENERATOR;       target_obj = target_value.generator_object;
+    }
+    if !target_obj return .{ type = .UNDEFINED };
 
-    prototype := target_value.object.prototype;
+    prototype := target_obj.prototype;
 
     if !prototype return .{ type = .NULL };
 
@@ -372,9 +394,10 @@ object_get_own_property_descriptor :: (vm: *Vm, this: Value, arguments: [] Value
             property_value = .{ type = .NUMBER, number = cast(float64) get_typed_array_length(object) };
         } else if object.kind == .GLOBAL_PROXY {
             found_global, global_idx := get_global_index(vm, name);
-            if found_global && vm.current_realm.globals[global_idx].type != .EMPTY {
+            target_realm := ifx object.realm then object.realm else vm.current_realm;
+            if found_global && target_realm.globals[global_idx].type != .EMPTY {
                 has_property = true;
-                property_value = vm.current_realm.globals[global_idx];
+                property_value = target_realm.globals[global_idx];
             }
         }
     }
@@ -475,7 +498,8 @@ object_has_own_property :: (vm: *Vm, this: Value, arguments: [] Value, is_new: b
 
     if object.kind == .GLOBAL_PROXY {
         found_global, global_idx := get_global_index(vm, name);
-        if found_global && vm.current_realm.globals[global_idx].type != .EMPTY {
+        target_realm := ifx object.realm then object.realm else vm.current_realm;
+        if found_global && target_realm.globals[global_idx].type != .EMPTY {
             return .{ type = .BOOLEAN, boolean = true };
         }
     }
