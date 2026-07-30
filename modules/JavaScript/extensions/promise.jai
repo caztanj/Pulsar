@@ -72,18 +72,27 @@ promise_then :: (vm: *Vm, this: Value, arguments: [] Value, is_new: bool) -> Val
     if this.type == .OBJECT && this.object.kind == .PROMISE {
         promise_object := this.object;
 
-        if arguments.count > 0 {
-            callback := arguments[0];
-
-            if promise_object.promise_status == .FULFILLED {
+        if promise_object.promise_status == .FULFILLED {
+            if arguments.count > 0 && (arguments[0].type == .FUNCTION || arguments[0].type == .NATIVE_FUNCTION) {
                 task := Microtask.{
-                    callback = callback,
+                    callback = arguments[0],
                     arg      = promise_object.promise_result,
                 };
 
                 array_add(*vm.microtask_queue, task);
-            } else {
-                array_add(*promise_object.promise_then_callbacks, callback);
+            }
+        } else if promise_object.promise_status == .REJECTED {
+            if arguments.count > 1 && (arguments[1].type == .FUNCTION || arguments[1].type == .NATIVE_FUNCTION) {
+                task := Microtask.{
+                    callback = arguments[1],
+                    arg      = promise_object.promise_result,
+                };
+
+                array_add(*vm.microtask_queue, task);
+            }
+        } else {
+            if arguments.count > 0 && (arguments[0].type == .FUNCTION || arguments[0].type == .NATIVE_FUNCTION) {
+                array_add(*promise_object.promise_then_callbacks, arguments[0]);
             }
         }
     }
