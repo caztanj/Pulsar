@@ -4,6 +4,19 @@ to_primitive_helper :: (vm: *Vm, value: Value, hint: enum { NUMBER; STRING; }) -
     current_obj := ifx value.type == .GENERATOR value.generator_object else value.object;
     if !current_obj return value;
 
+    found_to_prim, to_prim_fn := lookup_property(vm, current_obj, "@@Symbol.toPrimitive");
+    if vm.has_exception return .{};
+    if found_to_prim && (to_prim_fn.type == .FUNCTION || to_prim_fn.type == .NATIVE_FUNCTION || (to_prim_fn.type == .OBJECT && to_prim_fn.object.kind == .PROXY)) {
+        hint_val := Value.{ type = .STRING, s = ifx hint == .NUMBER "number" else "string" };
+        res := call_value(vm, value, to_prim_fn, .[ hint_val ]);
+        if vm.has_exception return .{};
+        if res.type != .OBJECT && res.type != .ARRAY && res.type != .GENERATOR && res.type != .FUNCTION && res.type != .NATIVE_FUNCTION {
+            return res;
+        }
+        throw_exception(vm, "TypeError: Cannot convert object to primitive value");
+        return .{};
+    }
+
     first_method  := ifx hint == .NUMBER then "valueOf" else "toString";
     second_method := ifx hint == .NUMBER then "toString" else "valueOf";
 
