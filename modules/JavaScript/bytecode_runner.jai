@@ -356,17 +356,37 @@ execute_function_internal :: (vm: *Vm, initial_function: *Bytecode_Function, ini
                     }
                     set_object_property(vm, function_object, "length", .{ type = .NUMBER, number = cast(float64) func_len });
 
-                    if !(loaded_function.flags & .ARROW) && !(loaded_function.flags & .ASYNC) {
-                        prototype_object           := allocate_object(vm);
-                        prototype_object.prototype  = vm.object_prototype;
+                    if !(loaded_function.flags & .ARROW) {
+                        if (loaded_function.flags & .ASYNC) && (loaded_function.flags & .GENERATOR) {
+                            proto_obj := allocate_object(vm);
+                            found_proto, proto_val := lookup_property(vm, vm.async_generator_function_prototype, "prototype");
+                            if found_proto && proto_val.type == .OBJECT {
+                                proto_obj.prototype = proto_val.object;
+                            } else {
+                                proto_obj.prototype = vm.object_prototype;
+                            }
+                            set_object_property(vm, function_object, "prototype", .{ type = .OBJECT, object = proto_obj });
+                        } else if loaded_function.flags & .GENERATOR {
+                            proto_obj := allocate_object(vm);
+                            found_proto, proto_val := lookup_property(vm, vm.generator_function_prototype, "prototype");
+                            if found_proto && proto_val.type == .OBJECT {
+                                proto_obj.prototype = proto_val.object;
+                            } else {
+                                proto_obj.prototype = vm.object_prototype;
+                            }
+                            set_object_property(vm, function_object, "prototype", .{ type = .OBJECT, object = proto_obj });
+                        } else if !(loaded_function.flags & .ASYNC) {
+                            prototype_object           := allocate_object(vm);
+                            prototype_object.prototype  = vm.object_prototype;
 
-                        prototype_value := Value.{
-                            type   = .OBJECT,
-                            object = prototype_object,
-                        };
+                            prototype_value := Value.{
+                                type   = .OBJECT,
+                                object = prototype_object,
+                            };
 
-                        set_object_property(vm, function_object, "prototype", prototype_value);
-                        set_object_property(vm, prototype_object, "constructor", registers_data[instruction.dest]);
+                            set_object_property(vm, function_object, "prototype", prototype_value);
+                            set_object_property(vm, prototype_object, "constructor", registers_data[instruction.dest]);
+                        }
                     }
 
                     last_value = registers_data[instruction.dest];

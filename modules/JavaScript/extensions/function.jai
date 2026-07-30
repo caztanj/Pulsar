@@ -49,6 +49,10 @@ init_vm_function :: (vm: *Vm) {
         vm.generator_function_prototype = allocate_object(vm);
         vm.generator_function_prototype.prototype = vm.function_prototype;
 
+        generator_prototype := allocate_object(vm);
+        generator_prototype.prototype = vm.object_prototype;
+        set_object_property(vm, vm.generator_function_prototype, "prototype", Value.{ type = .OBJECT, object = generator_prototype });
+
         generator_function_constructor_object := allocate_object(vm);
         generator_function_constructor_object.prototype = function_constructor_object;
         vm.generator_function_constructor_object = generator_function_constructor_object;
@@ -70,6 +74,10 @@ init_vm_function :: (vm: *Vm) {
 
         vm.async_generator_function_prototype = allocate_object(vm);
         vm.async_generator_function_prototype.prototype = vm.function_prototype;
+
+        async_generator_prototype := allocate_object(vm);
+        async_generator_prototype.prototype = vm.object_prototype;
+        set_object_property(vm, vm.async_generator_function_prototype, "prototype", Value.{ type = .OBJECT, object = async_generator_prototype });
 
         async_generator_function_constructor_object := allocate_object(vm);
         async_generator_function_constructor_object.prototype = function_constructor_object;
@@ -307,7 +315,25 @@ function_constructor :: (vm: *Vm, this: Value, arguments: [] Value, is_new: bool
     set_object_property(vm, func_obj, "name", .{ type = .STRING, s = "anonymous" });
     set_object_property(vm, func_obj, "length", .{ type = .NUMBER, number = cast(float64) param_count });
 
-    if !(loaded_func.flags & .ARROW) && !(loaded_func.flags & .ASYNC) {
+    if is_async_gen {
+        proto_obj := allocate_object(vm);
+        found_proto, proto_val := lookup_property(vm, vm.async_generator_function_prototype, "prototype");
+        if found_proto && proto_val.type == .OBJECT {
+            proto_obj.prototype = proto_val.object;
+        } else {
+            proto_obj.prototype = vm.object_prototype;
+        }
+        set_object_property(vm, func_obj, "prototype", .{ type = .OBJECT, object = proto_obj });
+    } else if is_gen {
+        proto_obj := allocate_object(vm);
+        found_proto, proto_val := lookup_property(vm, vm.generator_function_prototype, "prototype");
+        if found_proto && proto_val.type == .OBJECT {
+            proto_obj.prototype = proto_val.object;
+        } else {
+            proto_obj.prototype = vm.object_prototype;
+        }
+        set_object_property(vm, func_obj, "prototype", .{ type = .OBJECT, object = proto_obj });
+    } else if !is_async {
         proto_obj := allocate_object(vm);
         proto_obj.prototype = vm.object_prototype;
         set_object_property(vm, func_obj, "prototype", .{ type = .OBJECT, object = proto_obj });
