@@ -319,6 +319,12 @@ execute_function_internal :: (vm: *Vm, initial_function: *Bytecode_Function, ini
                     registers_data[instruction.dest].object = function_object;
                     set_object_property(vm, function_object, "name", .{ type = .STRING, s = loaded_function.name });
 
+                    func_len := loaded_function.arguments_count;
+                    if (loaded_function.flags & .REST_PARAMETER) && func_len > 0 {
+                        func_len -= 1;
+                    }
+                    set_object_property(vm, function_object, "length", .{ type = .NUMBER, number = cast(float64) func_len });
+
                     if !(loaded_function.flags & .ARROW) && !(loaded_function.flags & .ASYNC) {
                         prototype_object           := allocate_object(vm);
                         prototype_object.prototype  = vm.object_prototype;
