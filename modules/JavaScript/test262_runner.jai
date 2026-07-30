@@ -5,14 +5,16 @@ main :: () {
     defer free(assert_js);
     sta_js, sta_success       := read_entire_file("modules/JavaScript/test262/harness/sta.js", log_errors = false);
     defer free(sta_js);
+    done_js, done_success     := read_entire_file("modules/JavaScript/test262/harness/doneprintHandle.js", log_errors = false);
+    defer free(done_js);
 
-    if !assert_success || !sta_success {
+    if !assert_success || !sta_success || !done_success {
         print("Error: The test262 submodule is not checked out.\n");
         print("Please run 'git submodule update --init' in the root directory.\n");
         exit(1);
     }
 
-    harness_code_global = tprint("%\n%\nvar $262 = { createRealm: function() { var r = new Realm(); return { global: r.import('globalThis') }; }, detachArrayBuffer: __detachArrayBuffer__ };\n", assert_js, sta_js);
+    harness_code_global = tprint("%\n%\n%\nvar $262 = { createRealm: function() { var r = new Realm(); return { global: r.import('globalThis') }; }, detachArrayBuffer: __detachArrayBuffer__ };\n", assert_js, sta_js, done_js);
 
     print("Starting test execution...\n");
 

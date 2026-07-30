@@ -45,11 +45,57 @@ init_vm_function :: (vm: *Vm) {
         set_object_property(vm, vm.async_function_prototype, "@@Symbol.toStringTag", symbol_tag_val);
 
         vm.current_realm.async_function_prototype = vm.async_function_prototype;
+
+        vm.generator_function_prototype = allocate_object(vm);
+        vm.generator_function_prototype.prototype = vm.function_prototype;
+
+        generator_function_constructor_object := allocate_object(vm);
+        generator_function_constructor_object.prototype = function_constructor_object;
+        vm.generator_function_constructor_object = generator_function_constructor_object;
+
+        gen_func_val := Value.{
+            type = .NATIVE_FUNCTION,
+            native_function = function_constructor,
+            object = generator_function_constructor_object,
+        };
+
+        set_object_property(vm, generator_function_constructor_object, "prototype", Value.{ type = .OBJECT, object = vm.generator_function_prototype });
+        set_object_property(vm, generator_function_constructor_object, "name", Value.{ type = .STRING, s = "GeneratorFunction" });
+        set_object_property(vm, generator_function_constructor_object, "length", Value.{ type = .NUMBER, number = 1 });
+
+        set_object_property(vm, vm.generator_function_prototype, "constructor", gen_func_val);
+        set_object_property(vm, vm.generator_function_prototype, "@@Symbol.toStringTag", Value.{ type = .STRING, s = "GeneratorFunction" });
+
+        vm.current_realm.generator_function_prototype = vm.generator_function_prototype;
+
+        vm.async_generator_function_prototype = allocate_object(vm);
+        vm.async_generator_function_prototype.prototype = vm.function_prototype;
+
+        async_generator_function_constructor_object := allocate_object(vm);
+        async_generator_function_constructor_object.prototype = function_constructor_object;
+        vm.async_generator_function_constructor_object = async_generator_function_constructor_object;
+
+        async_gen_func_val := Value.{
+            type = .NATIVE_FUNCTION,
+            native_function = function_constructor,
+            object = async_generator_function_constructor_object,
+        };
+
+        set_object_property(vm, async_generator_function_constructor_object, "prototype", Value.{ type = .OBJECT, object = vm.async_generator_function_prototype });
+        set_object_property(vm, async_generator_function_constructor_object, "name", Value.{ type = .STRING, s = "AsyncGeneratorFunction" });
+        set_object_property(vm, async_generator_function_constructor_object, "length", Value.{ type = .NUMBER, number = 1 });
+
+        set_object_property(vm, vm.async_generator_function_prototype, "constructor", async_gen_func_val);
+        set_object_property(vm, vm.async_generator_function_prototype, "@@Symbol.toStringTag", Value.{ type = .STRING, s = "AsyncGeneratorFunction" });
+
+        vm.current_realm.async_generator_function_prototype = vm.async_generator_function_prototype;
     }
 }
 
 function_constructor :: (vm: *Vm, this: Value, arguments: [] Value, is_new: bool) -> Value {
-    is_async := (vm.current_native_callee.type == .NATIVE_FUNCTION && vm.current_native_callee.object == vm.async_function_constructor_object);
+    is_async_gen := (vm.current_native_callee.type == .NATIVE_FUNCTION && vm.current_native_callee.object == vm.async_generator_function_constructor_object);
+    is_async := is_async_gen || (vm.current_native_callee.type == .NATIVE_FUNCTION && vm.current_native_callee.object == vm.async_function_constructor_object);
+    is_gen := is_async_gen || (vm.current_native_callee.type == .NATIVE_FUNCTION && vm.current_native_callee.object == vm.generator_function_constructor_object);
 
     body_str := "";
     params_str := "";
@@ -77,8 +123,12 @@ function_constructor :: (vm: *Vm, this: Value, arguments: [] Value, is_new: bool
     }
 
     code_str := "";
-    if is_async {
+    if is_async && is_gen {
+        code_str = tprint("async function* anonymous(%) {\n%\n}", params_str, body_str);
+    } else if is_async {
         code_str = tprint("async function anonymous(%) {\n%\n}", params_str, body_str);
+    } else if is_gen {
+        code_str = tprint("function* anonymous(%) {\n%\n}", params_str, body_str);
     } else {
         code_str = tprint("function anonymous(%) {\n%\n}", params_str, body_str);
     }
@@ -199,7 +249,21 @@ function_constructor :: (vm: *Vm, this: Value, arguments: [] Value, is_new: bool
 
     loaded_func := vm.program.functions[target_func_idx];
     func_obj := allocate_object(vm);
-    if is_async {
+    if is_async_gen {
+        target_proto: *Gc_Object = vm.async_generator_function_prototype;
+        if (this.type == .FUNCTION || this.type == .NATIVE_FUNCTION) && this.object {
+            found_proto, proto_val := lookup_property(vm, this.object, "prototype");
+            if found_proto && (proto_val.type == .OBJECT || proto_val.type == .ARRAY) && proto_val.object {
+                target_proto = proto_val.object;
+            } else {
+                new_target_realm := this.object.realm;
+                if new_target_realm && new_target_realm.async_generator_function_prototype {
+                    target_proto = new_target_realm.async_generator_function_prototype;
+                }
+            }
+        }
+        func_obj.prototype = target_proto;
+    } else if is_async {
         target_proto: *Gc_Object = vm.async_function_prototype;
         if (this.type == .FUNCTION || this.type == .NATIVE_FUNCTION) && this.object {
             found_proto, proto_val := lookup_property(vm, this.object, "prototype");
@@ -209,6 +273,20 @@ function_constructor :: (vm: *Vm, this: Value, arguments: [] Value, is_new: bool
                 new_target_realm := this.object.realm;
                 if new_target_realm && new_target_realm.async_function_prototype {
                     target_proto = new_target_realm.async_function_prototype;
+                }
+            }
+        }
+        func_obj.prototype = target_proto;
+    } else if is_gen {
+        target_proto: *Gc_Object = vm.generator_function_prototype;
+        if (this.type == .FUNCTION || this.type == .NATIVE_FUNCTION) && this.object {
+            found_proto, proto_val := lookup_property(vm, this.object, "prototype");
+            if found_proto && (proto_val.type == .OBJECT || proto_val.type == .ARRAY) && proto_val.object {
+                target_proto = proto_val.object;
+            } else {
+                new_target_realm := this.object.realm;
+                if new_target_realm && new_target_realm.generator_function_prototype {
+                    target_proto = new_target_realm.generator_function_prototype;
                 }
             }
         }

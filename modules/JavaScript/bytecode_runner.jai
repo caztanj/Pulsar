@@ -337,8 +337,12 @@ execute_function_internal :: (vm: *Vm, initial_function: *Bytecode_Function, ini
                     loaded_function := vm.program.functions[instruction.imm];
 
                     function_object           := allocate_object(vm);
-                    if loaded_function.flags & .ASYNC {
+                    if (loaded_function.flags & .ASYNC) && (loaded_function.flags & .GENERATOR) {
+                        function_object.prototype = vm.async_generator_function_prototype;
+                    } else if loaded_function.flags & .ASYNC {
                         function_object.prototype = vm.async_function_prototype;
+                    } else if loaded_function.flags & .GENERATOR {
+                        function_object.prototype = vm.generator_function_prototype;
                     } else {
                         function_object.prototype = vm.function_prototype;
                     }
@@ -1998,8 +2002,8 @@ call_value :: inline (vm: *Vm, this: Value, callee: Value, arguments: [] Value, 
         return result;
     } else if callee.type == .NATIVE_FUNCTION {
         if is_new {
-            if callee.object && callee.object.prototype == vm.async_function_prototype {
-                throw_exception(vm, "TypeError: AsyncFunction instances are not constructors");
+            if callee.object && (callee.object.prototype == vm.async_function_prototype || callee.object.prototype == vm.generator_function_prototype || callee.object.prototype == vm.async_generator_function_prototype) {
+                throw_exception(vm, tprint("TypeError: % instances are not constructors", ifx callee.object.prototype == vm.async_generator_function_prototype then "AsyncGeneratorFunction" else ifx callee.object.prototype == vm.generator_function_prototype then "GeneratorFunction" else "AsyncFunction"));
                 return .{};
             }
         }
@@ -2213,6 +2217,8 @@ realm_constructor :: (vm: *Vm, this: Value, final_arguments: [] Value, is_new: b
     init_common_vm_globals(vm);
 
     realm.async_function_prototype = vm.async_function_prototype;
+    realm.generator_function_prototype = vm.generator_function_prototype;
+    realm.async_generator_function_prototype = vm.async_generator_function_prototype;
 
     vm.current_realm = old_realm;
 
@@ -2284,11 +2290,19 @@ generator_next :: (vm: *Vm, this: Value, final_arguments: [] Value, is_new: bool
     if      this.type == .GENERATOR                                generator_object = this.generator_object;
     else if this.type == .OBJECT && this.object.kind == .GENERATOR generator_object = this.object;
 
+    is_async := generator_object && generator_object.generator_func && ((generator_object.generator_func.flags & .ASYNC) != 0);
+
     if !generator_object || generator_object.generator_closed {
         result := allocate_object(vm);
 
         set_object_property(vm, result, "value", .{ type = .UNDEFINED });
         set_object_property(vm, result, "done", .{ type = .BOOLEAN, boolean = true });
+
+        if is_async {
+            promise_value := promise_constructor(vm, .{}, .[], true);
+            promise_resolve_inner(vm, promise_value, .{ type = .OBJECT, object = result });
+            return promise_value;
+        }
 
         return .{ type = .OBJECT, object = result };
     }
@@ -2304,6 +2318,14 @@ generator_next :: (vm: *Vm, this: Value, final_arguments: [] Value, is_new: bool
 
     if vm.has_exception {
         generator_object.generator_closed = true;
+        exc := vm.exception;
+        vm.has_exception = false;
+        if is_async {
+            promise_value := promise_constructor(vm, .{}, .[], true);
+            promise_reject_inner(vm, promise_value, exc);
+            return promise_value;
+        }
+        throw_exception(vm, exc);
     }
 
     is_done         := generator_object.generator_closed;
@@ -2311,6 +2333,12 @@ generator_next :: (vm: *Vm, this: Value, final_arguments: [] Value, is_new: bool
 
     set_object_property(vm, result, "value", function_result);
     set_object_property(vm, result, "done", .{ type = .BOOLEAN, boolean = is_done });
+
+    if is_async {
+        promise_value := promise_constructor(vm, .{}, .[], true);
+        promise_resolve_inner(vm, promise_value, .{ type = .OBJECT, object = result });
+        return promise_value;
+    }
 
     return .{ type = .OBJECT, object = result };
 }
@@ -2993,6 +3021,8 @@ Microtask :: struct {
 Realm :: struct {
     globals: [] Value;
     async_function_prototype: *Gc_Object;
+    generator_function_prototype: *Gc_Object;
+    async_generator_function_prototype: *Gc_Object;
 }
 
 Module_Entry :: struct {
@@ -3044,7 +3074,7 @@ Vm :: struct {
     root_shape:    *Shape;
 
     union {
-        builtin_prototypes: [19] *Gc_Object;
+        builtin_prototypes: [27] *Gc_Object;
         struct {
             object_prototype:  *Gc_Object;
             number_prototype:  *Gc_Object;
@@ -3067,6 +3097,10 @@ Vm :: struct {
             function_prototype:*Gc_Object;
             async_function_prototype: *Gc_Object;
             async_function_constructor_object: *Gc_Object;
+            generator_function_prototype: *Gc_Object;
+            generator_function_constructor_object: *Gc_Object;
+            async_generator_function_prototype: *Gc_Object;
+            async_generator_function_constructor_object: *Gc_Object;
             array_buffer_prototype:*Gc_Object;
             data_view_prototype:   *Gc_Object;
         };
