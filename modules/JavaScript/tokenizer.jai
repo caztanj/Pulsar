@@ -129,7 +129,7 @@ tokenize :: (code: string) -> error: bool, error_message: string, [] Token {
             }
         }
 
-        if is_digit(t.*) {
+        if is_digit(t.*) || (t.* == #char "." && t + 1 < max_t && is_digit((t + 1).*)) {
             start_t := t;
 
             while t < max_t {

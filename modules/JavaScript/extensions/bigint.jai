@@ -129,7 +129,7 @@ bigint_constructor :: (vm: *Vm, this: Value, arguments: [] Value, is_new: bool) 
 
     if prim.type == {
         case .NUMBER;
-            if isnan(prim.number) || isinf(prim.number) {
+            if isnan(prim.number) || isinf(prim.number) || (cast(float64) (cast(s64) prim.number) != prim.number) {
                 throw_exception(vm, "RangeError: The number cannot be converted to a BigInt because it is not an integer");
                 return .{};
             }
