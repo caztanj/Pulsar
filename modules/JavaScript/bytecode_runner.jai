@@ -1079,8 +1079,13 @@ execute_function_internal :: (vm: *Vm, initial_function: *Bytecode_Function, ini
                 case .UNARY_MINUS;
                     value := *registers_data[instruction.arg1];
 
-                    registers_data[instruction.dest].type   = .NUMBER;
-                    registers_data[instruction.dest].number = -value_to_number(value.*);
+                    if value.type == .BIGINT {
+                        registers_data[instruction.dest].type       = .BIGINT;
+                        registers_data[instruction.dest].bigint_val = -value.bigint_val;
+                    } else {
+                        registers_data[instruction.dest].type   = .NUMBER;
+                        registers_data[instruction.dest].number = -value_to_number(value.*);
+                    }
 
                     last_value = registers_data[instruction.dest];
 
@@ -2643,10 +2648,12 @@ values_addition :: (vm: *Vm, a: Value, b: Value) -> Value {
 }
 
 values_subtraction :: (a: Value, b: Value) -> Value {
+    if a.type == .BIGINT && b.type == .BIGINT return .{ type = .BIGINT, bigint_val = a.bigint_val - b.bigint_val };
     return .{ type = .NUMBER, number = value_to_number(a) - value_to_number(b) };
 }
 
 values_multiply :: (a: Value, b: Value) -> Value {
+    if a.type == .BIGINT && b.type == .BIGINT return .{ type = .BIGINT, bigint_val = a.bigint_val * b.bigint_val };
     return .{ type = .NUMBER, number = value_to_number(a) * value_to_number(b) };
 }
 
@@ -2655,14 +2662,17 @@ values_exponentiation :: (a: Value, b: Value) -> Value {
 }
 
 values_divide :: (a: Value, b: Value) -> Value {
+    if a.type == .BIGINT && b.type == .BIGINT return .{ type = .BIGINT, bigint_val = ifx b.bigint_val != 0 then a.bigint_val / b.bigint_val else 0 };
     return .{ type = .NUMBER, number = value_to_number(a) / value_to_number(b) };
 }
 
 values_modulo :: inline (a: Value, b: Value) -> Value {
+    if a.type == .BIGINT && b.type == .BIGINT return .{ type = .BIGINT, bigint_val = ifx b.bigint_val != 0 then a.bigint_val % b.bigint_val else 0 };
     return .{ type = .NUMBER, number = fmod_cycling(value_to_number(a), value_to_number(b)) };
 }
 
 values_bitwise_and :: (a: Value, b: Value) -> Value {
+    if a.type == .BIGINT && b.type == .BIGINT return .{ type = .BIGINT, bigint_val = a.bigint_val & b.bigint_val };
     value_a := cast(s32) value_to_number(a);
     value_b := cast(s32) value_to_number(b);
 
@@ -2670,6 +2680,7 @@ values_bitwise_and :: (a: Value, b: Value) -> Value {
 }
 
 values_bitwise_or :: (a: Value, b: Value) -> Value {
+    if a.type == .BIGINT && b.type == .BIGINT return .{ type = .BIGINT, bigint_val = a.bigint_val | b.bigint_val };
     value_a := cast(s32) value_to_number(a);
     value_b := cast(s32) value_to_number(b);
 
@@ -2677,6 +2688,7 @@ values_bitwise_or :: (a: Value, b: Value) -> Value {
 }
 
 values_bitwise_xor :: (a: Value, b: Value) -> Value {
+    if a.type == .BIGINT && b.type == .BIGINT return .{ type = .BIGINT, bigint_val = a.bigint_val ^ b.bigint_val };
     value_a := cast(s32) value_to_number(a);
     value_b := cast(s32) value_to_number(b);
 
@@ -2684,6 +2696,7 @@ values_bitwise_xor :: (a: Value, b: Value) -> Value {
 }
 
 values_less_than :: (a: Value, b: Value) -> bool {
+    if a.type == .BIGINT && b.type == .BIGINT return a.bigint_val < b.bigint_val;
     na := value_to_number(a);
     nb := value_to_number(b);
     if isnan(na) || isnan(nb) return false;
@@ -2691,6 +2704,7 @@ values_less_than :: (a: Value, b: Value) -> bool {
 }
 
 values_greater_than :: (a: Value, b: Value) -> bool {
+    if a.type == .BIGINT && b.type == .BIGINT return a.bigint_val > b.bigint_val;
     na := value_to_number(a);
     nb := value_to_number(b);
     if isnan(na) || isnan(nb) return false;
@@ -2698,6 +2712,7 @@ values_greater_than :: (a: Value, b: Value) -> bool {
 }
 
 values_less_than_equal :: (a: Value, b: Value) -> bool {
+    if a.type == .BIGINT && b.type == .BIGINT return a.bigint_val <= b.bigint_val;
     na := value_to_number(a);
     nb := value_to_number(b);
     if isnan(na) || isnan(nb) return false;
@@ -2705,6 +2720,7 @@ values_less_than_equal :: (a: Value, b: Value) -> bool {
 }
 
 values_greater_than_equal :: (a: Value, b: Value) -> bool {
+    if a.type == .BIGINT && b.type == .BIGINT return a.bigint_val >= b.bigint_val;
     na := value_to_number(a);
     nb := value_to_number(b);
     if isnan(na) || isnan(nb) return false;

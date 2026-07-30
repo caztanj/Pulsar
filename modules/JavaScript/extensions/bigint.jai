@@ -97,7 +97,7 @@ parse_string_to_bigint :: (s_input: string) -> s64, bool {
         result = result * (cast(u64) base) + digit;
     }
 
-    final_val := (cast(s64) result) * sign;
+    final_val := (cast,no_check(s64) result) * sign;
     return final_val, true;
 }
 
