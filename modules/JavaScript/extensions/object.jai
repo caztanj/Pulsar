@@ -478,7 +478,12 @@ object_has_own_property :: (vm: *Vm, this: Value, arguments: [] Value, is_new: b
     if (this.type != .OBJECT && this.type != .ARRAY && this.type != .FUNCTION && this.type != .NATIVE_FUNCTION) || !this.object return .{ type = .BOOLEAN, boolean = false };
     if arguments.count == 0 return .{ type = .BOOLEAN, boolean = false };
 
-    name   := value_to_string(vm, arguments[0]);
+    name: string;
+    if arguments[0].type == .SYMBOL {
+        name = get_symbol_string_key(*arguments[0]);
+    } else {
+        name = value_to_string(vm, arguments[0]);
+    }
     object := this.object;
 
     if object.shape {
@@ -541,8 +546,12 @@ object_property_is_enumerable :: (vm: *Vm, this: Value, arguments: [] Value, is_
         return .{ type = .BOOLEAN, boolean = false };
     }
 
-    if arguments.count == 0 return .{ type = .BOOLEAN, boolean = false };
-    name := value_to_string(vm, arguments[0]);
+    name: string;
+    if arguments[0].type == .SYMBOL {
+        name = get_symbol_string_key(*arguments[0]);
+    } else {
+        name = value_to_string(vm, arguments[0]);
+    }
     if vm.has_exception return .{};
 
     obj := this.object;

@@ -678,7 +678,12 @@ execute_function_internal :: (vm: *Vm, initial_function: *Bytecode_Function, ini
                     object_val := registers_data[instruction.arg1];
                     property_name: string;
                     if instruction.arg2 != 0 {
-                        property_name = value_to_string(vm, registers_data[instruction.arg2]);
+                        prop_val := registers_data[instruction.arg2];
+                        if prop_val.type == .SYMBOL {
+                            property_name = get_symbol_string_key(*prop_val);
+                        } else {
+                            property_name = value_to_string(vm, prop_val);
+                        }
                     } else {
                         property_name = vm.program.property_names[instruction.imm];
                     }
@@ -1969,6 +1974,18 @@ call_value :: inline (vm: *Vm, this: Value, callee: Value, arguments: [] Value, 
         if (callee.function.function.flags & .GENERATOR) {
             generator_object                := allocate_object(vm);
             if callee.object && callee.object.realm generator_object.realm = callee.object.realm;
+
+            if callee.object {
+                found_proto, proto_val := lookup_property(vm, callee.object, "prototype");
+                if found_proto && (proto_val.type == .OBJECT || proto_val.type == .ARRAY) && proto_val.object {
+                    generator_object.prototype = proto_val.object;
+                }
+            }
+            if !generator_object.prototype {
+                is_async := (callee.function.function.flags & .ASYNC) != 0;
+                generator_object.prototype = ifx is_async then vm.async_generator_prototype else vm.generator_prototype;
+            }
+
             generator_object.kind            = .GENERATOR;
             generator_object.generator_func  = callee.function.function;
             generator_object.generator_pc    = 0;
