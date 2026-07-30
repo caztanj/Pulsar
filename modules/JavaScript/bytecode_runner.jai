@@ -96,6 +96,10 @@ execute_main :: (vm: *Vm, program: *Bytecode_Program) -> Value {
 }
 
 execute_function :: (vm: *Vm, function: *Bytecode_Function, call_final_arguments: [] Value = .[], this_value: Value = .{}, generator: *Gc_Object = null, parent_env: *Environment = null) -> Value {
+    if vm.call_stack.count >= 1000 {
+        throw_exception(vm, "RangeError: Maximum call stack size exceeded");
+        return .{};
+    }
     if vm.profile {
         return execute_function_internal(vm, function, call_final_arguments, this_value, generator, parent_env, true);
     } else {
@@ -137,6 +141,12 @@ execute_function_internal :: (vm: *Vm, initial_function: *Bytecode_Function, ini
 
     while true {
         if needs_frame_init {
+            if vm.call_stack.count >= 200 {
+                throw_exception(vm, "RangeError: Maximum call stack size exceeded");
+                needs_frame_init = false;
+                continue;
+            }
+
             env = allocate_environment(vm);
 
             env.parent      = parent_env;
@@ -2683,12 +2693,16 @@ deinit :: (vm: *Vm) {
 
     vm.gc.object_pool = null;
 
+    freed_environments: Table(*Environment, bool);
+    defer deinit(*freed_environments);
+
     current_env := vm.gc.environments;
     while current_env {
         next := current_env.next;
 
+        if table_find_pointer(*freed_environments, current_env) break;
+        table_set(*freed_environments, current_env, true);
         array_free(current_env.values);
-
         free(current_env);
 
         current_env = next;
@@ -2700,8 +2714,9 @@ deinit :: (vm: *Vm) {
     while current_pooled {
         next := current_pooled.next;
 
+        if table_find_pointer(*freed_environments, current_pooled) break;
+        table_set(*freed_environments, current_pooled, true);
         array_free(current_pooled.values);
-
         free(current_pooled);
 
         current_pooled = next;

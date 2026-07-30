@@ -165,6 +165,7 @@ parse_try_statement :: (parser: *Parser) -> *Ast_Try_Statement {
 
             node.catch_parameter = identifier;
 
+            skip_whitespace_and_comments(parser);
             consume(parser, ")");
         }
 
@@ -243,13 +244,14 @@ parse_block_statement :: (parser: *Parser) -> *Ast_Block_Statement {
 
     consume(parser, "{");
 
-    while !is_at_end(parser) && !check(parser, "}") {
+    while !is_at_end(parser) {
+        skip_whitespace_and_comments(parser);
+        if check(parser, "}") break;
         if parser.has_error break;
+
         statement := parse_statement(parser);
 
         if statement array_add(*node.body, statement);
-
-        skip_whitespace_and_comments(parser);
     }
 
     consume(parser, "}");

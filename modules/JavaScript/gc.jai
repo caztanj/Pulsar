@@ -20,13 +20,15 @@ allocate_environment :: inline (vm: *Vm) -> *Environment {
         env = New(Environment);
     }
 
-    env.marked = false;
-
-    env.next     = null;
-    env.previous = null;
+    env.marked      = false;
+    env.is_captured = false;
+    env.parent      = null;
+    env.next        = null;
+    env.previous    = null;
 
     return env;
 }
+
 
 allocate_object :: (vm: *Vm) -> *Gc_Object {
     if vm.gc.young_object_count >= vm.gc.young_threshold {

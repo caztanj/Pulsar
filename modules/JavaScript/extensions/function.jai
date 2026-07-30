@@ -47,35 +47,23 @@ init_vm_function :: (vm: *Vm) {
 }
 
 function_constructor :: (vm: *Vm, this: Value, arguments: [] Value, is_new: bool) -> Value {
-    dummy := Value.{ type = .NATIVE_FUNCTION, native_function = empty_function };
+    is_async := (vm.current_native_callee.type == .NATIVE_FUNCTION && vm.current_native_callee.object == vm.async_function_constructor_object);
 
-    if is_new && this.type == .OBJECT {
-        dummy.object = this.object;
-    } else {
-        dummy.object = allocate_object(vm);
-    }
+    body_str := "";
+    params_str := "";
 
-    if vm.current_native_callee.type == .NATIVE_FUNCTION && vm.current_native_callee.object {
-        dummy.object.realm = vm.current_native_callee.object.realm;
-
-        if !is_new || this.type != .OBJECT {
-            found, prototype_value := lookup_property(vm, vm.current_native_callee.object, "prototype");
-            if found && (prototype_value.type == .OBJECT || prototype_value.type == .ARRAY) {
-                dummy.object.prototype = prototype_value.object;
-            } else {
-                dummy.object.prototype = vm.function_prototype;
-            }
-        }
-    } else {
-        if !is_new || this.type != .OBJECT {
-            dummy.object.prototype = vm.function_prototype;
-        }
+    if arguments.count > 0 {
+        body_str = value_to_string(vm, arguments[arguments.count - 1]);
     }
 
     param_count := 0;
     if arguments.count > 1 {
+        builder: String_Builder;
+        builder.allocator = temp;
         for i: 0..arguments.count - 2 {
+            if i > 0 append(*builder, ", ");
             s := value_to_string(vm, arguments[i]);
+            append(*builder, s);
             parts := split(s, ",");
             defer array_free(parts);
             for parts {
@@ -83,11 +71,144 @@ function_constructor :: (vm: *Vm, this: Value, arguments: [] Value, is_new: bool
                 if trimmed.count > 0 param_count += 1;
             }
         }
+        params_str = builder_to_string(*builder);
     }
 
-    set_object_property(vm, dummy.object, "length", Value.{ type = .NUMBER, number = cast(float64) param_count });
+    code_str := "";
+    if is_async {
+        code_str = tprint("async function anonymous(%) {\n%\n}", params_str, body_str);
+    } else {
+        code_str = tprint("function anonymous(%) {\n%\n}", params_str, body_str);
+    }
 
-    return dummy;
+    state := get_temporary_storage_mark();
+    defer set_temporary_storage_mark(state);
+
+    has_error, error_msg, tokens := tokenize(code_str);
+    if has_error {
+        throw_exception(vm, tprint("SyntaxError: %", error_msg));
+        return .{};
+    }
+
+    ast := build_ast(code_str, tokens);
+    if ast.has_error {
+        throw_exception(vm, tprint("SyntaxError: %", ast.error_message));
+        return .{};
+    }
+
+    new_program := generate_bytecode(ast);
+    if new_program.has_error {
+        throw_exception(vm, tprint("SyntaxError: %", new_program.error_message));
+        return .{};
+    }
+
+    const_map: [..] int;
+    const_map.allocator = temp;
+    for c: new_program.constants {
+        array_add(*vm.program.constants, c);
+        array_add(*const_map, vm.program.constants.count - 1);
+    }
+
+    global_map: [..] int;
+    global_map.allocator = temp;
+    for g: new_program.globals {
+        found, idx := get_global_index(vm, g);
+        if found {
+            array_add(*global_map, idx);
+        } else {
+            array_add(*vm.program.globals, g);
+            new_idx := vm.program.globals.count - 1;
+            array_add(*global_map, new_idx);
+            for r: vm.realms {
+                if r.globals.count < vm.program.globals.count {
+                    old_count := r.globals.count;
+                    new_count := vm.program.globals.count;
+                    new_globals := NewArray(new_count, Value);
+                    memcpy(new_globals.data, r.globals.data, old_count * size_of(Value));
+                    memset(new_globals.data + old_count, 0, (new_count - old_count) * size_of(Value));
+                    r.globals = new_globals;
+                }
+            }
+        }
+    }
+
+    prop_map: [..] int;
+    prop_map.allocator = temp;
+    for p: new_program.property_names {
+        pointer := table_find_pointer(*vm.program.property_names_hash, p);
+        if pointer {
+            array_add(*prop_map, pointer.*);
+        } else {
+            array_add(*vm.program.property_names, p);
+            new_idx := vm.program.property_names.count - 1;
+            table_set(*vm.program.property_names_hash, p, new_idx);
+            array_add(*prop_map, new_idx);
+        }
+    }
+
+    func_map: [..] int;
+    func_map.allocator = temp;
+    target_func_idx := -1;
+    for f, f_idx: new_program.functions {
+        array_add(*vm.program.functions, f);
+        new_f_idx := vm.program.functions.count - 1;
+        array_add(*func_map, new_f_idx);
+        if target_func_idx == -1 && !(f.flags & .TOP_LEVEL) {
+            target_func_idx = new_f_idx;
+        }
+    }
+
+    if target_func_idx == -1 && func_map.count > 0 {
+        target_func_idx = func_map[0];
+    }
+
+    for f_idx: func_map {
+        f := vm.program.functions[f_idx];
+        for * inst: f.instructions {
+            if inst.op_code == {
+                case .LOAD_CONST;
+                    if inst.imm < const_map.count inst.imm = cast(u16) const_map[inst.imm];
+                case .LOAD_GLOBAL; #through;
+                case .STORE_GLOBAL;
+                    if inst.imm < global_map.count inst.imm = cast(u16) global_map[inst.imm];
+                case .GET_FIELD; #through;
+                case .SET_FIELD; #through;
+                case .DELETE_PROPERTY;
+                    if inst.imm < prop_map.count inst.imm = cast(u16) prop_map[inst.imm];
+                case .LOAD_FUNC;
+                    if inst.imm < func_map.count inst.imm = cast(u16) func_map[inst.imm];
+            }
+        }
+    }
+
+    loaded_func := vm.program.functions[target_func_idx];
+    func_obj := allocate_object(vm);
+    if is_async {
+        func_obj.prototype = vm.async_function_prototype;
+    } else {
+        func_obj.prototype = vm.function_prototype;
+    }
+
+    if vm.current_native_callee.type == .NATIVE_FUNCTION && vm.current_native_callee.object {
+        func_obj.realm = vm.current_native_callee.object.realm;
+    }
+
+    res := Value.{ type = .FUNCTION };
+    res.function.function = loaded_func;
+    res.function.environment = null;
+    res.object = func_obj;
+
+    set_object_property(vm, func_obj, "name", .{ type = .STRING, s = "anonymous" });
+    set_object_property(vm, func_obj, "length", .{ type = .NUMBER, number = cast(float64) param_count });
+
+    if !(loaded_func.flags & .ARROW) && !(loaded_func.flags & .ASYNC) {
+        proto_obj := allocate_object(vm);
+        proto_obj.prototype = vm.object_prototype;
+        set_object_property(vm, func_obj, "prototype", .{ type = .OBJECT, object = proto_obj });
+        set_object_property(vm, proto_obj, "constructor", res);
+    }
+
+    return res;
 }
 
 empty_function :: (vm: *Vm, this: Value, arguments: [] Value, is_new: bool) -> Value {
