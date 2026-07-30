@@ -13,6 +13,10 @@ run_bytecode :: (program: *Bytecode_Program, profile := false, permissions: Perm
 
     vm.current_realm         = New(Realm);
     vm.current_realm.globals = NewArray(program.globals.count, Value);
+    for i: 0..vm.current_realm.globals.count-1 {
+        is_declared := i < program.declared_globals.count && program.declared_globals[i];
+        vm.current_realm.globals[i] = ifx is_declared then Value.{ type = .UNDEFINED } else Value.{ type = .EMPTY };
+    }
 
     array_add(*vm.realms, vm.current_realm);
 
@@ -81,6 +85,10 @@ execute_main :: (vm: *Vm, program: *Bytecode_Program) -> Value {
         vm.current_realm.globals = NewArray(program.globals.count, Value);
 
         for i: 0..old_globals.count-1 vm.current_realm.globals[i] = old_globals[i];
+        for i: old_globals.count..program.globals.count-1 {
+            is_declared := i < program.declared_globals.count && program.declared_globals[i];
+            vm.current_realm.globals[i] = ifx is_declared then Value.{ type = .UNDEFINED } else Value.{ type = .EMPTY };
+        }
 
         if old_globals.data free(old_globals.data);
     }
@@ -240,6 +248,15 @@ execute_function_internal :: (vm: *Vm, initial_function: *Bytecode_Function, ini
                     last_value                       = registers_data[instruction.dest];
 
                 case .LOAD_GLOBAL;
+                    val := vm.current_realm.globals[instruction.imm];
+                    if val.type == .EMPTY {
+                        throw_exception(vm, sprint("ReferenceError: % is not defined", vm.program.globals[instruction.imm]));
+                    } else {
+                        registers_data[instruction.dest] = val;
+                        last_value                       = val;
+                    }
+
+                case .LOAD_GLOBAL_SAFE;
                     registers_data[instruction.dest] = vm.current_realm.globals[instruction.imm];
                     last_value                       = registers_data[instruction.dest];
 
@@ -596,7 +613,7 @@ execute_function_internal :: (vm: *Vm, initial_function: *Bytecode_Function, ini
                         if current && current.kind == .GLOBAL_PROXY {
                             found, global_index := get_global_index(vm, property_name);
 
-                            if found {
+                            if found && vm.current_realm.globals[global_index].type != .EMPTY {
                                 registers_data[instruction.dest] = vm.current_realm.globals[global_index];
                                 if property_name == "globalThis" && registers_data[instruction.dest].type == .OBJECT {
                                     registers_data[instruction.dest].object.kind = .GLOBAL_PROXY;
@@ -1328,6 +1345,10 @@ execute_function_internal :: (vm: *Vm, initial_function: *Bytecode_Function, ini
 
                             vm.current_realm         = New(Realm);
                             vm.current_realm.globals = NewArray(vm.program.globals.count, Value);
+                            for i: 0..vm.current_realm.globals.count-1 {
+                                is_declared := i < vm.program.declared_globals.count && vm.program.declared_globals[i];
+                                vm.current_realm.globals[i] = ifx is_declared then Value.{ type = .UNDEFINED } else Value.{ type = .EMPTY };
+                            }
 
                             array_add(*vm.realms, vm.current_realm);
 
@@ -1419,6 +1440,10 @@ execute_function_internal :: (vm: *Vm, initial_function: *Bytecode_Function, ini
                             old_realm := vm.current_realm;
                             vm.current_realm         = New(Realm);
                             vm.current_realm.globals = NewArray(vm.program.globals.count, Value);
+                            for i: 0..vm.current_realm.globals.count-1 {
+                                is_declared := i < vm.program.declared_globals.count && vm.program.declared_globals[i];
+                                vm.current_realm.globals[i] = ifx is_declared then Value.{ type = .UNDEFINED } else Value.{ type = .EMPTY };
+                            }
                             array_add(*vm.realms, vm.current_realm);
                             init_common_vm_globals(vm);
 
@@ -2099,6 +2124,20 @@ init_vm_core :: (vm: *Vm) {
         vm.current_realm.globals[realm_index].type            = .NATIVE_FUNCTION;
         vm.current_realm.globals[realm_index].native_function = realm_constructor;
     }
+
+    eval_index: int;
+    found, eval_index = get_global_index(vm, "eval");
+    if found {
+        eval_obj := allocate_object(vm);
+        eval_obj.prototype = vm.function_prototype;
+        vm.current_realm.globals[eval_index] = Value.{ type = .NATIVE_FUNCTION, native_function = eval_stub, object = eval_obj };
+    }
+}
+
+eval_stub :: (vm: *Vm, this: Value, arguments: [] Value, is_new: bool) -> Value {
+    if arguments.count == 0 return .{ type = .UNDEFINED };
+    if arguments[0].type != .STRING return arguments[0];
+    return .{ type = .UNDEFINED };
 }
 
 realm_constructor :: (vm: *Vm, this: Value, final_arguments: [] Value, is_new: bool) -> Value {
@@ -2107,6 +2146,10 @@ realm_constructor :: (vm: *Vm, this: Value, final_arguments: [] Value, is_new: b
 
     realm         := New(Realm);
     realm.globals  = NewArray(vm.program.globals.count, Value);
+    for i: 0..realm.globals.count-1 {
+        is_declared := i < vm.program.declared_globals.count && vm.program.declared_globals[i];
+        realm.globals[i] = ifx is_declared then Value.{ type = .UNDEFINED } else Value.{ type = .EMPTY };
+    }
 
     array_add(*vm.realms, realm);
 
@@ -3057,7 +3100,10 @@ delete_property :: (vm: *Vm, object: *Gc_Object, name: string) -> bool {
     if object.kind == .GLOBAL_PROXY {
         found, index := get_global_index(vm, name);
         if found {
-            vm.current_realm.globals[index] = .{ type = .UNDEFINED };
+            if index < vm.program.declared_globals.count && vm.program.declared_globals[index] {
+                return false;
+            }
+            vm.current_realm.globals[index] = .{ type = .EMPTY };
             return true;
         }
     }

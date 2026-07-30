@@ -52,6 +52,27 @@ init_vm_number :: (vm: *Vm) {
         vm.current_realm.globals[nan_index].type = .NUMBER;
         vm.current_realm.globals[nan_index].number = not_a_number_value;
     }
+
+    found_parse_int, parse_int_idx := get_global_index(vm, "parseInt");
+    if found_parse_int {
+        obj := allocate_object(vm); obj.prototype = vm.function_prototype;
+        vm.current_realm.globals[parse_int_idx] = .{ type = .NATIVE_FUNCTION, native_function = number_parse_int, object = obj };
+    }
+    found_parse_float, parse_float_idx := get_global_index(vm, "parseFloat");
+    if found_parse_float {
+        obj := allocate_object(vm); obj.prototype = vm.function_prototype;
+        vm.current_realm.globals[parse_float_idx] = .{ type = .NATIVE_FUNCTION, native_function = number_parse_float, object = obj };
+    }
+    found_is_nan, is_nan_idx := get_global_index(vm, "isNaN");
+    if found_is_nan {
+        obj := allocate_object(vm); obj.prototype = vm.function_prototype;
+        vm.current_realm.globals[is_nan_idx] = .{ type = .NATIVE_FUNCTION, native_function = number_is_nan_static, object = obj };
+    }
+    found_is_finite, is_finite_idx := get_global_index(vm, "isFinite");
+    if found_is_finite {
+        obj := allocate_object(vm); obj.prototype = vm.function_prototype;
+        vm.current_realm.globals[is_finite_idx] = .{ type = .NATIVE_FUNCTION, native_function = number_is_finite, object = obj };
+    }
 }
 
 number_constructor :: (vm: *Vm, this: Value, arguments: [] Value, is_new: bool) -> Value {
@@ -139,24 +160,86 @@ number_parse_float :: (vm: *Vm, this: Value, arguments: [] Value, is_new: bool) 
     return .{ type = .NUMBER, number = string_to_float64(input_string) };
 }
 
+js_parse_int :: (str: string, radix: int) -> float64 {
+    i := 0;
+    while i < str.count {
+        c := str[i];
+        if c == #char " " || c == #char "\t" || c == #char "\n" || c == #char "\r" || c == 0x0B || c == 0x0C || c == 0xA0 {
+            i += 1;
+        } else {
+            break;
+        }
+    }
+
+    if i >= str.count return not_a_number_value;
+
+    sign := 1.0;
+    if str[i] == #char "-" {
+        sign = -1.0;
+        i += 1;
+    } else if str[i] == #char "+" {
+        i += 1;
+    }
+
+    R := radix;
+    if R == 0 {
+        if i + 1 < str.count && str[i] == #char "0" && (str[i+1] == #char "x" || str[i+1] == #char "X") {
+            R = 16;
+        } else {
+            R = 10;
+        }
+    }
+
+    if R == 16 && i + 1 < str.count && str[i] == #char "0" && (str[i+1] == #char "x" || str[i+1] == #char "X") {
+        i += 2;
+    }
+
+    if R < 2 || R > 36 return not_a_number_value;
+
+    accum: float64 = 0.0;
+    has_digit := false;
+
+    while i < str.count {
+        c := str[i];
+        digit := -1;
+        if c >= #char "0" && c <= #char "9" {
+            digit = c - #char "0";
+        } else if c >= #char "a" && c <= #char "z" {
+            digit = 10 + (c - #char "a");
+        } else if c >= #char "A" && c <= #char "Z" {
+            digit = 10 + (c - #char "A");
+        }
+
+        if digit < 0 || digit >= R break;
+
+        has_digit = true;
+        accum = accum * cast(float64) R + cast(float64) digit;
+        i += 1;
+    }
+
+    if !has_digit return not_a_number_value;
+
+    return sign * accum;
+}
+
 number_parse_int :: (vm: *Vm, this: Value, arguments: [] Value, is_new: bool) -> Value {
     if arguments.count == 0 return .{ type = .NUMBER, number = not_a_number_value };
 
     input_string := value_to_string(vm, arguments[0]);
 
-    radix := 10;
-    if arguments.count > 1 {
+    radix := 0;
+    if arguments.count > 1 && arguments[1].type != .UNDEFINED {
         radix_number := value_to_number(arguments[1]);
-        radix = cast(int) radix_number;
+        if !isnan(radix_number) {
+            radix = cast(int) radix_number;
+        }
     }
 
-    parsed_value: float64 = 0.0;
-
-    if radix == 10 {
-        parsed_value = cast(float64) string_to_int(input_string);
-    } else {
-        parsed_value = cast(float64) string_to_int(input_string, base = cast(u32) radix);
+    if radix != 0 && (radix < 2 || radix > 36) {
+        return .{ type = .NUMBER, number = not_a_number_value };
     }
+
+    parsed_value := js_parse_int(input_string, radix);
 
     return .{ type = .NUMBER, number = parsed_value };
 }

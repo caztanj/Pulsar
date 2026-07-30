@@ -88,7 +88,7 @@ lookup_property :: (vm: *Vm, object: *Gc_Object, name: string, imm: int = -1) ->
 
         if current.kind == .GLOBAL_PROXY {
             found_global, global_idx := get_global_index(vm, name);
-            if found_global && vm.current_realm.globals[global_idx].type != .UNDEFINED return true, vm.current_realm.globals[global_idx];
+            if found_global && vm.current_realm.globals[global_idx].type != .EMPTY return true, vm.current_realm.globals[global_idx];
         }
 
         if current.kind == .PROXY {

@@ -25,6 +25,7 @@ deinit :: (program: *Bytecode_Program) {
     array_free(program.functions);
     array_free(program.constants);
     array_free(program.globals);
+    array_free(program.declared_globals);
     array_free(program.property_names);
 
     deinit(*program.property_names_hash);
@@ -59,6 +60,7 @@ print :: (program: *Bytecode_Program) {
             if #complete instruction.op_code == {
                 case .LOAD_CONST;         print(" LOAD_CONST         dest: R%, imm: % (value: %)", instruction.dest, instruction.imm, program.constants[instruction.imm]);
                 case .LOAD_GLOBAL;        print(" LOAD_GLOBAL        dest: R%, imm: % (name: %)", instruction.dest, instruction.imm, program.globals[instruction.imm]);
+                case .LOAD_GLOBAL_SAFE;   print(" LOAD_GLOBAL_SAFE   dest: R%, imm: % (name: %)", instruction.dest, instruction.imm, program.globals[instruction.imm]);
                 case .STORE_GLOBAL;       print(" STORE_GLOBAL       arg1: R%, imm: % (name: %)", instruction.arg1, instruction.imm, program.globals[instruction.imm]);
                 case .LOAD_LOCAL;         print(" LOAD_LOCAL         dest: R%, imm: %", instruction.dest, instruction.imm);
                 case .STORE_LOCAL;        print(" STORE_LOCAL        arg1: R%, imm: %", instruction.arg1, instruction.imm);
@@ -167,6 +169,20 @@ collect_identifiers :: (node: *Ast_Node, identifiers: *[..] string) {
     }
 }
 
+add_global :: (generator: *Bytecode_Generator, name: string, is_declared := false) -> int {
+    for global: generator.program.globals if global == name {
+        if is_declared && it_index < generator.program.declared_globals.count {
+            generator.program.declared_globals[it_index] = true;
+        }
+        return it_index;
+    }
+
+    index := generator.program.globals.count;
+    array_add(*generator.program.globals, name);
+    array_add(*generator.program.declared_globals, is_declared);
+    return index;
+}
+
 collect_globals :: (generator: *Bytecode_Generator, node: *Ast_Node) {
     if !node return;
 
@@ -180,14 +196,7 @@ collect_globals :: (generator: *Bytecode_Generator, node: *Ast_Node) {
             for variable_declaration.declarations collect_identifiers(it.identifier, *identifiers);
 
             for identifiers {
-                found := false;
-
-                for global: generator.program.globals if global == it {
-                    found = true;
-                    break;
-                }
-
-                if !found array_add(*generator.program.globals, it);
+                add_global(generator, it, is_declared = true);
             }
 
         case .IDENTIFIER;
@@ -200,14 +209,7 @@ collect_globals :: (generator: *Bytecode_Generator, node: *Ast_Node) {
             }
 
             if !is_local {
-                found := false;
-
-                for generator.program.globals if it == identifier.name {
-                    found = true;
-                    break;
-                }
-
-                if !found array_add(*generator.program.globals, identifier.name);
+                add_global(generator, identifier.name, is_declared = false);
             }
 
         case .PROGRAM;
@@ -222,16 +224,7 @@ collect_globals :: (generator: *Bytecode_Generator, node: *Ast_Node) {
             function_declaration := cast(*Ast_Function_Declaration) node;
 
             if generator.current_function.name == "main" || (generator.current_function.name.count > 0 && generator.current_function.name[0] == "/") {
-                found := false;
-
-                for generator.program.globals {
-                    if it == function_declaration.identifier.name {
-                        found = true;
-                        break;
-                    }
-                }
-
-                if !found array_add(*generator.program.globals, function_declaration.identifier.name);
+                add_global(generator, function_declaration.identifier.name, is_declared = true);
             }
 
         case .EXPRESSION_STATEMENT;
@@ -376,34 +369,69 @@ generate_bytecode :: (ast: *Ast_Program, program: *Bytecode_Program = null) -> *
     } else {
         generator.program = New(Bytecode_Program);
 
-        array_add(*generator.program.globals, "globalThis");
-        array_add(*generator.program.globals, "Promise");
-        array_add(*generator.program.globals, "Realm");
-        array_add(*generator.program.globals, "print");
-        array_add(*generator.program.globals, "true");
-        array_add(*generator.program.globals, "false");
-        array_add(*generator.program.globals, "Function");
-        array_add(*generator.program.globals, "undefined");
-        array_add(*generator.program.globals, "null");
-        array_add(*generator.program.globals, "Infinity");
-        array_add(*generator.program.globals, "NaN");
-        array_add(*generator.program.globals, "Number");
-        array_add(*generator.program.globals, "Array");
-        array_add(*generator.program.globals, "String");
-        array_add(*generator.program.globals, "Boolean");
-        array_add(*generator.program.globals, "JSON");
-        array_add(*generator.program.globals, "Map");
-        array_add(*generator.program.globals, "Set");
-        array_add(*generator.program.globals, "HttpServer");
-        array_add(*generator.program.globals, "fetch");
-        array_add(*generator.program.globals, "RegExp");
-        array_add(*generator.program.globals, "AggregateError");
-        array_add(*generator.program.globals, "Reflect");
-        array_add(*generator.program.globals, "Proxy");
-        array_add(*generator.program.globals, "ArrayBuffer");
-        array_add(*generator.program.globals, "DataView");
-        array_add(*generator.program.globals, "DisposableStack");
-        array_add(*generator.program.globals, "AsyncDisposableStack");
+        add_global(*generator, "globalThis", is_declared = true);
+        add_global(*generator, "Object", is_declared = true);
+        add_global(*generator, "Function", is_declared = true);
+        add_global(*generator, "Array", is_declared = true);
+        add_global(*generator, "Number", is_declared = true);
+        add_global(*generator, "String", is_declared = true);
+        add_global(*generator, "Boolean", is_declared = true);
+        add_global(*generator, "Symbol", is_declared = true);
+        add_global(*generator, "BigInt", is_declared = true);
+        add_global(*generator, "Math", is_declared = true);
+        add_global(*generator, "JSON", is_declared = true);
+        add_global(*generator, "Promise", is_declared = true);
+        add_global(*generator, "RegExp", is_declared = true);
+        add_global(*generator, "Date", is_declared = true);
+        add_global(*generator, "Map", is_declared = true);
+        add_global(*generator, "Set", is_declared = true);
+        add_global(*generator, "WeakMap", is_declared = true);
+        add_global(*generator, "WeakSet", is_declared = true);
+        add_global(*generator, "ArrayBuffer", is_declared = true);
+        add_global(*generator, "DataView", is_declared = true);
+        add_global(*generator, "Float32Array", is_declared = true);
+        add_global(*generator, "Float64Array", is_declared = true);
+        add_global(*generator, "Int8Array", is_declared = true);
+        add_global(*generator, "Int16Array", is_declared = true);
+        add_global(*generator, "Int32Array", is_declared = true);
+        add_global(*generator, "Uint8Array", is_declared = true);
+        add_global(*generator, "Uint16Array", is_declared = true);
+        add_global(*generator, "Uint32Array", is_declared = true);
+        add_global(*generator, "Uint8ClampedArray", is_declared = true);
+        add_global(*generator, "BigInt64Array", is_declared = true);
+        add_global(*generator, "BigUint64Array", is_declared = true);
+        add_global(*generator, "Error", is_declared = true);
+        add_global(*generator, "TypeError", is_declared = true);
+        add_global(*generator, "ReferenceError", is_declared = true);
+        add_global(*generator, "SyntaxError", is_declared = true);
+        add_global(*generator, "RangeError", is_declared = true);
+        add_global(*generator, "URIError", is_declared = true);
+        add_global(*generator, "EvalError", is_declared = true);
+        add_global(*generator, "AggregateError", is_declared = true);
+        add_global(*generator, "eval", is_declared = true);
+        add_global(*generator, "parseInt", is_declared = true);
+        add_global(*generator, "parseFloat", is_declared = true);
+        add_global(*generator, "isNaN", is_declared = true);
+        add_global(*generator, "isFinite", is_declared = true);
+        add_global(*generator, "encodeURI", is_declared = true);
+        add_global(*generator, "encodeURIComponent", is_declared = true);
+        add_global(*generator, "decodeURI", is_declared = true);
+        add_global(*generator, "decodeURIComponent", is_declared = true);
+        add_global(*generator, "console", is_declared = true);
+        add_global(*generator, "Realm", is_declared = true);
+        add_global(*generator, "print", is_declared = true);
+        add_global(*generator, "true", is_declared = true);
+        add_global(*generator, "false", is_declared = true);
+        add_global(*generator, "undefined", is_declared = true);
+        add_global(*generator, "null", is_declared = true);
+        add_global(*generator, "Infinity", is_declared = true);
+        add_global(*generator, "NaN", is_declared = true);
+        add_global(*generator, "HttpServer", is_declared = true);
+        add_global(*generator, "fetch", is_declared = true);
+        add_global(*generator, "Reflect", is_declared = true);
+        add_global(*generator, "Proxy", is_declared = true);
+        add_global(*generator, "DisposableStack", is_declared = true);
+        add_global(*generator, "AsyncDisposableStack", is_declared = true);
     }
 
     main_function: *Bytecode_Function;
@@ -612,17 +640,7 @@ store_local_or_global :: (generator: *Bytecode_Generator, name: string, register
 
         is_global := generator.current_function && (generator.current_function.flags & .TOP_LEVEL) && (target_scope == generator.function_scope);
         if is_global {
-            index := -1;
-            for generator.program.globals {
-                if it == name {
-                    index = it_index;
-                    break;
-                }
-            }
-            if index == -1 {
-                array_add(*generator.program.globals, name);
-                index = generator.program.globals.count - 1;
-            }
+            index := add_global(generator, name, is_declared = true);
 
             instruction.op_code = .STORE_GLOBAL;
             instruction.imm = cast(s32) index;
@@ -677,10 +695,10 @@ store_local_or_global :: (generator: *Bytecode_Generator, name: string, register
             is_global := generator.current_function && (generator.current_function.flags & .TOP_LEVEL);
 
             if is_global {
-                array_add(*generator.program.globals, name);
+                index := add_global(generator, name, is_declared = true);
 
                 instruction.op_code = .STORE_GLOBAL;
-                instruction.imm = cast(s32) (generator.program.globals.count - 1);
+                instruction.imm = cast(s32) index;
                 emit_instruction(generator, instruction);
             } else {
                 array_add(*generator.locals, name);
@@ -1998,18 +2016,7 @@ emit_expression :: (generator: *Bytecode_Generator, node: *Ast_Node, force_new_r
             callee_register := generator.next_register;
             generator.next_register += 1;
 
-            global_index := -1;
-            for generator.program.globals {
-                if it == "RegExp" {
-                    global_index = it_index;
-                    break;
-                }
-            }
-
-            if global_index == -1 {
-                global_index = generator.program.globals.count;
-                array_add(*generator.program.globals, "RegExp");
-            }
+            global_index := add_global(generator, "RegExp", is_declared = true);
 
             emit_instruction(generator, Instruction.{
                 op_code = .LOAD_GLOBAL,
@@ -2070,9 +2077,9 @@ emit_expression :: (generator: *Bytecode_Generator, node: *Ast_Node, force_new_r
                     instruction.op_code = .LOAD_GLOBAL;
                     instruction.imm = cast(s32) location.index;
                 case .NOT_FOUND;
-                    array_add(*generator.program.globals, identifier.name);
+                    index := add_global(generator, identifier.name, is_declared = false);
                     instruction.op_code = .LOAD_GLOBAL;
-                    instruction.imm = cast(s32) (generator.program.globals.count - 1);
+                    instruction.imm = cast(s32) index;
             }
 
             emit_instruction(generator, instruction);
@@ -2735,6 +2742,7 @@ operator == :: (a: Value, b: Value) -> bool {
 Op_Code :: enum u8 {
     LOAD_CONST;
     LOAD_GLOBAL;
+    LOAD_GLOBAL_SAFE;
     STORE_GLOBAL;
     LOAD_LOCAL;
     STORE_LOCAL;
@@ -2863,9 +2871,10 @@ Deferred_Function :: struct {
 }
 
 Bytecode_Program :: struct {
-    functions:      [..] *Bytecode_Function;
-    constants:      [..] Value;
-    globals:        [..] string;
+    functions:        [..] *Bytecode_Function;
+    constants:        [..] Value;
+    globals:          [..] string;
+    declared_globals: [..] bool;
 
     property_names:      [..] string;
     property_names_hash: Table(string, int);
@@ -3868,7 +3877,24 @@ emit_unary_expression_helper :: (generator: *Bytecode_Generator, unary_expressio
     if unary_expression.op == "!" {
         instruction.op_code = .LOGICAL_NOT;
     } else if unary_expression.op == "typeof" {
-        instruction.op_code = .TYPEOF;
+        if unary_expression.right.kind == .IDENTIFIER {
+            identifier := cast(*Ast_Identifier) unary_expression.right;
+            location := resolve_variable(generator, identifier.name);
+            if location.type == .GLOBAL || location.type == .NOT_FOUND {
+                global_index := ifx location.type == .GLOBAL then location.index else add_global(generator, identifier.name, is_declared = false);
+                instruction.op_code = .TYPEOF;
+                load_inst := Instruction.{
+                    op_code = .LOAD_GLOBAL_SAFE,
+                    dest    = right,
+                    imm     = cast(s32) global_index,
+                };
+                emit_instruction(generator, load_inst);
+            } else {
+                instruction.op_code = .TYPEOF;
+            }
+        } else {
+            instruction.op_code = .TYPEOF;
+        }
     } else if unary_expression.op == "-" {
         instruction.op_code = .UNARY_MINUS;
     } else if unary_expression.op == "+" {

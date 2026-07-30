@@ -372,7 +372,7 @@ object_get_own_property_descriptor :: (vm: *Vm, this: Value, arguments: [] Value
             property_value = .{ type = .NUMBER, number = cast(float64) get_typed_array_length(object) };
         } else if object.kind == .GLOBAL_PROXY {
             found_global, global_idx := get_global_index(vm, name);
-            if found_global && vm.current_realm.globals[global_idx].type != .UNDEFINED {
+            if found_global && vm.current_realm.globals[global_idx].type != .EMPTY {
                 has_property = true;
                 property_value = vm.current_realm.globals[global_idx];
             }
@@ -475,7 +475,7 @@ object_has_own_property :: (vm: *Vm, this: Value, arguments: [] Value, is_new: b
 
     if object.kind == .GLOBAL_PROXY {
         found_global, global_idx := get_global_index(vm, name);
-        if found_global && vm.current_realm.globals[global_idx].type != .UNDEFINED {
+        if found_global && vm.current_realm.globals[global_idx].type != .EMPTY {
             return .{ type = .BOOLEAN, boolean = true };
         }
     }
@@ -534,7 +534,7 @@ object_property_is_enumerable :: (vm: *Vm, this: Value, arguments: [] Value, is_
 
     if obj.kind == .GLOBAL_PROXY {
         found_global, global_idx := get_global_index(vm, name);
-        if found_global && vm.current_realm.globals[global_idx].type != .UNDEFINED {
+        if found_global && vm.current_realm.globals[global_idx].type != .EMPTY {
             found = true;
         }
     }
