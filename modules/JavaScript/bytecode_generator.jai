@@ -1940,6 +1940,7 @@ emit_statement :: (generator: *Bytecode_Generator, node: *Ast_Node) {
         case .MEMBER_EXPRESSION;
         case .BINARY_EXPRESSION;
         case .LITERAL_NUMBER;
+        case .LITERAL_BIGINT;
         case .LITERAL_STRING;
         case .LITERAL_REGEXP;
         case .IDENTIFIER;
@@ -1978,6 +1979,24 @@ emit_expression :: (generator: *Bytecode_Generator, node: *Ast_Node, force_new_r
             index          := generator.program.constants.count;
 
             array_add(*generator.program.constants, .{ type = .NUMBER, number = literal_number.value });
+
+            register := allocate_register(generator, destination_register);
+
+            instruction := Instruction.{
+                op_code = .LOAD_CONST,
+                dest    = register,
+                imm     = cast(s32) index,
+            };
+
+            emit_instruction(generator, instruction);
+
+            return register;
+
+        case .LITERAL_BIGINT;
+            literal_bigint := cast(*Ast_Literal_BigInt) node;
+            index          := generator.program.constants.count;
+
+            array_add(*generator.program.constants, .{ type = .BIGINT, bigint_val = literal_bigint.value });
 
             register := allocate_register(generator, destination_register);
 
@@ -2928,6 +2947,7 @@ Value_Type :: enum u8 {
     STRING;
     GENERATOR;
     SYMBOL;
+    BIGINT;
     EMPTY;
 }
 
@@ -2949,6 +2969,7 @@ Value :: struct {
         .GENERATOR       ,, generator_object: *Gc_Object;
         .NATIVE_FUNCTION ,, native_function:  Native_Function;
         .SYMBOL          ,, symbol_object:    *Gc_Object;
+        .BIGINT          ,, bigint_val:       s64;
     }
 }
 

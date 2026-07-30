@@ -122,6 +122,7 @@ Permission :: enum_flags {
 #load "extensions/proxy.jai";
 #load "extensions/disposable_stack.jai";
 #load "extensions/atomics.jai";
+#load "extensions/bigint.jai";
 
 #scope_module
 

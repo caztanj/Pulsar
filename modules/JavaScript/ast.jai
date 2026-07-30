@@ -980,6 +980,19 @@ parse_primary :: (parser: *Parser) -> *Ast_Node {
     if token.type == .NUMBER {
         advance(parser);
 
+        if ends_with(token.text, "n") || ends_with(token.text, "N") {
+            node := New(Ast_Literal_BigInt);
+            node.kind   = .LITERAL_BIGINT;
+            node.line   = token.line;
+            node.column = token.column;
+            slice := token.text;
+            slice.count -= 1;
+            val, _ := string_to_int(slice);
+            node.value  = cast(s64) val;
+            node.text   = token.text;
+            return xx node;
+        }
+
         node := New(Ast_Literal_Number);
 
         node.kind   = .LITERAL_NUMBER;
@@ -2388,6 +2401,7 @@ Ast_Kind :: enum {
     VARIABLE_DECLARATOR;
     BINARY_EXPRESSION;
     LITERAL_NUMBER;
+    LITERAL_BIGINT;
     LITERAL_STRING;
     LITERAL_REGEXP;
     IDENTIFIER;
@@ -2548,6 +2562,12 @@ Ast_Literal_Number :: struct {
     using base: Ast_Node;
 
     value: float64;
+    text:  string;
+}
+
+Ast_Literal_BigInt :: struct {
+    using #as base: Ast_Node;
+    value: s64;
     text:  string;
 }
 

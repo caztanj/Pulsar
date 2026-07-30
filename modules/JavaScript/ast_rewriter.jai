@@ -248,6 +248,7 @@ optimize_node :: (node: *Ast_Node) -> *Ast_Node {
         case .AWAIT_EXPRESSION; #through;
         case .SUPER_EXPRESSION; #through;
         case .LITERAL_NUMBER;   #through;
+        case .LITERAL_BIGINT;   #through;
         case .LITERAL_STRING;   #through;
         case .LITERAL_REGEXP;   #through;
         case .IDENTIFIER;       #through;

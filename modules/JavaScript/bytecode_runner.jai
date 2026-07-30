@@ -1230,6 +1230,7 @@ execute_function_internal :: (vm: *Vm, initial_function: *Bytecode_Function, ini
                         case .ARRAY;           type_name = "object";
                         case .GENERATOR;       type_name = "object";
                         case .SYMBOL;          type_name = "symbol";
+                        case .BIGINT;          type_name = "bigint";
                         case .EMPTY;           type_name = "undefined";
                     }
 
@@ -2168,6 +2169,7 @@ init_common_vm_globals :: (vm: *Vm) {
     init_vm_data_view(vm);
     init_vm_disposable_stack(vm);
     init_vm_atomics(vm);
+    init_vm_bigint(vm);
 }
 
 init_vm_core :: (vm: *Vm) {
@@ -2553,6 +2555,7 @@ value_to_string :: (vm: *Vm, value: Value) -> string {
         case .FUNCTION;        return "[object Function]";
         case .NATIVE_FUNCTION; return "[object NativeFunction]";
         case .GENERATOR;       return "[object Generator]";
+        case .BIGINT;          return tprint("%", value.bigint_val);
         case .EMPTY;           return "empty";
     }
 }
@@ -2738,6 +2741,7 @@ values_strict_equal :: (a: Value, b: Value) -> bool {
         case .NATIVE_FUNCTION; return false;
         case .GENERATOR;       return false;
         case .SYMBOL;          return false;
+        case .BIGINT;          return a.bigint_val == b.bigint_val;
     }
 
     return false;
@@ -2756,6 +2760,7 @@ is_truthy :: (value: Value) -> bool {
         case .STRING;          return value.s.count > 0;
         case .GENERATOR;       return true;
         case .SYMBOL;          return true;
+        case .BIGINT;          return value.bigint_val != 0;
         case .EMPTY;           return false;
     }
 
