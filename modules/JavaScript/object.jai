@@ -198,7 +198,7 @@ set_object_property :: (vm: *Vm, object: *Gc_Object, name: string, value: Value,
         }
     }
 
-    if name == "@@Symbol.toStringTag" {
+    if name == "@@Symbol.toStringTag" || ((object == vm.async_generator_prototype || object == vm.generator_prototype) && name == "constructor") {
         if object.shape {
             offset, found := shape_lookup_property(object.shape, name, -1);
             if found return;

@@ -407,7 +407,7 @@ object_get_own_property_descriptor :: (vm: *Vm, this: Value, arguments: [] Value
 
         enumerable := true;
         configurable := true;
-        if name == "cause" || name == "message" || name == "name" || name == "length" || name == "prototype" || starts_with(name, "@@") {
+        if name == "cause" || name == "message" || name == "name" || name == "length" || name == "prototype" || name == "constructor" || starts_with(name, "@@") {
             enumerable = false;
         }
         if object.kind == .GLOBAL_PROXY {
@@ -422,7 +422,7 @@ object_get_own_property_descriptor :: (vm: *Vm, this: Value, arguments: [] Value
         if (target_value.type == .FUNCTION || target_value.type == .NATIVE_FUNCTION) && (name == "length" || name == "name") {
             writable = false;
         }
-        if (target_value.type == .NATIVE_FUNCTION && name == "prototype") || name == "@@Symbol.toStringTag" {
+        if (target_value.type == .NATIVE_FUNCTION && name == "prototype") || name == "@@Symbol.toStringTag" || ((object == vm.async_generator_prototype || object == vm.generator_prototype) && name == "constructor") {
             writable = false;
         }
 
@@ -566,7 +566,7 @@ object_property_is_enumerable :: (vm: *Vm, this: Value, arguments: [] Value, is_
     if !found return .{ type = .BOOLEAN, boolean = false };
 
     enumerable := true;
-    if name == "cause" || name == "message" || name == "name" || name == "length" || name == "prototype" || obj.kind == .GLOBAL_PROXY {
+    if name == "cause" || name == "message" || name == "name" || name == "length" || name == "prototype" || name == "constructor" || starts_with(name, "@@") || obj.kind == .GLOBAL_PROXY {
         enumerable = false;
     }
 

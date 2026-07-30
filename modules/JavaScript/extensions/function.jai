@@ -17,6 +17,8 @@ init_vm_function :: (vm: *Vm) {
 
         generator_prototype := allocate_object(vm);
         generator_prototype.prototype = vm.object_prototype;
+        vm.generator_prototype = generator_prototype;
+        set_object_property(vm, generator_prototype, "constructor", Value.{ type = .OBJECT, object = vm.generator_function_prototype });
         set_object_property(vm, vm.generator_function_prototype, "prototype", Value.{ type = .OBJECT, object = generator_prototype });
         set_object_property(vm, vm.generator_function_prototype, "@@Symbol.toStringTag", Value.{ type = .STRING, s = "GeneratorFunction" });
 
@@ -25,6 +27,8 @@ init_vm_function :: (vm: *Vm) {
 
         async_generator_prototype := allocate_object(vm);
         async_generator_prototype.prototype = vm.object_prototype;
+        vm.async_generator_prototype = async_generator_prototype;
+        set_object_property(vm, async_generator_prototype, "constructor", Value.{ type = .OBJECT, object = vm.async_generator_function_prototype });
         set_object_property(vm, vm.async_generator_function_prototype, "prototype", Value.{ type = .OBJECT, object = async_generator_prototype });
         set_object_property(vm, vm.async_generator_function_prototype, "@@Symbol.toStringTag", Value.{ type = .STRING, s = "AsyncGeneratorFunction" });
     }

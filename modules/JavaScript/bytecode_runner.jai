@@ -3144,7 +3144,7 @@ Vm :: struct {
     root_shape:    *Shape;
 
     union {
-        builtin_prototypes: [27] *Gc_Object;
+        builtin_prototypes: [29] *Gc_Object;
         struct {
             object_prototype:  *Gc_Object;
             number_prototype:  *Gc_Object;
@@ -3169,8 +3169,10 @@ Vm :: struct {
             async_function_prototype: *Gc_Object;
             async_function_constructor_object: *Gc_Object;
             generator_function_prototype: *Gc_Object;
+            generator_prototype: *Gc_Object;
             generator_function_constructor_object: *Gc_Object;
             async_generator_function_prototype: *Gc_Object;
+            async_generator_prototype: *Gc_Object;
             async_generator_function_constructor_object: *Gc_Object;
             array_buffer_prototype:*Gc_Object;
             data_view_prototype:   *Gc_Object;
