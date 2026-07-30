@@ -81,22 +81,32 @@ function_constructor :: (vm: *Vm, this: Value, arguments: [] Value, is_new: bool
         code_str = tprint("function anonymous(%) {\n%\n}", params_str, body_str);
     }
 
-    state := get_temporary_storage_mark();
-    defer set_temporary_storage_mark(state);
+    ast: *Ast_Program;
+    {
+        state := get_temporary_storage_mark();
+        defer set_temporary_storage_mark(state);
 
-    has_error, error_msg, tokens := tokenize(code_str);
-    if has_error {
-        throw_exception(vm, tprint("SyntaxError: %", error_msg));
-        return .{};
+        has_error, error_msg, tokens := tokenize(code_str);
+        if has_error {
+            throw_exception(vm, tprint("SyntaxError: %", error_msg));
+            return .{};
+        }
+
+        ast_temp := build_ast(code_str, tokens);
+        if ast_temp.has_error {
+            throw_exception(vm, tprint("SyntaxError: %", ast_temp.error_message));
+            return .{};
+        }
+
+        ast = ast_temp;
     }
 
-    ast := build_ast(code_str, tokens);
-    if ast.has_error {
-        throw_exception(vm, tprint("SyntaxError: %", ast.error_message));
-        return .{};
+    new_program: Bytecode_Program;
+    {
+        push_allocator(context.default_allocator);
+        new_program = generate_bytecode(ast);
     }
 
-    new_program := generate_bytecode(ast);
     if new_program.has_error {
         throw_exception(vm, tprint("SyntaxError: %", new_program.error_message));
         return .{};
@@ -123,7 +133,11 @@ function_constructor :: (vm: *Vm, this: Value, arguments: [] Value, is_new: bool
                 if r.globals.count < vm.program.globals.count {
                     old_count := r.globals.count;
                     new_count := vm.program.globals.count;
-                    new_globals := NewArray(new_count, Value);
+                    new_globals: [] Value;
+                    {
+                        push_allocator(context.default_allocator);
+                        new_globals = NewArray(new_count, Value);
+                    }
                     memcpy(new_globals.data, r.globals.data, old_count * size_of(Value));
                     memset(new_globals.data + old_count, 0, (new_count - old_count) * size_of(Value));
                     r.globals = new_globals;

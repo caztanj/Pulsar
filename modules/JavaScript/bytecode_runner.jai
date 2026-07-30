@@ -240,12 +240,12 @@ execute_function_internal :: (vm: *Vm, initial_function: *Bytecode_Function, ini
                     last_value                       = registers_data[instruction.dest];
 
                 case .LOAD_GLOBAL;
-                    registers_data[instruction.dest] = globals_data[instruction.imm];
+                    registers_data[instruction.dest] = vm.current_realm.globals[instruction.imm];
                     last_value                       = registers_data[instruction.dest];
 
                 case .STORE_GLOBAL;
-                    globals_data[instruction.imm] = registers_data[instruction.arg1];
-                    last_value                    = globals_data[instruction.imm];
+                    vm.current_realm.globals[instruction.imm] = registers_data[instruction.arg1];
+                    last_value                                 = vm.current_realm.globals[instruction.imm];
 
                 case .LOAD_LOCAL;
                     registers_data[instruction.dest] = registers_data[instruction.imm];
