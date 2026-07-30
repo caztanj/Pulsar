@@ -44,6 +44,63 @@ to_primitive_helper :: (vm: *Vm, value: Value, hint: enum { NUMBER; STRING; }) -
     return .{};
 }
 
+parse_string_to_bigint :: (s_input: string) -> s64, bool {
+    s := trim(s_input);
+    if s.count == 0 return 0, true;
+
+    sign: s64 = 1;
+    if s[0] == #char "+" {
+        s.data  += 1;
+        s.count -= 1;
+    } else if s[0] == #char "-" {
+        sign     = -1;
+        s.data  += 1;
+        s.count -= 1;
+    }
+
+    if s.count == 0 return 0, false;
+
+    base: s64 = 10;
+    if s.count >= 2 && s[0] == #char "0" {
+        c := s[1];
+        if c == #char "b" || c == #char "B" {
+            base = 2;
+            s.data  += 2;
+            s.count -= 2;
+        } else if c == #char "o" || c == #char "O" {
+            base = 8;
+            s.data  += 2;
+            s.count -= 2;
+        } else if c == #char "x" || c == #char "X" {
+            base = 16;
+            s.data  += 2;
+            s.count -= 2;
+        }
+    }
+
+    if s.count == 0 return 0, false;
+
+    result: u64 = 0;
+    for i: 0..s.count-1 {
+        ch := s[i];
+        digit: u64 = 255;
+        if ch >= #char "0" && ch <= #char "9" {
+            digit = xx (ch - #char "0");
+        } else if ch >= #char "a" && ch <= #char "f" {
+            digit = xx (10 + ch - #char "a");
+        } else if ch >= #char "A" && ch <= #char "F" {
+            digit = xx (10 + ch - #char "A");
+        }
+
+        if digit >= cast(u64) base return 0, false;
+
+        result = result * (cast(u64) base) + digit;
+    }
+
+    final_val := (cast(s64) result) * sign;
+    return final_val, true;
+}
+
 bigint_constructor :: (vm: *Vm, this: Value, arguments: [] Value, is_new: bool) -> Value {
     if is_new {
         throw_exception(vm, "TypeError: BigInt is not a constructor");
@@ -69,14 +126,12 @@ bigint_constructor :: (vm: *Vm, this: Value, arguments: [] Value, is_new: bool) 
             return prim;
 
         case .STRING;
-            s := trim(prim.s);
-            if s.count == 0 return .{ type = .BIGINT, bigint_val = 0 };
-            val, success := string_to_int(s);
+            val, success := parse_string_to_bigint(prim.s);
             if !success {
                 throw_exception(vm, "SyntaxError: Cannot convert string to BigInt");
                 return .{};
             }
-            return .{ type = .BIGINT, bigint_val = cast(s64) val };
+            return .{ type = .BIGINT, bigint_val = val };
 
         case .SYMBOL;
             throw_exception(vm, "TypeError: Cannot convert a Symbol value to a BigInt");
