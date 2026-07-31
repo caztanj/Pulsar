@@ -17,7 +17,7 @@ init_vm_boolean :: (vm: *Vm) {
 
         vm.current_realm.globals[boolean_index].object = boolean_object;
 
-        boolean_object.prototype = vm.boolean_prototype;
+        boolean_object.prototype = vm.function_prototype;
 
         prototype_value := Value.{
             type   = .OBJECT,
