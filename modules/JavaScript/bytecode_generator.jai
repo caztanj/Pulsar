@@ -2209,7 +2209,7 @@ emit_expression :: (generator: *Bytecode_Generator, node: *Ast_Node, force_new_r
             return register;
 
         case .ASSIGNMENT_EXPRESSION;
-            return emit_assignment_expression_helper(generator, cast(*Ast_Assignment_Expression) node);
+            return emit_assignment_expression_helper(generator, cast(*Ast_Assignment_Expression) node, destination_register);
 
         case .PROGRAM;
         case .VARIABLE_DECLARATION;
@@ -3367,13 +3367,15 @@ emit_binary_expression_helper :: (generator: *Bytecode_Generator, binary_express
     return left;
 }
 
-emit_assignment_expression_helper :: (generator: *Bytecode_Generator, assignment_expression: *Ast_Assignment_Expression) -> u16 {
+emit_assignment_expression_helper :: (generator: *Bytecode_Generator, assignment_expression: *Ast_Assignment_Expression, destination_register: s32 = -1) -> u16 {
+    result_register: u16;
+
     if assignment_expression.op == "=" {
         value_register := emit_expression(generator, assignment_expression.right);
 
         emit_store(generator, assignment_expression.left, value_register);
 
-        return value_register;
+        result_register = value_register;
     } else if assignment_expression.op == "+=" && assignment_expression.right.kind == .LITERAL_NUMBER {
         literal_number := cast(*Ast_Literal_Number) assignment_expression.right;
 
@@ -3404,7 +3406,7 @@ emit_assignment_expression_helper :: (generator: *Bytecode_Generator, assignment
 
         emit_store(generator, assignment_expression.left, left_register);
 
-        return left_register;
+        result_register = left_register;
     } else if assignment_expression.op == "+=" && assignment_expression.left.kind == .IDENTIFIER && assignment_expression.right.kind == .IDENTIFIER {
         left_identifier  := cast(*Ast_Identifier) assignment_expression.left;
         right_identifier := cast(*Ast_Identifier) assignment_expression.right;
@@ -3421,28 +3423,28 @@ emit_assignment_expression_helper :: (generator: *Bytecode_Generator, assignment
 
             array_add(*generator.current_function.instructions, op_instruction);
 
-            return cast(u16) left_index;
+            result_register = cast(u16) left_index;
+        } else {
+            left_register  := emit_expression(generator, assignment_expression.left);
+            right_register := emit_expression(generator, assignment_expression.right);
+
+            res_reg := generator.next_register;
+
+            generator.next_register += 1;
+
+            instruction := Instruction.{
+                dest    = res_reg,
+                arg1    = left_register,
+                arg2    = right_register,
+                op_code = .ADD,
+            };
+
+            emit_instruction(generator, instruction);
+
+            emit_store(generator, assignment_expression.left, res_reg);
+
+            result_register = res_reg;
         }
-
-        left_register  := emit_expression(generator, assignment_expression.left);
-        right_register := emit_expression(generator, assignment_expression.right);
-
-        result_register := generator.next_register;
-
-        generator.next_register += 1;
-
-        instruction := Instruction.{
-            dest    = result_register,
-            arg1    = left_register,
-            arg2    = right_register,
-            op_code = .ADD,
-        };
-
-        emit_instruction(generator, instruction);
-
-        emit_store(generator, assignment_expression.left, result_register);
-
-        return result_register;
     } else if assignment_expression.op == "-=" && assignment_expression.left.kind == .IDENTIFIER && assignment_expression.right.kind == .IDENTIFIER {
         left_identifier  := cast(*Ast_Identifier) assignment_expression.left;
         right_identifier := cast(*Ast_Identifier) assignment_expression.right;
@@ -3459,38 +3461,38 @@ emit_assignment_expression_helper :: (generator: *Bytecode_Generator, assignment
 
             array_add(*generator.current_function.instructions, op_instruction);
 
-            return cast(u16) left_index;
+            result_register = cast(u16) left_index;
+        } else {
+            left_register  := emit_expression(generator, assignment_expression.left);
+            right_register := emit_expression(generator, assignment_expression.right);
+
+            res_reg := generator.next_register;
+
+            generator.next_register += 1;
+
+            instruction := Instruction.{
+                dest    = res_reg,
+                arg1    = left_register,
+                arg2    = right_register,
+                op_code = .SUB,
+            };
+
+            emit_instruction(generator, instruction);
+
+            emit_store(generator, assignment_expression.left, res_reg);
+
+            result_register = res_reg;
         }
-
-        left_register  := emit_expression(generator, assignment_expression.left);
-        right_register := emit_expression(generator, assignment_expression.right);
-
-        result_register := generator.next_register;
-
-        generator.next_register += 1;
-
-        instruction := Instruction.{
-            dest    = result_register,
-            arg1    = left_register,
-            arg2    = right_register,
-            op_code = .SUB,
-        };
-
-        emit_instruction(generator, instruction);
-
-        emit_store(generator, assignment_expression.left, result_register);
-
-        return result_register;
     } else {
         left_register  := emit_expression(generator, assignment_expression.left);
         right_register := emit_expression(generator, assignment_expression.right);
 
-        result_register := generator.next_register;
+        res_reg := generator.next_register;
 
         generator.next_register += 1;
 
         instruction := Instruction.{
-            dest = result_register,
+            dest = res_reg,
             arg1 = left_register,
             arg2 = right_register,
         };
@@ -3503,10 +3505,21 @@ emit_assignment_expression_helper :: (generator: *Bytecode_Generator, assignment
 
         emit_instruction(generator, instruction);
 
-        emit_store(generator, assignment_expression.left, result_register);
+        emit_store(generator, assignment_expression.left, res_reg);
 
-        return result_register;
+        result_register = res_reg;
     }
+
+    if destination_register != -1 && result_register != cast(u16) destination_register {
+        emit_instruction(generator, .{
+            op_code = .MOVE,
+            dest    = cast(u16) destination_register,
+            arg1    = result_register,
+        });
+        return cast(u16) destination_register;
+    }
+
+    return result_register;
 }
 
 emit_object_literal_helper :: (generator: *Bytecode_Generator, object_literal: *Ast_Object_Literal, destination_register: s32) -> u16 {
