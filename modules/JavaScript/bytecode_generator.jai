@@ -392,6 +392,7 @@ generate_bytecode :: (ast: *Ast_Program, program: *Bytecode_Program = null) -> *
         add_global(*generator, "WeakMap", is_declared = true);
         add_global(*generator, "WeakSet", is_declared = true);
         add_global(*generator, "ArrayBuffer", is_declared = false);
+        add_global(*generator, "SharedArrayBuffer", is_declared = true);
         add_global(*generator, "DataView", is_declared = true);
         add_global(*generator, "Float32Array", is_declared = true);
         add_global(*generator, "Float64Array", is_declared = true);

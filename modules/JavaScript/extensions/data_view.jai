@@ -34,8 +34,8 @@ data_view_constructor :: (vm: *Vm, this: Value, arguments: [] Value, is_new: boo
         return .{};
     }
 
-    if arguments.count < 1 || arguments[0].type != .OBJECT || arguments[0].object.kind != .ARRAY_BUFFER {
-        throw_exception(vm, "TypeError: DataView constructor requires an ArrayBuffer");
+    if arguments.count < 1 || arguments[0].type != .OBJECT || (arguments[0].object.kind != .ARRAY_BUFFER && arguments[0].object.kind != .SHARED_ARRAY_BUFFER) {
+        throw_exception(vm, "TypeError: DataView constructor requires an ArrayBuffer or SharedArrayBuffer");
         return .{};
     }
 
@@ -105,7 +105,7 @@ data_view_get_uint8 :: (vm: *Vm, this: Value, arguments: [] Value, is_new: bool)
     if this.object.elements.count < 3 return .{ type = .UNDEFINED };
 
     buffer_val := this.object.elements[0];
-    if buffer_val.type != .OBJECT || buffer_val.object.kind != .ARRAY_BUFFER return .{ type = .UNDEFINED };
+    if buffer_val.type != .OBJECT || (buffer_val.object.kind != .ARRAY_BUFFER && buffer_val.object.kind != .SHARED_ARRAY_BUFFER) return .{ type = .UNDEFINED };
 
     byte_offset := cast(int) this.object.elements[1].number;
     byte_length := cast(int) this.object.elements[2].number;

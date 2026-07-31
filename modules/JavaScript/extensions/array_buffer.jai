@@ -14,6 +14,14 @@ init_vm_array_buffer :: (vm: *Vm) {
         vm.current_realm.globals[detach_index].native_function = array_buffer_detach;
     }
 
+    sab_found, sab_index := get_global_index(vm, "SharedArrayBuffer");
+
+    if !vm.shared_array_buffer_prototype {
+        vm.shared_array_buffer_prototype = allocate_object(vm);
+        vm.shared_array_buffer_prototype.prototype = vm.object_prototype;
+        add_instance_method(vm, vm.shared_array_buffer_prototype, "byteLength__getter__", array_buffer_byte_length_getter);
+    }
+
     if found {
         vm.current_realm.globals[index].type            = .NATIVE_FUNCTION;
         vm.current_realm.globals[index].native_function = array_buffer_constructor;
@@ -32,6 +40,26 @@ init_vm_array_buffer :: (vm: *Vm) {
 
         add_static_property(vm, array_buffer_object,    "prototype",   prototype_value);
         add_static_property(vm, vm.array_buffer_prototype, "constructor", vm.current_realm.globals[index]);
+    }
+
+    if sab_found {
+        vm.current_realm.globals[sab_index].type            = .NATIVE_FUNCTION;
+        vm.current_realm.globals[sab_index].native_function = shared_array_buffer_constructor;
+
+        sab_object := allocate_object(vm);
+        vm.current_realm.globals[sab_index].object = sab_object;
+        sab_object.prototype = vm.function_prototype;
+
+        set_object_property(vm, sab_object, "name",   Value.{ type = .STRING, s = "SharedArrayBuffer" });
+        set_object_property(vm, sab_object, "length", Value.{ type = .NUMBER, number = 1 });
+
+        prototype_value := Value.{
+            type   = .OBJECT,
+            object = vm.shared_array_buffer_prototype,
+        };
+
+        add_static_property(vm, sab_object,                        "prototype",   prototype_value);
+        add_static_property(vm, vm.shared_array_buffer_prototype, "constructor", vm.current_realm.globals[sab_index]);
     }
 }
 
@@ -133,7 +161,7 @@ array_buffer_constructor :: (vm: *Vm, this: Value, arguments: [] Value, is_new: 
 }
 
 array_buffer_byte_length_getter :: (vm: *Vm, this: Value, arguments: [] Value, is_new: bool) -> Value {
-    if this.type != .OBJECT || this.object.kind != .ARRAY_BUFFER {
+    if this.type != .OBJECT || (this.object.kind != .ARRAY_BUFFER && this.object.kind != .SHARED_ARRAY_BUFFER) {
         throw_exception(vm, "TypeError: get byteLength called on incompatible receiver");
         return .{};
     }
@@ -141,6 +169,67 @@ array_buffer_byte_length_getter :: (vm: *Vm, this: Value, arguments: [] Value, i
     if this.object.is_detached return .{ type = .NUMBER, number = 0 };
 
     return .{ type = .NUMBER, number = cast(float64) this.object.primitive_value.s.count };
+}
+
+shared_array_buffer_constructor :: (vm: *Vm, this: Value, arguments: [] Value, is_new: bool) -> Value {
+    if !is_new {
+        throw_exception(vm, "TypeError: Constructor SharedArrayBuffer requires 'new'");
+        return .{};
+    }
+
+    length := 0;
+    if arguments.count > 0 {
+        arg := arguments[0];
+        length_f := abstract_to_number(vm, arg);
+        if vm.has_exception return .{};
+
+        if isnan(length_f) {
+            length_f = 0;
+        } else if !isinf(length_f) {
+            length_f = cast(float64) cast(s64) length_f;
+        }
+
+        if length_f < 0 || isinf(length_f) || length_f > 9007199254740991 {
+            throw_exception(vm, "RangeError: Invalid SharedArrayBuffer length");
+            return .{};
+        }
+        length = cast(int) length_f;
+    }
+
+    if length > 2147483647 {
+        throw_exception(vm, "RangeError: SharedArrayBuffer allocation limit exceeded");
+        return .{};
+    }
+
+    object: *Gc_Object;
+    if this.type == .OBJECT {
+        object = this.object;
+    } else {
+        object = allocate_object(vm);
+        if this.type == .FUNCTION || this.type == .NATIVE_FUNCTION {
+            found, prototype_value := lookup_property(vm, this.object, "prototype");
+            if vm.has_exception return .{};
+            if prototype_value.type == .OBJECT {
+                object.prototype = prototype_value.object;
+            } else {
+                object.prototype = vm.shared_array_buffer_prototype;
+            }
+        } else {
+            object.prototype = vm.shared_array_buffer_prototype;
+        }
+    }
+    object.kind = .SHARED_ARRAY_BUFFER;
+
+    data_ptr := alloc(length);
+    memset(data_ptr, 0, length);
+
+    s: string;
+    s.data = data_ptr;
+    s.count = length;
+
+    object.primitive_value = .{ type = .STRING, s = s };
+
+    return .{ type = .OBJECT, object = object };
 }
 
 array_buffer_detach :: (vm: *Vm, this: Value, arguments: [] Value, is_new: bool) -> Value {

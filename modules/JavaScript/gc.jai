@@ -366,7 +366,7 @@ collect_garbage_minor :: (vm: *Vm) {
                 Uniform.uninit(*unreachable.regexp);
             } else if is_typed_array(unreachable.kind) {
                 if unreachable.primitive_value.s.data && !unreachable.viewed_array_buffer free(unreachable.primitive_value.s.data);
-            } else if unreachable.kind == .ARRAY_BUFFER {
+            } else if unreachable.kind == .ARRAY_BUFFER || unreachable.kind == .SHARED_ARRAY_BUFFER {
                 if unreachable.primitive_value.s.data free(unreachable.primitive_value.s.data);
             }
 
@@ -457,7 +457,7 @@ collect_garbage_major :: (vm: *Vm) {
                     Uniform.uninit(*unreachable.regexp);
                 } else if is_typed_array(unreachable.kind) {
                     if unreachable.primitive_value.s.data && !unreachable.viewed_array_buffer free(unreachable.primitive_value.s.data);
-                } else if unreachable.kind == .ARRAY_BUFFER {
+                } else if unreachable.kind == .ARRAY_BUFFER || unreachable.kind == .SHARED_ARRAY_BUFFER {
                     if unreachable.primitive_value.s.data free(unreachable.primitive_value.s.data);
                 }
 
@@ -513,6 +513,7 @@ Gc_Object_Kind :: enum u8 {
     FLOAT64_ARRAY;
     UINT8_CLAMPED_ARRAY;
     ARRAY_BUFFER;
+    SHARED_ARRAY_BUFFER;
     REGEXP;
     SYMBOL;
     DATA_VIEW;

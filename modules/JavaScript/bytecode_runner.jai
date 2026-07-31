@@ -3104,7 +3104,7 @@ deinit :: (vm: *Vm) {
                 Uniform.uninit(*current_object.regexp);
             } else if is_typed_array(current_object.kind) {
                 if current_object.primitive_value.s.data && !current_object.viewed_array_buffer free(current_object.primitive_value.s.data);
-            } else if current_object.kind == .ARRAY_BUFFER {
+            } else if current_object.kind == .ARRAY_BUFFER || current_object.kind == .SHARED_ARRAY_BUFFER {
                 if current_object.primitive_value.s.data free(current_object.primitive_value.s.data);
             }
 
@@ -3430,6 +3430,7 @@ Vm :: struct {
             async_generator_prototype: *Gc_Object;
             async_generator_function_constructor_object: *Gc_Object;
             array_buffer_prototype:*Gc_Object;
+            shared_array_buffer_prototype:*Gc_Object;
             data_view_prototype:   *Gc_Object;
             bigint_prototype:      *Gc_Object;
         };
