@@ -25,6 +25,7 @@ init_vm_boolean :: (vm: *Vm) {
         };
 
         add_static_property(vm, boolean_object,       "prototype",   prototype_value);
+        add_static_property(vm, boolean_object,       "length",      Value.{ type = .NUMBER, number = 1 });
         add_static_property(vm, vm.boolean_prototype, "constructor", vm.current_realm.globals[boolean_index]);
     }
 }
