@@ -1885,9 +1885,11 @@ execute_function_internal :: (vm: *Vm, initial_function: *Bytecode_Function, ini
                 vm.gc.environment_pool = env;
             }
 
+            ret_val := ifx (function.flags & .TOP_LEVEL) then last_value else Value.{ type = .UNDEFINED };
+
             if vm.call_frames.count == start_frame_count {
                 try_stack.count = initial_try_count;
-                return last_value;
+                return ret_val;
             } else {
                 try_stack.count = initial_try_count;
                 vm.call_frames.count -= 1;
@@ -1906,7 +1908,8 @@ execute_function_internal :: (vm: *Vm, initial_function: *Bytecode_Function, ini
                 globals_data         = vm.current_realm.globals.data;
                 generator            = frame.generator;
 
-                registers_data[frame.dest_register] = last_value;
+                registers_data[frame.dest_register] = ret_val;
+                last_value = ret_val;
                 needs_frame_init = false;
                 continue;
             }
