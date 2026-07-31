@@ -42,8 +42,45 @@ init_vm_object :: (vm: *Vm) {
 
 object_constructor :: (vm: *Vm, this: Value, arguments: [] Value, is_new: bool) -> Value {
     if arguments.count > 0 && arguments[0].type != .UNDEFINED && arguments[0].type != .NULL {
-        if arguments[0].type == .OBJECT || arguments[0].type == .ARRAY || arguments[0].type == .FUNCTION || arguments[0].type == .NATIVE_FUNCTION {
-            return arguments[0];
+        arg := arguments[0];
+        if arg.type == .OBJECT || arg.type == .ARRAY || arg.type == .FUNCTION || arg.type == .NATIVE_FUNCTION || arg.type == .GENERATOR {
+            return arg;
+        }
+
+        if arg.type == .BOOLEAN {
+            obj := allocate_object(vm);
+            obj.kind = .BOOLEAN_WRAPPER;
+            obj.primitive_value = arg;
+            obj.prototype = vm.boolean_prototype;
+            return .{ type = .OBJECT, object = obj };
+        }
+        if arg.type == .NUMBER {
+            obj := allocate_object(vm);
+            obj.kind = .NUMBER_WRAPPER;
+            obj.primitive_value = arg;
+            obj.prototype = vm.number_prototype;
+            return .{ type = .OBJECT, object = obj };
+        }
+        if arg.type == .STRING {
+            obj := allocate_object(vm);
+            obj.kind = .STRING_WRAPPER;
+            obj.primitive_value = arg;
+            obj.prototype = vm.string_prototype;
+            return .{ type = .OBJECT, object = obj };
+        }
+        if arg.type == .BIGINT {
+            obj := allocate_object(vm);
+            obj.kind = .BIGINT_WRAPPER;
+            obj.primitive_value = arg;
+            obj.prototype = vm.bigint_prototype;
+            return .{ type = .OBJECT, object = obj };
+        }
+        if arg.type == .SYMBOL {
+            obj := allocate_object(vm);
+            obj.kind = .SYMBOL;
+            obj.primitive_value = arg;
+            obj.prototype = vm.symbol_prototype;
+            return .{ type = .OBJECT, object = obj };
         }
     }
 
@@ -524,6 +561,7 @@ object_to_string :: (vm: *Vm, this: Value, arguments: [] Value, is_new: bool) ->
     if this.type == .NATIVE_FUNCTION return .{ type = .STRING, s = "[object Function]" };
     if this.type == .GENERATOR       return .{ type = .STRING, s = "[object Generator]" };
     if this.type == .SYMBOL          return .{ type = .STRING, s = "[object Symbol]" };
+    if this.type == .BIGINT          return .{ type = .STRING, s = "[object BigInt]" };
 
     if this.type == .OBJECT && this.object {
         kind := this.object.kind;
@@ -533,6 +571,7 @@ object_to_string :: (vm: *Vm, this: Value, arguments: [] Value, is_new: bool) ->
         if kind == .BOOLEAN_WRAPPER return .{ type = .STRING, s = "[object Boolean]" };
         if kind == .NUMBER_WRAPPER  return .{ type = .STRING, s = "[object Number]" };
         if kind == .STRING_WRAPPER  return .{ type = .STRING, s = "[object String]" };
+        if kind == .BIGINT_WRAPPER  return .{ type = .STRING, s = "[object BigInt]" };
         if kind == .PROMISE         return .{ type = .STRING, s = "[object Promise]" };
         if kind == .MAP             return .{ type = .STRING, s = "[object Map]" };
         if kind == .SET             return .{ type = .STRING, s = "[object Set]" };

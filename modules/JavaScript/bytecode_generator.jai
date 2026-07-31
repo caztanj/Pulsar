@@ -118,9 +118,13 @@ print :: (program: *Bytecode_Program) {
                 case .ITERATOR_CLOSE;     print(" ITERATOR_CLOSE     arg1: R%", instruction.arg1);
                 case .GET_KEYS;           print(" GET_KEYS           dest: R%, arg1: R%", instruction.dest, instruction.arg1);
                 case .COMPUTED_SET;       print(" COMPUTED_SET       dest: R% (obj), arg1: R% (prop), arg2: R% (val)", instruction.dest, instruction.arg1, instruction.arg2);
+                case .COMPUTED_SET_GETTER;print(" COMPUTED_SET_GETTER dest: R% (obj), arg1: R% (prop), arg2: R% (val)", instruction.dest, instruction.arg1, instruction.arg2);
+                case .COMPUTED_SET_SETTER;print(" COMPUTED_SET_SETTER dest: R% (obj), arg1: R% (prop), arg2: R% (val)", instruction.dest, instruction.arg1, instruction.arg2);
                 case .EXPONENTIATION;     print(" EXPONENTIATION     dest: R%, arg1: R%, arg2: R%", instruction.dest, instruction.arg1, instruction.arg2);
                 case .JUMP_IF_NOT_NULLISH; print(" JUMP_IF_NOT_NULLISH arg1: R%, imm: %", instruction.arg1, instruction.imm);
                 case .UNARY_MINUS;        print(" UNARY_MINUS        dest: R%, arg1: R%", instruction.dest, instruction.arg1);
+                case .UNARY_PLUS;         print(" UNARY_PLUS         dest: R%, arg1: R%", instruction.dest, instruction.arg1);
+                case .TO_STRING;          print(" TO_STRING          dest: R%, arg1: R%", instruction.dest, instruction.arg1);
                 case .ADD_CONST;          print(" ADD_CONST          dest: R%, arg1: R%, imm: % (value: %)", instruction.dest, instruction.arg1, instruction.imm, program.constants[instruction.imm]);
                 case .SUB_CONST;          print(" SUB_CONST          dest: R%, arg1: R%, imm: % (value: %)", instruction.dest, instruction.arg1, instruction.imm, program.constants[instruction.imm]);
                 case .SET_PROTOTYPE;      print(" SET_PROTOTYPE      dest: R%, arg1: R%", instruction.dest, instruction.arg1);
@@ -2143,7 +2147,7 @@ emit_expression :: (generator: *Bytecode_Generator, node: *Ast_Node, force_new_r
             return emit_arrow_function_expression_helper(generator, cast(*Ast_Arrow_Function_Expression) node, destination_register);
 
         case .TEMPLATE_LITERAL;
-            return emit_template_literal_helper(generator, cast(*Ast_Template_Literal) node);
+            return emit_template_literal_helper(generator, cast(*Ast_Template_Literal) node, destination_register);
 
         case .SPREAD_ELEMENT;
             return 65535;
@@ -2836,6 +2840,10 @@ Op_Code :: enum u8 {
     DEC_LOCAL;
     JUMP_IF_LOCAL_LESS_THAN_CONST;
     DELETE_PROPERTY;
+    UNARY_PLUS;
+    TO_STRING;
+    COMPUTED_SET_GETTER;
+    COMPUTED_SET_SETTER;
 }
 
 Instruction :: struct {
@@ -3533,31 +3541,12 @@ emit_object_literal_helper :: (generator: *Bytecode_Generator, object_literal: *
             if is_computed {
                 key_register := emit_expression(generator, it.key_expr);
 
-                if is_getter || is_setter {
-                    suffix := ifx is_getter then "__getter__" else "__setter__";
-                    suffix_index := generator.program.constants.count;
-                    array_add(*generator.program.constants, .{ type = .STRING, s = suffix });
-
-                    suffix_reg := allocate_register(generator, -1);
-                    emit_instruction(generator, .{
-                        op_code = .LOAD_CONST,
-                        dest    = suffix_reg,
-                        imm     = cast(s32) suffix_index,
-                    });
-
-                    concat_reg := allocate_register(generator, -1);
-                    emit_instruction(generator, .{
-                        op_code = .ADD,
-                        dest    = concat_reg,
-                        arg1    = key_register,
-                        arg2    = suffix_reg,
-                    });
-
-                    key_register = concat_reg;
-                }
+                op := Op_Code.COMPUTED_SET;
+                if is_getter      op = .COMPUTED_SET_GETTER;
+                else if is_setter op = .COMPUTED_SET_SETTER;
 
                 emit_instruction(generator, .{
-                    op_code = .COMPUTED_SET,
+                    op_code = op,
                     dest    = register,
                     arg1    = key_register,
                     arg2    = value_register,
@@ -3740,7 +3729,7 @@ emit_array_literal_helper :: (generator: *Bytecode_Generator, array_literal: *As
     return register;
 }
 
-emit_template_literal_helper :: (generator: *Bytecode_Generator, template_literal: *Ast_Template_Literal) -> u16 {
+emit_template_literal_helper :: (generator: *Bytecode_Generator, template_literal: *Ast_Template_Literal, destination_register: s32 = -1) -> u16 {
     result_register: u16;
 
     first := true;
@@ -3787,6 +3776,17 @@ emit_template_literal_helper :: (generator: *Bytecode_Generator, template_litera
         if it_index < template_literal.expressions.count {
             expression_register := emit_expression(generator, template_literal.expressions[it_index]);
 
+            str_reg := generator.next_register;
+            generator.next_register += 1;
+
+            to_string_instruction := Instruction.{
+                op_code = .TO_STRING,
+                dest    = str_reg,
+                arg1    = expression_register,
+            };
+            emit_instruction(generator, to_string_instruction);
+            expression_register = str_reg;
+
             if first {
                 result_register = expression_register;
                 first           = false;
@@ -3825,6 +3825,15 @@ emit_template_literal_helper :: (generator: *Bytecode_Generator, template_litera
         };
 
         emit_instruction(generator, quasi_instruction);
+    }
+
+    if destination_register != -1 && result_register != cast(u16) destination_register {
+        emit_instruction(generator, .{
+            op_code = .MOVE,
+            dest    = cast(u16) destination_register,
+            arg1    = result_register,
+        });
+        return cast(u16) destination_register;
     }
 
     return result_register;
@@ -3920,7 +3929,7 @@ emit_unary_expression_helper :: (generator: *Bytecode_Generator, unary_expressio
     } else if unary_expression.op == "-" {
         instruction.op_code = .UNARY_MINUS;
     } else if unary_expression.op == "+" {
-        instruction.op_code = .MOVE;
+        instruction.op_code = .UNARY_PLUS;
         instruction.arg1 = right;
     }
 

@@ -23,6 +23,7 @@ init_vm_string :: (vm: *Vm) {
         add_instance_method(vm, vm.string_prototype, "trimStart",   string_trim_start);
         add_instance_method(vm, vm.string_prototype, "trimEnd",     string_trim_end);
         add_instance_method(vm, vm.string_prototype, "at",          string_at);
+        add_instance_method(vm, vm.string_prototype, "concat",      string_concat);
         add_instance_method(vm, vm.string_prototype, "toString",    string_to_string);
         add_instance_method(vm, vm.string_prototype, "valueOf",     string_value_of);
     }
@@ -50,7 +51,10 @@ init_vm_string :: (vm: *Vm) {
 string_constructor :: (vm: *Vm, this: Value, arguments: [] Value, is_new: bool) -> Value {
     string_value := "";
 
-    if arguments.count > 0 string_value = value_to_string(vm, arguments[0]);
+    if arguments.count > 0 {
+        string_value = abstract_to_string(vm, arguments[0]);
+        if vm.has_exception return .{};
+    }
 
     if is_new {
         string_object := allocate_object(vm);
@@ -456,4 +460,29 @@ string_value_of :: (vm: *Vm, this: Value, arguments: [] Value, is_new: bool) -> 
 
     throw_exception(vm, "TypeError: String.prototype.valueOf requires that 'this' be a String");
     return .{};
+}
+
+string_concat :: (vm: *Vm, this: Value, arguments: [] Value, is_new: bool) -> Value {
+    if this.type == .UNDEFINED || this.type == .NULL {
+        throw_exception(vm, "TypeError: String.prototype.concat called on null or undefined");
+        return .{};
+    }
+    this_str := abstract_to_string(vm, this);
+    if vm.has_exception return .{};
+
+    builder: String_Builder;
+    append(*builder, this_str);
+
+    for arg: arguments {
+        arg_str := abstract_to_string(vm, arg);
+        if vm.has_exception {
+            free_buffers(*builder);
+            return .{};
+        }
+        append(*builder, arg_str);
+    }
+
+    res := allocate_string_from_builder(vm, *builder);
+    free_buffers(*builder);
+    return .{ type = .STRING, s = res };
 }

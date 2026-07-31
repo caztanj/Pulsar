@@ -56,7 +56,8 @@ date_constructor :: (vm: *Vm, this: Value, arguments: [] Value, is_new: bool) ->
         now          := current_time_consensus();
         milliseconds  = to_float64_seconds(now - APOLLO_TIME_FOR_JAN_1_1970) * 1000.0;
     } else if arguments.count == 1 {
-        milliseconds = value_to_number(arguments[0]);
+        milliseconds = abstract_to_number(vm, arguments[0]);
+        if vm.has_exception return .{};
     } else {
         milliseconds = 0.0;
     }

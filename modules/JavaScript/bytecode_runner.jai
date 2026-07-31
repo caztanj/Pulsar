@@ -420,7 +420,7 @@ execute_function_internal :: (vm: *Vm, initial_function: *Bytecode_Function, ini
                         registers_data[instruction.dest].type = .NUMBER;
                         registers_data[instruction.dest].number = v1.number - v2.number;
                     } else {
-                        registers_data[instruction.dest] = values_subtraction(v1.*, v2.*);
+                        registers_data[instruction.dest] = values_subtraction(vm, v1.*, v2.*);
 
                         if vm.has_exception break;
                     }
@@ -435,7 +435,7 @@ execute_function_internal :: (vm: *Vm, initial_function: *Bytecode_Function, ini
                         registers_data[instruction.dest].type = .NUMBER;
                         registers_data[instruction.dest].number = v1.number * v2.number;
                     } else {
-                        registers_data[instruction.dest] = values_multiply(v1.*, v2.*);
+                        registers_data[instruction.dest] = values_multiply(vm, v1.*, v2.*);
 
                         if vm.has_exception break;
                     }
@@ -450,7 +450,7 @@ execute_function_internal :: (vm: *Vm, initial_function: *Bytecode_Function, ini
                         registers_data[instruction.dest].type = .NUMBER;
                         registers_data[instruction.dest].number = v1.number / v2.number;
                     } else {
-                        registers_data[instruction.dest] = values_divide(v1.*, v2.*);
+                        registers_data[instruction.dest] = values_divide(vm, v1.*, v2.*);
 
                         if vm.has_exception break;
                     }
@@ -458,11 +458,11 @@ execute_function_internal :: (vm: *Vm, initial_function: *Bytecode_Function, ini
                     last_value = registers_data[instruction.dest];
 
                 case .MOD;
-                    registers_data[instruction.dest] = values_modulo(registers_data[instruction.arg1], registers_data[instruction.arg2]);
+                    registers_data[instruction.dest] = values_modulo(vm, registers_data[instruction.arg1], registers_data[instruction.arg2]);
                     last_value                       = registers_data[instruction.dest];
 
                 case .EXPONENTIATION;
-                    registers_data[instruction.dest] = values_exponentiation(registers_data[instruction.arg1], registers_data[instruction.arg2]);
+                    registers_data[instruction.dest] = values_exponentiation(vm, registers_data[instruction.arg1], registers_data[instruction.arg2]);
                     last_value                       = registers_data[instruction.dest];
 
                 case .CALL;
@@ -790,39 +790,51 @@ execute_function_internal :: (vm: *Vm, initial_function: *Bytecode_Function, ini
 
                     last_value = registers_data[instruction.arg2];
 
-                case .COMPUTED_SET;
+                case .COMPUTED_SET; #through;
+                case .COMPUTED_SET_GETTER; #through;
+                case .COMPUTED_SET_SETTER;
                     object   := registers_data[instruction.dest].object;
                     property := *registers_data[instruction.arg1];
                     value    := registers_data[instruction.arg2];
 
                     if object {
+                        prop_name := "";
                         if property.type == .STRING {
-                            set_object_property(vm, object, property.s, value);
+                            prop_name = property.s;
                         } else if property.type == .SYMBOL {
-                            symbol_name := get_symbol_string_key(property);
-                            set_object_property(vm, object, symbol_name, value);
+                            prop_name = get_symbol_string_key(property);
                         } else if property.type == .NUMBER {
                             index := cast(int) property.number;
-
                             if cast(float64) index == property.number && index >= 0 && index < 1048576 {
                                 if is_typed_array(object.kind) {
                                     len := get_typed_array_length(object);
                                     if index < len {
                                         set_typed_array_element(object, index, value_to_number(value));
                                     }
-                                } else {
+                                    last_value = value;
+                                    break;
+                                } else if instruction.op_code == .COMPUTED_SET {
                                     while object.elements.count <= index array_add(*object.elements, .{});
-
                                     object.elements[index] = value;
-
                                     write_barrier(vm, object, value);
+                                    last_value = value;
+                                    break;
                                 }
-                            } else {
-                                set_object_property(vm, object, abstract_to_string(vm, property.*), value);
                             }
+                            prop_name = abstract_to_string(vm, property.*);
+                            if vm.has_exception break;
                         } else {
-                            set_object_property(vm, object, abstract_to_string(vm, property.*), value);
+                            prop_name = abstract_to_string(vm, property.*);
+                            if vm.has_exception break;
                         }
+
+                        if instruction.op_code == .COMPUTED_SET_GETTER {
+                            prop_name = tprint("%__getter__", prop_name);
+                        } else if instruction.op_code == .COMPUTED_SET_SETTER {
+                            prop_name = tprint("%__setter__", prop_name);
+                        }
+
+                        set_object_property(vm, object, prop_name, value);
                     }
 
                     last_value = value;
@@ -883,7 +895,7 @@ execute_function_internal :: (vm: *Vm, initial_function: *Bytecode_Function, ini
                     registers_data[instruction.dest].type = .BOOLEAN;
 
                     if v1.type == .NUMBER && v2.type == .NUMBER registers_data[instruction.dest].boolean = v1.number == v2.number;
-                    else                                        registers_data[instruction.dest].boolean = values_equal(v1.*, v2.*);
+                    else                                        registers_data[instruction.dest].boolean = values_equal(vm, v1.*, v2.*);
 
                     last_value = registers_data[instruction.dest];
 
@@ -894,7 +906,7 @@ execute_function_internal :: (vm: *Vm, initial_function: *Bytecode_Function, ini
                     registers_data[instruction.dest].type = .BOOLEAN;
 
                     if v1.type == .NUMBER && v2.type == .NUMBER registers_data[instruction.dest].boolean = v1.number != v2.number;
-                    else                                        registers_data[instruction.dest].boolean = !values_equal(v1.*, v2.*);
+                    else                                        registers_data[instruction.dest].boolean = !values_equal(vm, v1.*, v2.*);
 
                     last_value = registers_data[instruction.dest];
 
@@ -905,7 +917,7 @@ execute_function_internal :: (vm: *Vm, initial_function: *Bytecode_Function, ini
                     registers_data[instruction.dest].type = .BOOLEAN;
 
                     if v1.type == .NUMBER && v2.type == .NUMBER registers_data[instruction.dest].boolean = v1.number < v2.number;
-                    else                                        registers_data[instruction.dest].boolean = values_less_than(v1.*, v2.*);
+                    else                                        registers_data[instruction.dest].boolean = values_less_than(vm, v1.*, v2.*);
 
                     last_value = registers_data[instruction.dest];
 
@@ -916,7 +928,7 @@ execute_function_internal :: (vm: *Vm, initial_function: *Bytecode_Function, ini
                     registers_data[instruction.dest].type = .BOOLEAN;
 
                     if v1.type == .NUMBER && v2.type == .NUMBER registers_data[instruction.dest].boolean = v1.number > v2.number;
-                    else                                        registers_data[instruction.dest].boolean = values_greater_than(v1.*, v2.*);
+                    else                                        registers_data[instruction.dest].boolean = values_greater_than(vm, v1.*, v2.*);
 
                     last_value = registers_data[instruction.dest];
 
@@ -927,7 +939,7 @@ execute_function_internal :: (vm: *Vm, initial_function: *Bytecode_Function, ini
                     registers_data[instruction.dest].type = .BOOLEAN;
 
                     if v1.type == .NUMBER && v2.type == .NUMBER registers_data[instruction.dest].boolean = v1.number <= v2.number;
-                    else                                        registers_data[instruction.dest].boolean = values_less_than_equal(v1.*, v2.*);
+                    else                                        registers_data[instruction.dest].boolean = values_less_than_equal(vm, v1.*, v2.*);
 
                     last_value = registers_data[instruction.dest];
 
@@ -938,7 +950,7 @@ execute_function_internal :: (vm: *Vm, initial_function: *Bytecode_Function, ini
                     registers_data[instruction.dest].type = .BOOLEAN;
 
                     if v1.type == .NUMBER && v2.type == .NUMBER registers_data[instruction.dest].boolean = v1.number >= v2.number;
-                    else                                        registers_data[instruction.dest].boolean = values_greater_than_equal(v1.*, v2.*);
+                    else                                        registers_data[instruction.dest].boolean = values_greater_than_equal(vm, v1.*, v2.*);
 
                     last_value = registers_data[instruction.dest];
 
@@ -1027,15 +1039,15 @@ execute_function_internal :: (vm: *Vm, initial_function: *Bytecode_Function, ini
                     last_value = registers_data[instruction.dest];
 
                 case .BITWISE_AND;
-                    registers_data[instruction.dest] = values_bitwise_and(registers_data[instruction.arg1], registers_data[instruction.arg2]);
+                    registers_data[instruction.dest] = values_bitwise_and(vm, registers_data[instruction.arg1], registers_data[instruction.arg2]);
                     last_value                       = registers_data[instruction.dest];
 
                 case .BITWISE_OR;
-                    registers_data[instruction.dest] = values_bitwise_or(registers_data[instruction.arg1], registers_data[instruction.arg2]);
+                    registers_data[instruction.dest] = values_bitwise_or(vm, registers_data[instruction.arg1], registers_data[instruction.arg2]);
                     last_value                       = registers_data[instruction.dest];
 
                 case .BITWISE_XOR;
-                    registers_data[instruction.dest] = values_bitwise_xor(registers_data[instruction.arg1], registers_data[instruction.arg2]);
+                    registers_data[instruction.dest] = values_bitwise_xor(vm, registers_data[instruction.arg1], registers_data[instruction.arg2]);
                     last_value                       = registers_data[instruction.dest];
 
                 case .JUMP;
@@ -1077,15 +1089,39 @@ execute_function_internal :: (vm: *Vm, initial_function: *Bytecode_Function, ini
                     last_value = registers_data[instruction.dest];
 
                 case .UNARY_MINUS;
-                    value := *registers_data[instruction.arg1];
+                    val := registers_data[instruction.arg1];
+                    prim := to_primitive(vm, val, .NUMBER);
+                    if vm.has_exception break;
 
-                    if value.type == .BIGINT {
+                    if prim.type == .BIGINT {
                         registers_data[instruction.dest].type       = .BIGINT;
-                        registers_data[instruction.dest].bigint_val = -value.bigint_val;
+                        registers_data[instruction.dest].bigint_val = -prim.bigint_val;
                     } else {
+                        num := abstract_to_number(vm, prim);
+                        if vm.has_exception break;
                         registers_data[instruction.dest].type   = .NUMBER;
-                        registers_data[instruction.dest].number = -value_to_number(value.*);
+                        registers_data[instruction.dest].number = -num;
                     }
+
+                    last_value = registers_data[instruction.dest];
+
+                case .UNARY_PLUS;
+                    val := registers_data[instruction.arg1];
+                    num := abstract_to_number(vm, val);
+                    if vm.has_exception break;
+
+                    registers_data[instruction.dest].type   = .NUMBER;
+                    registers_data[instruction.dest].number = num;
+
+                    last_value = registers_data[instruction.dest];
+
+                case .TO_STRING;
+                    val := registers_data[instruction.arg1];
+                    str := abstract_to_string(vm, val);
+                    if vm.has_exception break;
+
+                    registers_data[instruction.dest].type = .STRING;
+                    registers_data[instruction.dest].s    = str;
 
                     last_value = registers_data[instruction.dest];
 
@@ -1131,7 +1167,7 @@ execute_function_internal :: (vm: *Vm, initial_function: *Bytecode_Function, ini
                         registers_data[instruction.dest].type   = .NUMBER;
                         registers_data[instruction.dest].number = v1.number - v2.number;
                     } else {
-                        registers_data[instruction.dest] = values_subtraction(v1.*, v2.*);
+                        registers_data[instruction.dest] = values_subtraction(vm, v1.*, v2.*);
 
                         if vm.has_exception break;
                     }
@@ -1160,7 +1196,7 @@ execute_function_internal :: (vm: *Vm, initial_function: *Bytecode_Function, ini
                     jump := false;
 
                     if v1.type == .NUMBER && v2.type == .NUMBER jump = v1.number < v2.number;
-                    else                                        jump = values_less_than(v1.*, v2.*);
+                    else                                        jump = values_less_than(vm, v1.*, v2.*);
 
                     if jump pc_pointer = instructions_pointer + instruction.imm;
 
@@ -1185,7 +1221,7 @@ execute_function_internal :: (vm: *Vm, initial_function: *Bytecode_Function, ini
                     } else {
                         one := Value.{ type = .NUMBER, number = 1 };
 
-                        registers_data[instruction.imm] = values_subtraction(v.*, one);
+                        registers_data[instruction.imm] = values_subtraction(vm, v.*, one);
                     }
 
                     last_value = registers_data[instruction.imm];
@@ -1204,7 +1240,7 @@ execute_function_internal :: (vm: *Vm, initial_function: *Bytecode_Function, ini
                     v2 := *registers_data[instruction.arg1];
 
                     if v1.type == .NUMBER && v2.type == .NUMBER v1.number -= v2.number;
-                    else                                        registers_data[instruction.dest] = values_subtraction(v1.*, v2.*);
+                    else                                        registers_data[instruction.dest] = values_subtraction(vm, v1.*, v2.*);
 
                     last_value = registers_data[instruction.dest];
 
@@ -1215,7 +1251,7 @@ execute_function_internal :: (vm: *Vm, initial_function: *Bytecode_Function, ini
                     jump := false;
 
                     if v1.type == .NUMBER && v2.type == .NUMBER jump = v1.number < v2.number;
-                    else                                        jump = values_less_than(v1.*, v2.*);
+                    else                                        jump = values_less_than(vm, v1.*, v2.*);
 
                     if jump pc_pointer = instructions_pointer + instruction.imm;
 
@@ -2452,71 +2488,87 @@ value_to_number :: inline (value: Value) -> float64 {
     return not_a_number_value;
 }
 
+ToPrimitive_Hint :: enum {
+    DEFAULT;
+    NUMBER;
+    STRING;
+}
+
+to_primitive :: (vm: *Vm, value: Value, hint: ToPrimitive_Hint = .DEFAULT) -> Value {
+    if value.type != .OBJECT && value.type != .ARRAY && value.type != .FUNCTION && value.type != .NATIVE_FUNCTION && value.type != .GENERATOR return value;
+
+    current_obj := ifx value.type == .GENERATOR value.generator_object else value.object;
+    if !current_obj return value;
+
+    found_to_prim, to_prim_fn := lookup_property(vm, current_obj, "@@Symbol.toPrimitive");
+    if vm.has_exception return .{};
+    if found_to_prim && to_prim_fn.type != .UNDEFINED && to_prim_fn.type != .NULL {
+        if to_prim_fn.type == .FUNCTION || to_prim_fn.type == .NATIVE_FUNCTION || (to_prim_fn.type == .OBJECT && to_prim_fn.object.kind == .PROXY) {
+            hint_str := "default";
+            if hint == .NUMBER hint_str = "number";
+            else if hint == .STRING hint_str = "string";
+
+            hint_val := Value.{ type = .STRING, s = hint_str };
+            res := call_value(vm, value, to_prim_fn, .[ hint_val ]);
+            if vm.has_exception return .{};
+            if res.type != .OBJECT && res.type != .ARRAY && res.type != .GENERATOR && res.type != .FUNCTION && res.type != .NATIVE_FUNCTION {
+                return res;
+            }
+            throw_exception(vm, "TypeError: Cannot convert object to primitive value");
+            return .{};
+        } else {
+            throw_exception(vm, "TypeError: @@Symbol.toPrimitive is not a function");
+            return .{};
+        }
+    }
+
+    first_method  := ifx hint == .STRING then "toString" else "valueOf";
+    second_method := ifx hint == .STRING then "valueOf" else "toString";
+
+    found1, val1 := lookup_property(vm, current_obj, first_method);
+    if vm.has_exception return .{};
+    if found1 && (val1.type == .FUNCTION || val1.type == .NATIVE_FUNCTION || (val1.type == .OBJECT && val1.object.kind == .PROXY)) {
+        res := call_value(vm, value, val1, .[]);
+        if vm.has_exception return .{};
+        if res.type != .OBJECT && res.type != .ARRAY && res.type != .GENERATOR && res.type != .FUNCTION && res.type != .NATIVE_FUNCTION {
+            return res;
+        }
+    }
+
+    found2, val2 := lookup_property(vm, current_obj, second_method);
+    if vm.has_exception return .{};
+    if found2 && (val2.type == .FUNCTION || val2.type == .NATIVE_FUNCTION || (val2.type == .OBJECT && val2.object.kind == .PROXY)) {
+        res := call_value(vm, value, val2, .[]);
+        if vm.has_exception return .{};
+        if res.type != .OBJECT && res.type != .ARRAY && res.type != .GENERATOR && res.type != .FUNCTION && res.type != .NATIVE_FUNCTION {
+            return res;
+        }
+    }
+
+    throw_exception(vm, "TypeError: Cannot convert object to primitive value");
+    return .{};
+}
+
 abstract_to_number :: (vm: *Vm, value: Value) -> float64 {
-    if value.type == .SYMBOL {
+    prim := to_primitive(vm, value, .NUMBER);
+    if vm.has_exception return not_a_number_value;
+
+    if prim.type == .SYMBOL {
         throw_exception(vm, "TypeError: Cannot convert a Symbol value to a number");
         return not_a_number_value;
     }
-
-    if value.type != .OBJECT && value.type != .ARRAY && value.type != .GENERATOR && value.type != .FUNCTION && value.type != .NATIVE_FUNCTION {
-        return value_to_number(value);
-    }
-
-    current_obj := ifx value.type == .GENERATOR value.generator_object else value.object;
-    if current_obj {
-        found_value_of, value_of_val := lookup_property(vm, current_obj, "valueOf");
-        if vm.has_exception return not_a_number_value;
-        if found_value_of && (value_of_val.type == .FUNCTION || value_of_val.type == .NATIVE_FUNCTION) {
-            res := call_value(vm, value, value_of_val, .[]);
-            if vm.has_exception return not_a_number_value;
-            if res.type != .OBJECT && res.type != .ARRAY && res.type != .GENERATOR && res.type != .FUNCTION && res.type != .NATIVE_FUNCTION {
-                return value_to_number(res);
-            }
-        }
-
-        found_to_string, to_string_val := lookup_property(vm, current_obj, "toString");
-        if vm.has_exception return not_a_number_value;
-        if found_to_string && (to_string_val.type == .FUNCTION || to_string_val.type == .NATIVE_FUNCTION) {
-            res := call_value(vm, value, to_string_val, .[]);
-            if vm.has_exception return not_a_number_value;
-            if res.type != .OBJECT && res.type != .ARRAY && res.type != .GENERATOR && res.type != .FUNCTION && res.type != .NATIVE_FUNCTION {
-                return value_to_number(res);
-            }
-        }
-
-        throw_exception(vm, "TypeError: Cannot convert object to primitive value");
+    if prim.type == .BIGINT {
+        throw_exception(vm, "TypeError: Cannot convert a BigInt value to a number");
         return not_a_number_value;
     }
-    return not_a_number_value;
+
+    return value_to_number(prim);
 }
 
 abstract_to_string :: (vm: *Vm, value: Value) -> string {
-    if value.type == .OBJECT || value.type == .ARRAY || value.type == .GENERATOR || value.type == .FUNCTION || value.type == .NATIVE_FUNCTION {
-        current_obj := ifx value.type == .GENERATOR value.generator_object else value.object;
-
-        if current_obj {
-            found_to_string, to_string_val := lookup_property(vm, current_obj, "toString");
-            if found_to_string && (to_string_val.type == .FUNCTION || to_string_val.type == .NATIVE_FUNCTION) {
-                res := call_value(vm, value, to_string_val, .[]);
-                if res.type != .OBJECT && res.type != .ARRAY && res.type != .GENERATOR && res.type != .FUNCTION && res.type != .NATIVE_FUNCTION {
-                    return value_to_string(vm, res);
-                }
-            }
-
-            found_value_of, value_of_val := lookup_property(vm, current_obj, "valueOf");
-            if found_value_of && (value_of_val.type == .FUNCTION || value_of_val.type == .NATIVE_FUNCTION) {
-                res := call_value(vm, value, value_of_val, .[]);
-                if res.type != .OBJECT && res.type != .ARRAY && res.type != .GENERATOR && res.type != .FUNCTION && res.type != .NATIVE_FUNCTION {
-                    return value_to_string(vm, res);
-                }
-            }
-
-            throw_exception(vm, "TypeError: Cannot convert object to primitive value");
-            return "";
-        }
-    }
-
-    return value_to_string(vm, value);
+    prim := to_primitive(vm, value, .STRING);
+    if vm.has_exception return "";
+    return value_to_string(vm, prim);
 }
 
 value_to_string :: (vm: *Vm, value: Value) -> string {
@@ -2552,6 +2604,7 @@ value_to_string :: (vm: *Vm, value: Value) -> string {
             if value.object.kind == .BOOLEAN_WRAPPER return ifx value.object.primitive_value.boolean "true" else "false";
             if value.object.kind == .NUMBER_WRAPPER  return value_to_string(vm, value.object.primitive_value);
             if value.object.kind == .STRING_WRAPPER  return value_to_string(vm, value.object.primitive_value);
+            if value.object.kind == .BIGINT_WRAPPER  return value_to_string(vm, value.object.primitive_value);
             if value.object.kind == .GENERATOR       return "[object Generator]";
 
             return "[object Object]";
@@ -2592,35 +2645,18 @@ allocate_string_from_builder :: (vm: *Vm, builder: *String_Builder) -> string {
 }
 
 values_addition :: (vm: *Vm, a: Value, b: Value) -> Value {
-    if a.type == .NUMBER && b.type == .NUMBER {
-        return .{ type = .NUMBER, number = a.number + b.number };
-    }
+    prim_a := to_primitive(vm, a, .DEFAULT);
+    if vm.has_exception return .{};
+    prim_b := to_primitive(vm, b, .DEFAULT);
+    if vm.has_exception return .{};
 
-    if a.type == .SYMBOL && b.type == .STRING {
-        desc := "";
-        if a.symbol_object && a.symbol_object.primitive_value.type == .STRING {
-            desc = a.symbol_object.primitive_value.s;
-        }
-        res_str := allocate_string(vm, tprint("@@%%", desc, b.s));
-        return .{ type = .STRING, s = res_str };
-    }
-
-    if b.type == .SYMBOL && a.type == .STRING {
-        desc := "";
-        if b.symbol_object && b.symbol_object.primitive_value.type == .STRING {
-            desc = b.symbol_object.primitive_value.s;
-        }
-        res_str := allocate_string(vm, tprint("@@%%", a.s, desc));
-        return .{ type = .STRING, s = res_str };
-    }
-
-    if a.type == .STRING || b.type == .STRING {
+    if prim_a.type == .STRING || prim_b.type == .STRING {
         if vm.allocated_strings.count > 10000 {
             collect_garbage_major(vm);
         }
 
-        string_a := value_to_string(vm, a);
-        string_b := value_to_string(vm, b);
+        string_a := value_to_string(vm, prim_a);
+        string_b := value_to_string(vm, prim_b);
 
         if string_a.count == 0 return .{ type = .STRING, s = string_b };
         if string_b.count == 0 return .{ type = .STRING, s = string_a };
@@ -2640,95 +2676,272 @@ values_addition :: (vm: *Vm, a: Value, b: Value) -> Value {
         return .{ type = .STRING, s = result };
     }
 
-    msg := sprint("Error: Unhandled types in values_addition: % and %\n", a.type, b.type);
-    throw_exception(vm, allocate_string(vm, msg));
-    free(msg);
+    if prim_a.type == .BIGINT || prim_b.type == .BIGINT {
+        if prim_a.type == .BIGINT && prim_b.type == .BIGINT {
+            return .{ type = .BIGINT, bigint_val = prim_a.bigint_val + prim_b.bigint_val };
+        }
+        throw_exception(vm, "TypeError: Cannot mix BigInt and other types, use explicit conversions");
+        return .{};
+    }
 
-    return .{};
+    if prim_a.type == .SYMBOL || prim_b.type == .SYMBOL {
+        throw_exception(vm, "TypeError: Cannot convert Symbol to number");
+        return .{};
+    }
+
+    na := value_to_number(prim_a);
+    nb := value_to_number(prim_b);
+    return .{ type = .NUMBER, number = na + nb };
 }
 
-values_subtraction :: (a: Value, b: Value) -> Value {
-    if a.type == .BIGINT && b.type == .BIGINT return .{ type = .BIGINT, bigint_val = a.bigint_val - b.bigint_val };
-    return .{ type = .NUMBER, number = value_to_number(a) - value_to_number(b) };
+values_subtraction :: (vm: *Vm, a: Value, b: Value) -> Value {
+    pa := to_primitive(vm, a, .NUMBER);
+    if vm.has_exception return .{};
+    pb := to_primitive(vm, b, .NUMBER);
+    if vm.has_exception return .{};
+
+    if pa.type == .BIGINT || pb.type == .BIGINT {
+        if pa.type == .BIGINT && pb.type == .BIGINT return .{ type = .BIGINT, bigint_val = pa.bigint_val - pb.bigint_val };
+        throw_exception(vm, "TypeError: Cannot mix BigInt and other types, use explicit conversions");
+        return .{};
+    }
+    return .{ type = .NUMBER, number = abstract_to_number(vm, pa) - abstract_to_number(vm, pb) };
 }
 
-values_multiply :: (a: Value, b: Value) -> Value {
-    if a.type == .BIGINT && b.type == .BIGINT return .{ type = .BIGINT, bigint_val = a.bigint_val * b.bigint_val };
-    return .{ type = .NUMBER, number = value_to_number(a) * value_to_number(b) };
+values_multiply :: (vm: *Vm, a: Value, b: Value) -> Value {
+    pa := to_primitive(vm, a, .NUMBER);
+    if vm.has_exception return .{};
+    pb := to_primitive(vm, b, .NUMBER);
+    if vm.has_exception return .{};
+
+    if pa.type == .BIGINT || pb.type == .BIGINT {
+        if pa.type == .BIGINT && pb.type == .BIGINT return .{ type = .BIGINT, bigint_val = pa.bigint_val * pb.bigint_val };
+        throw_exception(vm, "TypeError: Cannot mix BigInt and other types, use explicit conversions");
+        return .{};
+    }
+    return .{ type = .NUMBER, number = abstract_to_number(vm, pa) * abstract_to_number(vm, pb) };
 }
 
-values_exponentiation :: (a: Value, b: Value) -> Value {
-    return .{ type = .NUMBER, number = pow(value_to_number(a), value_to_number(b)) };
+values_exponentiation :: (vm: *Vm, a: Value, b: Value) -> Value {
+    pa := to_primitive(vm, a, .NUMBER);
+    if vm.has_exception return .{};
+    pb := to_primitive(vm, b, .NUMBER);
+    if vm.has_exception return .{};
+
+    if pa.type == .BIGINT || pb.type == .BIGINT {
+        if pa.type == .BIGINT && pb.type == .BIGINT {
+            if pb.bigint_val < 0 {
+                throw_exception(vm, "RangeError: Exponent must be positive");
+                return .{};
+            }
+            res: s64 = 1;
+            base := pa.bigint_val;
+            exp := pb.bigint_val;
+            while exp > 0 {
+                if exp & 1 res *= base;
+                base *= base;
+                exp >>= 1;
+            }
+            return .{ type = .BIGINT, bigint_val = res };
+        }
+        throw_exception(vm, "TypeError: Cannot mix BigInt and other types, use explicit conversions");
+        return .{};
+    }
+    return .{ type = .NUMBER, number = pow(abstract_to_number(vm, pa), abstract_to_number(vm, pb)) };
 }
 
-values_divide :: (a: Value, b: Value) -> Value {
-    if a.type == .BIGINT && b.type == .BIGINT return .{ type = .BIGINT, bigint_val = ifx b.bigint_val != 0 then a.bigint_val / b.bigint_val else 0 };
-    return .{ type = .NUMBER, number = value_to_number(a) / value_to_number(b) };
+values_divide :: (vm: *Vm, a: Value, b: Value) -> Value {
+    pa := to_primitive(vm, a, .NUMBER);
+    if vm.has_exception return .{};
+    pb := to_primitive(vm, b, .NUMBER);
+    if vm.has_exception return .{};
+
+    if pa.type == .BIGINT || pb.type == .BIGINT {
+        if pa.type == .BIGINT && pb.type == .BIGINT {
+            if pb.bigint_val == 0 {
+                throw_exception(vm, "RangeError: Division by zero");
+                return .{};
+            }
+            return .{ type = .BIGINT, bigint_val = pa.bigint_val / pb.bigint_val };
+        }
+        throw_exception(vm, "TypeError: Cannot mix BigInt and other types, use explicit conversions");
+        return .{};
+    }
+    return .{ type = .NUMBER, number = abstract_to_number(vm, pa) / abstract_to_number(vm, pb) };
 }
 
-values_modulo :: inline (a: Value, b: Value) -> Value {
-    if a.type == .BIGINT && b.type == .BIGINT return .{ type = .BIGINT, bigint_val = ifx b.bigint_val != 0 then a.bigint_val % b.bigint_val else 0 };
-    return .{ type = .NUMBER, number = fmod_cycling(value_to_number(a), value_to_number(b)) };
+values_modulo :: (vm: *Vm, a: Value, b: Value) -> Value {
+    pa := to_primitive(vm, a, .NUMBER);
+    if vm.has_exception return .{};
+    pb := to_primitive(vm, b, .NUMBER);
+    if vm.has_exception return .{};
+
+    if pa.type == .BIGINT || pb.type == .BIGINT {
+        if pa.type == .BIGINT && pb.type == .BIGINT {
+            if pb.bigint_val == 0 {
+                throw_exception(vm, "RangeError: Division by zero");
+                return .{};
+            }
+            return .{ type = .BIGINT, bigint_val = pa.bigint_val % pb.bigint_val };
+        }
+        throw_exception(vm, "TypeError: Cannot mix BigInt and other types, use explicit conversions");
+        return .{};
+    }
+    return .{ type = .NUMBER, number = fmod_cycling(abstract_to_number(vm, pa), abstract_to_number(vm, pb)) };
 }
 
-values_bitwise_and :: (a: Value, b: Value) -> Value {
-    if a.type == .BIGINT && b.type == .BIGINT return .{ type = .BIGINT, bigint_val = a.bigint_val & b.bigint_val };
-    value_a := cast(s32) value_to_number(a);
-    value_b := cast(s32) value_to_number(b);
+values_bitwise_and :: (vm: *Vm, a: Value, b: Value) -> Value {
+    pa := to_primitive(vm, a, .NUMBER);
+    if vm.has_exception return .{};
+    pb := to_primitive(vm, b, .NUMBER);
+    if vm.has_exception return .{};
+
+    if pa.type == .BIGINT || pb.type == .BIGINT {
+        if pa.type == .BIGINT && pb.type == .BIGINT return .{ type = .BIGINT, bigint_val = pa.bigint_val & pb.bigint_val };
+        throw_exception(vm, "TypeError: Cannot mix BigInt and other types, use explicit conversions");
+        return .{};
+    }
+    value_a := cast(s32) abstract_to_number(vm, pa);
+    value_b := cast(s32) abstract_to_number(vm, pb);
 
     return .{ type = .NUMBER, number = cast(float64) (value_a & value_b) };
 }
 
-values_bitwise_or :: (a: Value, b: Value) -> Value {
-    if a.type == .BIGINT && b.type == .BIGINT return .{ type = .BIGINT, bigint_val = a.bigint_val | b.bigint_val };
-    value_a := cast(s32) value_to_number(a);
-    value_b := cast(s32) value_to_number(b);
+values_bitwise_or :: (vm: *Vm, a: Value, b: Value) -> Value {
+    pa := to_primitive(vm, a, .NUMBER);
+    if vm.has_exception return .{};
+    pb := to_primitive(vm, b, .NUMBER);
+    if vm.has_exception return .{};
+
+    if pa.type == .BIGINT || pb.type == .BIGINT {
+        if pa.type == .BIGINT && pb.type == .BIGINT return .{ type = .BIGINT, bigint_val = pa.bigint_val | pb.bigint_val };
+        throw_exception(vm, "TypeError: Cannot mix BigInt and other types, use explicit conversions");
+        return .{};
+    }
+    value_a := cast(s32) abstract_to_number(vm, pa);
+    value_b := cast(s32) abstract_to_number(vm, pb);
 
     return .{ type = .NUMBER, number = cast(float64) (value_a | value_b) };
 }
 
-values_bitwise_xor :: (a: Value, b: Value) -> Value {
-    if a.type == .BIGINT && b.type == .BIGINT return .{ type = .BIGINT, bigint_val = a.bigint_val ^ b.bigint_val };
-    value_a := cast(s32) value_to_number(a);
-    value_b := cast(s32) value_to_number(b);
+values_bitwise_xor :: (vm: *Vm, a: Value, b: Value) -> Value {
+    pa := to_primitive(vm, a, .NUMBER);
+    if vm.has_exception return .{};
+    pb := to_primitive(vm, b, .NUMBER);
+    if vm.has_exception return .{};
+
+    if pa.type == .BIGINT || pb.type == .BIGINT {
+        if pa.type == .BIGINT && pb.type == .BIGINT return .{ type = .BIGINT, bigint_val = pa.bigint_val ^ pb.bigint_val };
+        throw_exception(vm, "TypeError: Cannot mix BigInt and other types, use explicit conversions");
+        return .{};
+    }
+    value_a := cast(s32) abstract_to_number(vm, pa);
+    value_b := cast(s32) abstract_to_number(vm, pb);
 
     return .{ type = .NUMBER, number = cast(float64) (value_a ^ value_b) };
 }
 
-values_less_than :: (a: Value, b: Value) -> bool {
-    if a.type == .BIGINT && b.type == .BIGINT return a.bigint_val < b.bigint_val;
-    na := value_to_number(a);
-    nb := value_to_number(b);
+compare_strings :: (s1: string, s2: string) -> int {
+    min_len := min(s1.count, s2.count);
+    for i: 0..min_len-1 {
+        if s1[i] != s2[i] return cast(int) s1[i] - cast(int) s2[i];
+    }
+    return s1.count - s2.count;
+}
+
+values_less_than :: (vm: *Vm, a: Value, b: Value) -> bool {
+    pa := to_primitive(vm, a, .NUMBER);
+    if vm.has_exception return false;
+    pb := to_primitive(vm, b, .NUMBER);
+    if vm.has_exception return false;
+
+    if pa.type == .STRING && pb.type == .STRING return compare_strings(pa.s, pb.s) < 0;
+    if pa.type == .BIGINT && pb.type == .BIGINT return pa.bigint_val < pb.bigint_val;
+    na := abstract_to_number(vm, pa);
+    nb := abstract_to_number(vm, pb);
     if isnan(na) || isnan(nb) return false;
     return na < nb;
 }
 
-values_greater_than :: (a: Value, b: Value) -> bool {
-    if a.type == .BIGINT && b.type == .BIGINT return a.bigint_val > b.bigint_val;
-    na := value_to_number(a);
-    nb := value_to_number(b);
+values_greater_than :: (vm: *Vm, a: Value, b: Value) -> bool {
+    pa := to_primitive(vm, a, .NUMBER);
+    if vm.has_exception return false;
+    pb := to_primitive(vm, b, .NUMBER);
+    if vm.has_exception return false;
+
+    if pa.type == .STRING && pb.type == .STRING return compare_strings(pa.s, pb.s) > 0;
+    if pa.type == .BIGINT && pb.type == .BIGINT return pa.bigint_val > pb.bigint_val;
+    na := abstract_to_number(vm, pa);
+    nb := abstract_to_number(vm, pb);
     if isnan(na) || isnan(nb) return false;
     return na > nb;
 }
 
-values_less_than_equal :: (a: Value, b: Value) -> bool {
-    if a.type == .BIGINT && b.type == .BIGINT return a.bigint_val <= b.bigint_val;
-    na := value_to_number(a);
-    nb := value_to_number(b);
+values_less_than_equal :: (vm: *Vm, a: Value, b: Value) -> bool {
+    pa := to_primitive(vm, a, .NUMBER);
+    if vm.has_exception return false;
+    pb := to_primitive(vm, b, .NUMBER);
+    if vm.has_exception return false;
+
+    if pa.type == .STRING && pb.type == .STRING return compare_strings(pa.s, pb.s) <= 0;
+    if pa.type == .BIGINT && pb.type == .BIGINT return pa.bigint_val <= pb.bigint_val;
+    na := abstract_to_number(vm, pa);
+    nb := abstract_to_number(vm, pb);
     if isnan(na) || isnan(nb) return false;
     return na <= nb;
 }
 
-values_greater_than_equal :: (a: Value, b: Value) -> bool {
-    if a.type == .BIGINT && b.type == .BIGINT return a.bigint_val >= b.bigint_val;
-    na := value_to_number(a);
-    nb := value_to_number(b);
+values_greater_than_equal :: (vm: *Vm, a: Value, b: Value) -> bool {
+    pa := to_primitive(vm, a, .NUMBER);
+    if vm.has_exception return false;
+    pb := to_primitive(vm, b, .NUMBER);
+    if vm.has_exception return false;
+
+    if pa.type == .STRING && pb.type == .STRING return compare_strings(pa.s, pb.s) >= 0;
+    if pa.type == .BIGINT && pb.type == .BIGINT return pa.bigint_val >= pb.bigint_val;
+    na := abstract_to_number(vm, pa);
+    nb := abstract_to_number(vm, pb);
     if isnan(na) || isnan(nb) return false;
     return na >= nb;
 }
 
-values_equal :: (a: Value, b: Value) -> bool {
+values_equal :: (vm: *Vm, a: Value, b: Value) -> bool {
     if a.type == b.type return values_strict_equal(a, b);
+
+    if (a.type == .NULL && b.type == .UNDEFINED) || (a.type == .UNDEFINED && b.type == .NULL) return true;
+
+    is_object_a := a.type == .OBJECT || a.type == .ARRAY || a.type == .FUNCTION || a.type == .NATIVE_FUNCTION || a.type == .GENERATOR;
+    is_object_b := b.type == .OBJECT || b.type == .ARRAY || b.type == .FUNCTION || b.type == .NATIVE_FUNCTION || b.type == .GENERATOR;
+
+    if is_object_a && !is_object_b {
+        pa := to_primitive(vm, a, .DEFAULT);
+        if vm.has_exception return false;
+        return values_equal(vm, pa, b);
+    }
+
+    if !is_object_a && is_object_b {
+        pb := to_primitive(vm, b, .DEFAULT);
+        if vm.has_exception return false;
+        return values_equal(vm, a, pb);
+    }
+
+    if a.type == .NUMBER && b.type == .STRING return a.number == string_to_float64(b.s);
+    if a.type == .STRING && b.type == .NUMBER return string_to_float64(a.s) == b.number;
+
+    if a.type == .BOOLEAN return values_equal(vm, .{ type = .NUMBER, number = ifx a.boolean 1.0 else 0.0 }, b);
+    if b.type == .BOOLEAN return values_equal(vm, a, .{ type = .NUMBER, number = ifx b.boolean 1.0 else 0.0 });
+
+    if a.type == .BIGINT && b.type == .STRING {
+        val, ok := parse_string_to_bigint(b.s);
+        return ok && a.bigint_val == val;
+    }
+    if a.type == .STRING && b.type == .BIGINT {
+        val, ok := parse_string_to_bigint(a.s);
+        return ok && val == b.bigint_val;
+    }
+
+    if a.type == .BIGINT && b.type == .NUMBER return cast(float64) a.bigint_val == b.number;
+    if a.type == .NUMBER && b.type == .BIGINT return a.number == cast(float64) b.bigint_val;
 
     return false;
 }
@@ -3183,7 +3396,7 @@ Vm :: struct {
     root_shape:    *Shape;
 
     union {
-        builtin_prototypes: [29] *Gc_Object;
+        builtin_prototypes: [31] *Gc_Object;
         struct {
             object_prototype:  *Gc_Object;
             number_prototype:  *Gc_Object;
@@ -3215,6 +3428,7 @@ Vm :: struct {
             async_generator_function_constructor_object: *Gc_Object;
             array_buffer_prototype:*Gc_Object;
             data_view_prototype:   *Gc_Object;
+            bigint_prototype:      *Gc_Object;
         };
     };
 

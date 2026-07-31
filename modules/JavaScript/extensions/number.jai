@@ -78,7 +78,10 @@ init_vm_number :: (vm: *Vm) {
 number_constructor :: (vm: *Vm, this: Value, arguments: [] Value, is_new: bool) -> Value {
     number_value: float64 = 0.0;
 
-    if arguments.count > 0 number_value = value_to_number(arguments[0]);
+    if arguments.count > 0 {
+        number_value = abstract_to_number(vm, arguments[0]);
+        if vm.has_exception return .{};
+    }
 
     if is_new {
         number_object := allocate_object(vm);

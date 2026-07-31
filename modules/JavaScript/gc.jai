@@ -516,6 +516,7 @@ Gc_Object_Kind :: enum u8 {
     REGEXP;
     SYMBOL;
     DATA_VIEW;
+    BIGINT_WRAPPER;
 }
 
 Gc_Object :: struct {

@@ -1,47 +1,61 @@
-to_primitive_helper :: (vm: *Vm, value: Value, hint: enum { NUMBER; STRING; }) -> Value {
-    if value.type != .OBJECT && value.type != .ARRAY && value.type != .FUNCTION && value.type != .NATIVE_FUNCTION && value.type != .GENERATOR && value.type != .SYMBOL return value;
-
-    current_obj := ifx value.type == .GENERATOR value.generator_object else value.object;
-    if !current_obj return value;
-
-    found_to_prim, to_prim_fn := lookup_property(vm, current_obj, "@@Symbol.toPrimitive");
-    if vm.has_exception return .{};
-    if found_to_prim && (to_prim_fn.type == .FUNCTION || to_prim_fn.type == .NATIVE_FUNCTION || (to_prim_fn.type == .OBJECT && to_prim_fn.object.kind == .PROXY)) {
-        hint_val := Value.{ type = .STRING, s = ifx hint == .NUMBER "number" else "string" };
-        res := call_value(vm, value, to_prim_fn, .[ hint_val ]);
-        if vm.has_exception return .{};
-        if res.type != .OBJECT && res.type != .ARRAY && res.type != .GENERATOR && res.type != .FUNCTION && res.type != .NATIVE_FUNCTION {
-            return res;
-        }
-        throw_exception(vm, "TypeError: Cannot convert object to primitive value");
-        return .{};
-    }
-
-    first_method  := ifx hint == .NUMBER then "valueOf" else "toString";
-    second_method := ifx hint == .NUMBER then "toString" else "valueOf";
-
-    found1, val1 := lookup_property(vm, current_obj, first_method);
-    if vm.has_exception return .{};
-    if found1 && (val1.type == .FUNCTION || val1.type == .NATIVE_FUNCTION) {
-        res := call_value(vm, value, val1, .[]);
-        if vm.has_exception return .{};
-        if res.type != .OBJECT && res.type != .ARRAY && res.type != .GENERATOR && res.type != .FUNCTION && res.type != .NATIVE_FUNCTION {
-            return res;
+bigint_this_value :: (vm: *Vm, this: Value) -> Value, bool {
+    if this.type == .BIGINT return this, true;
+    if this.type == .OBJECT && this.object && this.object.kind == .BIGINT_WRAPPER {
+        if this.object.primitive_value.type == .BIGINT {
+            return this.object.primitive_value, true;
         }
     }
+    throw_exception(vm, "TypeError: BigInt.prototype method called on incompatible receiver");
+    return .{}, false;
+}
 
-    found2, val2 := lookup_property(vm, current_obj, second_method);
-    if vm.has_exception return .{};
-    if found2 && (val2.type == .FUNCTION || val2.type == .NATIVE_FUNCTION) {
-        res := call_value(vm, value, val2, .[]);
+format_bigint_radix :: (vm: *Vm, n: s64, radix: int) -> string {
+    if n == 0 return "0";
+    digits := "0123456789abcdefghijklmnopqrstuvwxyz";
+    is_neg := n < 0;
+    un: u64 = cast(u64) (ifx is_neg then -n else n);
+    buf: [65] u8;
+    idx := 65;
+    u_radix := cast(u64) radix;
+    while un > 0 {
+        rem := un % u_radix;
+        un /= u_radix;
+        idx -= 1;
+        buf[idx] = digits[rem];
+    }
+    if is_neg {
+        idx -= 1;
+        buf[idx] = #char "-";
+    }
+    str: string;
+    str.data = buf.data + idx;
+    str.count = 65 - idx;
+    return allocate_string(vm, str);
+}
+
+bigint_to_string :: (vm: *Vm, this: Value, arguments: [] Value, is_new: bool) -> Value {
+    val, ok := bigint_this_value(vm, this);
+    if !ok return .{};
+
+    radix := 10;
+    if arguments.count > 0 && arguments[0].type != .UNDEFINED {
+        radix_num := abstract_to_number(vm, arguments[0]);
         if vm.has_exception return .{};
-        if res.type != .OBJECT && res.type != .ARRAY && res.type != .GENERATOR && res.type != .FUNCTION && res.type != .NATIVE_FUNCTION {
-            return res;
+        radix = cast(int) radix_num;
+        if radix < 2 || radix > 36 {
+            throw_exception(vm, "RangeError: toString() radix argument must be between 2 and 36");
+            return .{};
         }
     }
 
-    throw_exception(vm, "TypeError: Cannot convert object to primitive value");
-    return .{};
+    res := format_bigint_radix(vm, val.bigint_val, radix);
+    return .{ type = .STRING, s = res };
+}
+
+bigint_value_of :: (vm: *Vm, this: Value, arguments: [] Value, is_new: bool) -> Value {
+    val, ok := bigint_this_value(vm, this);
+    if !ok return .{};
+    return val;
 }
 
 parse_string_to_bigint :: (s_input: string) -> s64, bool {
@@ -124,7 +138,7 @@ bigint_constructor :: (vm: *Vm, this: Value, arguments: [] Value, is_new: bool) 
     }
     if arguments.count == 0 return .{ type = .BIGINT, bigint_val = 0 };
 
-    prim := to_primitive_helper(vm, arguments[0], .NUMBER);
+    prim := to_primitive(vm, arguments[0], .NUMBER);
     if vm.has_exception return .{};
 
     if prim.type == {
@@ -167,6 +181,16 @@ bigint_constructor :: (vm: *Vm, this: Value, arguments: [] Value, is_new: bool) 
 
 init_vm_bigint :: (vm: *Vm) {
     found, index := get_global_index(vm, "BigInt");
+
+    if !vm.bigint_prototype {
+        vm.bigint_prototype           = allocate_object(vm);
+        vm.bigint_prototype.prototype = vm.object_prototype;
+
+        add_instance_method(vm, vm.bigint_prototype, "toString", bigint_to_string);
+        add_instance_method(vm, vm.bigint_prototype, "valueOf",  bigint_value_of);
+        set_object_property(vm, vm.bigint_prototype, "@@Symbol.toStringTag", Value.{ type = .STRING, s = "BigInt" });
+    }
+
     if found {
         bigint_obj := allocate_object(vm);
         bigint_obj.prototype = vm.function_prototype;
@@ -180,5 +204,13 @@ init_vm_bigint :: (vm: *Vm) {
         };
 
         vm.current_realm.globals[index] = bigint_val;
+
+        prototype_value := Value.{
+            type   = .OBJECT,
+            object = vm.bigint_prototype,
+        };
+
+        add_static_property(vm, bigint_obj, "prototype", prototype_value);
+        add_static_property(vm, vm.bigint_prototype, "constructor", bigint_val);
     }
 }
