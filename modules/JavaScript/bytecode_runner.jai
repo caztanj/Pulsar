@@ -677,7 +677,7 @@ execute_function_internal :: (vm: *Vm, initial_function: *Bytecode_Function, ini
                 case .DELETE_PROPERTY;
                     object_val := registers_data[instruction.arg1];
                     property_name: string;
-                    if instruction.arg2 != 0 {
+                    if instruction.imm == -1 {
                         prop_val := registers_data[instruction.arg2];
                         if prop_val.type == .SYMBOL {
                             property_name = get_symbol_string_key(*prop_val);
@@ -3514,11 +3514,10 @@ delete_property :: (vm: *Vm, object: *Gc_Object, name: string) -> bool {
     }
 
     if object.kind == .GLOBAL_PROXY {
+        if name == "undefined" || name == "NaN" || name == "Infinity" return false;
+
         found, index := get_global_index(vm, name);
         if found {
-            if index < vm.program.declared_globals.count && vm.program.declared_globals[index] {
-                return false;
-            }
             vm.current_realm.globals[index] = .{ type = .EMPTY };
             return true;
         }

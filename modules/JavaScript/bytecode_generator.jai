@@ -3855,6 +3855,7 @@ emit_unary_expression_helper :: (generator: *Bytecode_Generator, unary_expressio
                     dest    = register,
                     arg1    = object_register,
                     arg2    = property_register,
+                    imm     = -1,
                 };
                 emit_instruction(generator, instruction);
             } else {
