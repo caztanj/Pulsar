@@ -49,7 +49,8 @@ data_view_constructor :: (vm: *Vm, this: Value, arguments: [] Value, is_new: boo
     byte_length := buffer_length;
 
     if arguments.count > 1 && arguments[1].type != .UNDEFINED {
-        byte_offset_f := value_to_number(arguments[1]);
+        byte_offset_f := abstract_to_number(vm, arguments[1]);
+        if vm.has_exception return .{};
         if isnan(byte_offset_f) || isinf(byte_offset_f) || byte_offset_f < 0 {
             throw_exception(vm, "RangeError: Invalid DataView byteOffset");
             return .{};
@@ -57,20 +58,25 @@ data_view_constructor :: (vm: *Vm, this: Value, arguments: [] Value, is_new: boo
         byte_offset = cast(int) byte_offset_f;
     }
 
+    if byte_offset > buffer_length {
+        throw_exception(vm, "RangeError: DataView byteOffset out of bounds");
+        return .{};
+    }
+
     if arguments.count > 2 && arguments[2].type != .UNDEFINED {
-        byte_length_f := value_to_number(arguments[2]);
+        byte_length_f := abstract_to_number(vm, arguments[2]);
+        if vm.has_exception return .{};
         if isnan(byte_length_f) || isinf(byte_length_f) || byte_length_f < 0 {
             throw_exception(vm, "RangeError: Invalid DataView byteLength");
             return .{};
         }
         byte_length = cast(int) byte_length_f;
+        if byte_offset + byte_length > buffer_length {
+            throw_exception(vm, "RangeError: DataView length exceeds ArrayBuffer length");
+            return .{};
+        }
     } else {
         byte_length = buffer_length - byte_offset;
-    }
-
-    if byte_offset + byte_length > buffer_length {
-        throw_exception(vm, "RangeError: DataView length exceeds ArrayBuffer length");
-        return .{};
     }
 
     object: *Gc_Object;
