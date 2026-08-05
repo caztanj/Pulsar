@@ -38,8 +38,8 @@ jai first.jai - test262
 
 | Status | Count | Percentage |
 |---|---|---|
-| Passed | 12584 | 23% |
-| Failed | 40976 | 76% |
+| Passed | 12585 | 23% |
+| Failed | 40975 | 76% |
 | Skipped | 14 | 0% |
 | **Total** | **53574** | **100%** |
 

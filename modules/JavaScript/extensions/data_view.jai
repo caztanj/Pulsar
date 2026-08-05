@@ -43,6 +43,10 @@ data_view_constructor :: (vm: *Vm, this: Value, arguments: [] Value, is_new: boo
     }
 
     buffer_obj := arguments[0].object;
+    if buffer_obj.is_detached {
+        throw_exception(vm, "TypeError: Cannot construct DataView with detached ArrayBuffer");
+        return .{};
+    }
     buffer_length := buffer_obj.primitive_value.s.count;
 
     byte_offset := 0;
@@ -96,6 +100,12 @@ data_view_constructor :: (vm: *Vm, this: Value, arguments: [] Value, is_new: boo
             object.prototype = vm.data_view_prototype;
         }
     }
+
+    if buffer_obj.is_detached {
+        throw_exception(vm, "TypeError: Cannot construct DataView with detached ArrayBuffer");
+        return .{};
+    }
+
     object.kind = .DATA_VIEW;
     object.viewed_array_buffer = buffer_obj;
 
