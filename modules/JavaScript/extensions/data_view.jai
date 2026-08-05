@@ -4,7 +4,10 @@ init_vm_data_view :: (vm: *Vm) {
     if !vm.data_view_prototype {
         vm.data_view_prototype = allocate_object(vm);
         vm.data_view_prototype.prototype = vm.object_prototype;
-        add_instance_method(vm, vm.data_view_prototype, "getUint8", data_view_get_uint8);
+        add_instance_method(vm, vm.data_view_prototype, "buffer__getter__",     data_view_buffer_getter);
+        add_instance_method(vm, vm.data_view_prototype, "byteLength__getter__", data_view_byte_length_getter);
+        add_instance_method(vm, vm.data_view_prototype, "byteOffset__getter__", data_view_byte_offset_getter);
+        add_instance_method(vm, vm.data_view_prototype, "getUint8",             data_view_get_uint8);
     }
 
     if found {
@@ -88,12 +91,64 @@ data_view_constructor :: (vm: *Vm, this: Value, arguments: [] Value, is_new: boo
         }
     }
     object.kind = .DATA_VIEW;
+    object.viewed_array_buffer = buffer_obj;
 
     array_add(*object.elements, arguments[0]);
     array_add(*object.elements, .{ type = .NUMBER, number = cast(float64) byte_offset });
     array_add(*object.elements, .{ type = .NUMBER, number = cast(float64) byte_length });
 
     return .{ type = .OBJECT, object = object };
+}
+
+data_view_buffer_getter :: (vm: *Vm, this: Value, arguments: [] Value, is_new: bool) -> Value {
+    if this.type != .OBJECT || this.object.kind != .DATA_VIEW {
+        throw_exception(vm, "TypeError: get buffer called on incompatible receiver");
+        return .{};
+    }
+
+    if this.object.elements.count > 0 {
+        return this.object.elements[0];
+    }
+    if this.object.viewed_array_buffer {
+        return .{ type = .OBJECT, object = this.object.viewed_array_buffer };
+    }
+    return .{ type = .UNDEFINED };
+}
+
+data_view_byte_length_getter :: (vm: *Vm, this: Value, arguments: [] Value, is_new: bool) -> Value {
+    if this.type != .OBJECT || this.object.kind != .DATA_VIEW {
+        throw_exception(vm, "TypeError: get byteLength called on incompatible receiver");
+        return .{};
+    }
+
+    buffer_obj := this.object.viewed_array_buffer;
+    if !buffer_obj && this.object.elements.count > 0 && this.object.elements[0].type == .OBJECT {
+        buffer_obj = this.object.elements[0].object;
+    }
+    if buffer_obj && buffer_obj.is_detached return .{ type = .NUMBER, number = 0 };
+
+    if this.object.elements.count >= 3 {
+        return this.object.elements[2];
+    }
+    return .{ type = .NUMBER, number = 0 };
+}
+
+data_view_byte_offset_getter :: (vm: *Vm, this: Value, arguments: [] Value, is_new: bool) -> Value {
+    if this.type != .OBJECT || this.object.kind != .DATA_VIEW {
+        throw_exception(vm, "TypeError: get byteOffset called on incompatible receiver");
+        return .{};
+    }
+
+    buffer_obj := this.object.viewed_array_buffer;
+    if !buffer_obj && this.object.elements.count > 0 && this.object.elements[0].type == .OBJECT {
+        buffer_obj = this.object.elements[0].object;
+    }
+    if buffer_obj && buffer_obj.is_detached return .{ type = .NUMBER, number = 0 };
+
+    if this.object.elements.count >= 2 {
+        return this.object.elements[1];
+    }
+    return .{ type = .NUMBER, number = 0 };
 }
 
 data_view_get_uint8 :: (vm: *Vm, this: Value, arguments: [] Value, is_new: bool) -> Value {

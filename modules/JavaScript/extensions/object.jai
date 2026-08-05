@@ -417,6 +417,36 @@ object_get_own_property_descriptor :: (vm: *Vm, this: Value, arguments: [] Value
         }
     }
 
+    has_getter := false;
+    has_setter := false;
+    getter_val: Value;
+    setter_val: Value;
+
+    if object.shape {
+        getter_name := tprint("%__getter__", name);
+        offset_pointer := table_find_pointer(*object.shape.property_offsets, getter_name);
+        if offset_pointer && offset_pointer.* < object.fields.count && object.fields[offset_pointer.*].type != .EMPTY {
+            has_getter = true;
+            getter_val = object.fields[offset_pointer.*];
+        }
+
+        setter_name := tprint("%__setter__", name);
+        offset_pointer_s := table_find_pointer(*object.shape.property_offsets, setter_name);
+        if offset_pointer_s && offset_pointer_s.* < object.fields.count && object.fields[offset_pointer_s.*].type != .EMPTY {
+            has_setter = true;
+            setter_val = object.fields[offset_pointer_s.*];
+        }
+    }
+
+    if has_getter || has_setter {
+        descriptor := allocate_object(vm);
+        set_object_property(vm, descriptor, "get",          ifx has_getter then getter_val else .{ type = .UNDEFINED });
+        set_object_property(vm, descriptor, "set",          ifx has_setter then setter_val else .{ type = .UNDEFINED });
+        set_object_property(vm, descriptor, "enumerable",   .{ type = .BOOLEAN, boolean = false });
+        set_object_property(vm, descriptor, "configurable", .{ type = .BOOLEAN, boolean = true });
+        return .{ type = .OBJECT, object = descriptor };
+    }
+
     if !has_property {
         parsed_index, success := string_to_int(name);
 

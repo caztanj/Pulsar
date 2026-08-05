@@ -135,6 +135,7 @@ mark_object :: (vm: *Vm, object: *Gc_Object, visited_environments: *Table(*Envir
 
     if object.prototype mark_object(vm, object.prototype, visited_environments, is_minor);
     if object.shape object.shape.marked = true;
+    if object.viewed_array_buffer mark_object(vm, object.viewed_array_buffer, visited_environments, is_minor);
 
     for object.fields      mark_value(vm, it, visited_environments, is_minor);
     for object.elements    mark_value(vm, it, visited_environments, is_minor);
