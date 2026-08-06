@@ -28,7 +28,7 @@ init_vm_date :: (vm: *Vm) {
 
         vm.current_realm.globals[date_global_index].object = date_object;
 
-        date_object.prototype = vm.date_prototype;
+        date_object.prototype = vm.function_prototype;
 
         add_static_method(vm, date_object, "now", date_now);
         add_static_method(vm, date_object, "parse", date_parse);
