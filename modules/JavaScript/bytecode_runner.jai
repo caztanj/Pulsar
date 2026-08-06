@@ -2574,6 +2574,19 @@ abstract_to_string :: (vm: *Vm, value: Value) -> string {
     return value_to_string(vm, prim);
 }
 
+value_to_property_key :: (vm: *Vm, value: Value) -> string {
+    if value.type == .SYMBOL {
+        return get_symbol_string_key(*value);
+    }
+    prim := to_primitive(vm, value, .STRING);
+    if vm.has_exception return "";
+    if prim.type == .SYMBOL {
+        return get_symbol_string_key(*prim);
+    }
+    return value_to_string(vm, prim);
+}
+
+
 value_to_string :: (vm: *Vm, value: Value) -> string {
     if #complete value.type == {
         case .UNDEFINED; return "undefined";

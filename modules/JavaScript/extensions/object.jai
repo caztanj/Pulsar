@@ -377,7 +377,8 @@ object_define_property :: (vm: *Vm, this: Value, arguments: [] Value, is_new: bo
 
     if (target_value.type != .OBJECT && target_value.type != .ARRAY && target_value.type != .FUNCTION && target_value.type != .NATIVE_FUNCTION) || !target_value.object return target_value;
 
-    name             := value_to_string(vm, arguments[1]);
+    name             := value_to_property_key(vm, arguments[1]);
+    if vm.has_exception return .{};
     descriptor_value := arguments[2];
 
     if (descriptor_value.type == .OBJECT || descriptor_value.type == .ARRAY) && descriptor_value.object {
@@ -423,12 +424,8 @@ object_get_own_property_descriptor :: (vm: *Vm, this: Value, arguments: [] Value
 
     if (target_value.type != .OBJECT && target_value.type != .ARRAY && target_value.type != .FUNCTION && target_value.type != .NATIVE_FUNCTION) || !target_value.object return .{ type = .UNDEFINED };
 
-    name: string;
-    if arguments[1].type == .SYMBOL {
-        name = get_symbol_string_key(*arguments[1]);
-    } else {
-        name = value_to_string(vm, arguments[1]);
-    }
+    name := value_to_property_key(vm, arguments[1]);
+    if vm.has_exception return .{ type = .UNDEFINED };
     object := target_value.object;
 
     has_property := false;
@@ -605,12 +602,8 @@ object_has_own_property :: (vm: *Vm, this: Value, arguments: [] Value, is_new: b
     if (this.type != .OBJECT && this.type != .ARRAY && this.type != .FUNCTION && this.type != .NATIVE_FUNCTION) || !this.object return .{ type = .BOOLEAN, boolean = false };
     if arguments.count == 0 return .{ type = .BOOLEAN, boolean = false };
 
-    name: string;
-    if arguments[0].type == .SYMBOL {
-        name = get_symbol_string_key(*arguments[0]);
-    } else {
-        name = value_to_string(vm, arguments[0]);
-    }
+    name := value_to_property_key(vm, arguments[0]);
+    if vm.has_exception return .{ type = .BOOLEAN, boolean = false };
     object := this.object;
 
     if object.shape {
@@ -675,12 +668,8 @@ object_property_is_enumerable :: (vm: *Vm, this: Value, arguments: [] Value, is_
         return .{ type = .BOOLEAN, boolean = false };
     }
 
-    name: string;
-    if arguments[0].type == .SYMBOL {
-        name = get_symbol_string_key(*arguments[0]);
-    } else {
-        name = value_to_string(vm, arguments[0]);
-    }
+    name := value_to_property_key(vm, arguments[0]);
+    if vm.has_exception return .{};
     if vm.has_exception return .{};
 
     obj := this.object;

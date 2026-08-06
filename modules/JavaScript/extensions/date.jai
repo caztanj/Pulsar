@@ -269,7 +269,7 @@ date_constructor :: (vm: *Vm, this: Value, arguments: [] Value, is_new: bool) ->
         } else if arg.type == .OBJECT && arg.object.kind == .DATE {
             milliseconds = arg.object.primitive_value.number;
         } else {
-            prim := to_primitive(vm, arg, .NUMBER);
+            prim := to_primitive(vm, arg, .DEFAULT);
             if vm.has_exception return .{};
             if prim.type == .STRING {
                 millis, ok := parse_date_string(prim.s);
