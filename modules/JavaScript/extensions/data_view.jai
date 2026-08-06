@@ -50,7 +50,8 @@ data_view_constructor :: (vm: *Vm, this: Value, arguments: [] Value, is_new: boo
     buffer_length := buffer_obj.primitive_value.s.count;
 
     byte_offset := 0;
-    byte_length := buffer_length;
+    has_byte_length := false;
+    byte_length := 0;
 
     if arguments.count > 1 && arguments[1].type != .UNDEFINED {
         byte_offset_f := abstract_to_number(vm, arguments[1]);
@@ -68,6 +69,7 @@ data_view_constructor :: (vm: *Vm, this: Value, arguments: [] Value, is_new: boo
     }
 
     if arguments.count > 2 && arguments[2].type != .UNDEFINED {
+        has_byte_length = true;
         byte_length_f := abstract_to_number(vm, arguments[2]);
         if vm.has_exception return .{};
         if isnan(byte_length_f) || isinf(byte_length_f) || byte_length_f < 0 {
@@ -80,6 +82,7 @@ data_view_constructor :: (vm: *Vm, this: Value, arguments: [] Value, is_new: boo
             return .{};
         }
     } else {
+        has_byte_length = false;
         byte_length = buffer_length - byte_offset;
     }
 
@@ -106,12 +109,29 @@ data_view_constructor :: (vm: *Vm, this: Value, arguments: [] Value, is_new: boo
         return .{};
     }
 
+    current_buffer_length := buffer_obj.primitive_value.s.count;
+    if byte_offset > current_buffer_length {
+        throw_exception(vm, "RangeError: DataView byteOffset out of bounds");
+        return .{};
+    }
+
+    if has_byte_length {
+        if byte_offset + byte_length > current_buffer_length {
+            throw_exception(vm, "RangeError: DataView length exceeds ArrayBuffer length");
+            return .{};
+        }
+    }
+
     object.kind = .DATA_VIEW;
     object.viewed_array_buffer = buffer_obj;
 
     array_add(*object.elements, arguments[0]);
     array_add(*object.elements, .{ type = .NUMBER, number = cast(float64) byte_offset });
-    array_add(*object.elements, .{ type = .NUMBER, number = cast(float64) byte_length });
+    if has_byte_length {
+        array_add(*object.elements, .{ type = .NUMBER, number = cast(float64) byte_length });
+    } else {
+        array_add(*object.elements, .{ type = .UNDEFINED });
+    }
 
     return .{ type = .OBJECT, object = object };
 }
@@ -144,7 +164,21 @@ data_view_byte_length_getter :: (vm: *Vm, this: Value, arguments: [] Value, is_n
     if buffer_obj && buffer_obj.is_detached return .{ type = .NUMBER, number = 0 };
 
     if this.object.elements.count >= 3 {
-        return this.object.elements[2];
+        byte_offset := 0;
+        if this.object.elements.count >= 2 && this.object.elements[1].type == .NUMBER {
+            byte_offset = cast(int) this.object.elements[1].number;
+        }
+
+        buffer_len := ifx buffer_obj then buffer_obj.primitive_value.s.count else 0;
+
+        if this.object.elements[2].type == .UNDEFINED {
+            if byte_offset > buffer_len return .{ type = .NUMBER, number = 0 };
+            return .{ type = .NUMBER, number = cast(float64) (buffer_len - byte_offset) };
+        } else if this.object.elements[2].type == .NUMBER {
+            byte_len := cast(int) this.object.elements[2].number;
+            if byte_offset + byte_len > buffer_len return .{ type = .NUMBER, number = 0 };
+            return .{ type = .NUMBER, number = cast(float64) byte_len };
+        }
     }
     return .{ type = .NUMBER, number = 0 };
 }
@@ -161,8 +195,18 @@ data_view_byte_offset_getter :: (vm: *Vm, this: Value, arguments: [] Value, is_n
     }
     if buffer_obj && buffer_obj.is_detached return .{ type = .NUMBER, number = 0 };
 
-    if this.object.elements.count >= 2 {
-        return this.object.elements[1];
+    if this.object.elements.count >= 2 && this.object.elements[1].type == .NUMBER {
+        byte_offset := cast(int) this.object.elements[1].number;
+        buffer_len := ifx buffer_obj then buffer_obj.primitive_value.s.count else 0;
+
+        if this.object.elements.count >= 3 && this.object.elements[2].type == .NUMBER {
+            byte_len := cast(int) this.object.elements[2].number;
+            if byte_offset + byte_len > buffer_len return .{ type = .NUMBER, number = 0 };
+        } else {
+            if byte_offset > buffer_len return .{ type = .NUMBER, number = 0 };
+        }
+
+        return .{ type = .NUMBER, number = cast(float64) byte_offset };
     }
     return .{ type = .NUMBER, number = 0 };
 }
@@ -178,8 +222,29 @@ data_view_get_uint8 :: (vm: *Vm, this: Value, arguments: [] Value, is_new: bool)
     buffer_val := this.object.elements[0];
     if buffer_val.type != .OBJECT || (buffer_val.object.kind != .ARRAY_BUFFER && buffer_val.object.kind != .SHARED_ARRAY_BUFFER) return .{ type = .UNDEFINED };
 
+    buffer_obj := buffer_val.object;
+    if buffer_obj.is_detached {
+        throw_exception(vm, "TypeError: ArrayBuffer is detached");
+        return .{};
+    }
+
     byte_offset := cast(int) this.object.elements[1].number;
-    byte_length := cast(int) this.object.elements[2].number;
+    buffer_len := buffer_obj.primitive_value.s.count;
+
+    byte_length := 0;
+    if this.object.elements[2].type == .UNDEFINED {
+        if byte_offset > buffer_len {
+            throw_exception(vm, "RangeError: Offset out of bounds");
+            return .{};
+        }
+        byte_length = buffer_len - byte_offset;
+    } else {
+        byte_length = cast(int) this.object.elements[2].number;
+        if byte_offset + byte_length > buffer_len {
+            throw_exception(vm, "RangeError: View out of bounds");
+            return .{};
+        }
+    }
 
     index := 0;
     if arguments.count > 0 {
@@ -196,7 +261,6 @@ data_view_get_uint8 :: (vm: *Vm, this: Value, arguments: [] Value, is_new: bool)
         return .{};
     }
 
-    buffer_obj := buffer_val.object;
     data_ptr := buffer_obj.primitive_value.s.data;
     if !data_ptr return .{ type = .NUMBER, number = 0 };
 

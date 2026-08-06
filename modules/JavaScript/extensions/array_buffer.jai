@@ -4,8 +4,10 @@ init_vm_array_buffer :: (vm: *Vm) {
     if !vm.array_buffer_prototype {
         vm.array_buffer_prototype = allocate_object(vm);
         vm.array_buffer_prototype.prototype = vm.object_prototype;
-        add_instance_method(vm, vm.array_buffer_prototype, "byteLength__getter__", array_buffer_byte_length_getter);
-        add_instance_method(vm, vm.array_buffer_prototype, "resizable__getter__",  array_buffer_resizable_getter);
+        add_instance_method(vm, vm.array_buffer_prototype, "byteLength__getter__",    array_buffer_byte_length_getter);
+        add_instance_method(vm, vm.array_buffer_prototype, "resizable__getter__",     array_buffer_resizable_getter);
+        add_instance_method(vm, vm.array_buffer_prototype, "maxByteLength__getter__", array_buffer_max_byte_length_getter);
+        add_instance_method(vm, vm.array_buffer_prototype, "resize",                  array_buffer_resize);
     }
 
     detach_found, detach_index := get_global_index(vm, "__detachArrayBuffer__");
@@ -265,4 +267,81 @@ array_buffer_resizable_getter :: (vm: *Vm, this: Value, arguments: [] Value, is_
     is_resizable := this.object.elements.count > 0;
 
     return .{ type = .BOOLEAN, boolean = is_resizable };
+}
+
+array_buffer_max_byte_length_getter :: (vm: *Vm, this: Value, arguments: [] Value, is_new: bool) -> Value {
+    if this.type != .OBJECT || (this.object.kind != .ARRAY_BUFFER && this.object.kind != .SHARED_ARRAY_BUFFER) {
+        throw_exception(vm, "TypeError: get maxByteLength called on incompatible receiver");
+        return .{};
+    }
+
+    if this.object.is_detached return .{ type = .NUMBER, number = 0 };
+
+    if this.object.elements.count > 0 {
+        return this.object.elements[0];
+    }
+    return .{ type = .NUMBER, number = cast(float64) this.object.primitive_value.s.count };
+}
+
+array_buffer_resize :: (vm: *Vm, this: Value, arguments: [] Value, is_new: bool) -> Value {
+    if this.type != .OBJECT || this.object.kind != .ARRAY_BUFFER {
+        throw_exception(vm, "TypeError: ArrayBuffer.prototype.resize called on incompatible receiver");
+        return .{};
+    }
+
+    if this.object.elements.count == 0 {
+        throw_exception(vm, "TypeError: ArrayBuffer is not resizable");
+        return .{};
+    }
+
+    if arguments.count == 0 {
+        throw_exception(vm, "RangeError: Invalid ArrayBuffer length");
+        return .{};
+    }
+
+    new_len_f := abstract_to_number(vm, arguments[0]);
+    if vm.has_exception return .{};
+
+    if isnan(new_len_f) {
+        new_len_f = 0;
+    } else if !isinf(new_len_f) {
+        new_len_f = cast(float64) cast(s64) new_len_f;
+    }
+
+    if new_len_f < 0 || isinf(new_len_f) || new_len_f > 9007199254740991 {
+        throw_exception(vm, "RangeError: Invalid ArrayBuffer length");
+        return .{};
+    }
+
+    new_len := cast(int) new_len_f;
+
+    if this.object.is_detached {
+        throw_exception(vm, "TypeError: ArrayBuffer is detached");
+        return .{};
+    }
+
+    max_len := cast(int) this.object.elements[0].number;
+    if new_len > max_len {
+        throw_exception(vm, "RangeError: ArrayBuffer length exceeds maxByteLength");
+        return .{};
+    }
+
+    old_len := this.object.primitive_value.s.count;
+    old_ptr := this.object.primitive_value.s.data;
+
+    new_ptr := alloc(new_len);
+    if old_ptr && old_len > 0 {
+        copy_len := ifx old_len < new_len then old_len else new_len;
+        memcpy(new_ptr, old_ptr, copy_len);
+    }
+    if new_len > old_len {
+        memset(new_ptr + old_len, 0, new_len - old_len);
+    }
+
+    if old_ptr free(old_ptr);
+
+    this.object.primitive_value.s.data = new_ptr;
+    this.object.primitive_value.s.count = new_len;
+
+    return .{ type = .UNDEFINED };
 }
