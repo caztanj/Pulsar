@@ -526,6 +526,7 @@ Gc_Object :: struct {
     is_old:            bool;
     in_remembered_set: bool;
     is_detached:       bool;
+    is_not_constructor: bool;
 
     kind:   Gc_Object_Kind;
 

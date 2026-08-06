@@ -18,6 +18,8 @@ init_vm_error :: (vm: *Vm) {
         "ReferenceError",
         "SyntaxError",
         "RangeError",
+        "URIError",
+        "EvalError",
         "AggregateError"
     ];
 
@@ -31,6 +33,8 @@ init_vm_error :: (vm: *Vm) {
             if it == "ReferenceError" vm.current_realm.globals[index].native_function = error_constructor_ReferenceError;
             if it == "SyntaxError"    vm.current_realm.globals[index].native_function = error_constructor_SyntaxError;
             if it == "RangeError"     vm.current_realm.globals[index].native_function = error_constructor_RangeError;
+            if it == "URIError"       vm.current_realm.globals[index].native_function = error_constructor_URIError;
+            if it == "EvalError"      vm.current_realm.globals[index].native_function = error_constructor_EvalError;
             if it == "AggregateError" vm.current_realm.globals[index].native_function = error_constructor_AggregateError;
 
             error_constructor_object := allocate_object(vm);
@@ -80,6 +84,8 @@ error_constructor_TypeError      :: (vm: *Vm, this: Value, arguments: [] Value, 
 error_constructor_ReferenceError :: (vm: *Vm, this: Value, arguments: [] Value, is_new: bool) -> Value { return error_constructor(vm, this, arguments, is_new, "ReferenceError"); }
 error_constructor_SyntaxError    :: (vm: *Vm, this: Value, arguments: [] Value, is_new: bool) -> Value { return error_constructor(vm, this, arguments, is_new, "SyntaxError"); }
 error_constructor_RangeError     :: (vm: *Vm, this: Value, arguments: [] Value, is_new: bool) -> Value { return error_constructor(vm, this, arguments, is_new, "RangeError"); }
+error_constructor_URIError     :: (vm: *Vm, this: Value, arguments: [] Value, is_new: bool) -> Value { return error_constructor(vm, this, arguments, is_new, "URIError"); }
+error_constructor_EvalError    :: (vm: *Vm, this: Value, arguments: [] Value, is_new: bool) -> Value { return error_constructor(vm, this, arguments, is_new, "EvalError"); }
 
 error_constructor :: (vm: *Vm, this: Value, arguments: [] Value, is_new: bool, name: string) -> Value {
     object := allocate_object(vm);

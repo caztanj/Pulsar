@@ -23,25 +23,13 @@ reflect_construct :: (vm: *Vm, this: Value, arguments: [] Value, is_new: bool) -
         new_target = arguments[2];
     }
 
-    is_target_callable := target.type == .FUNCTION || target.type == .NATIVE_FUNCTION || (target.type == .OBJECT && target.object.kind == .PROXY);
-    if !is_target_callable {
-        throw_exception(vm, "TypeError: Reflect.construct requires target to be a function");
+    if !is_constructor(vm, target) {
+        throw_exception(vm, "TypeError: Reflect.construct target is not a constructor");
         return .{};
     }
 
-    is_new_target_callable := new_target.type == .FUNCTION || new_target.type == .NATIVE_FUNCTION || (new_target.type == .OBJECT && new_target.object.kind == .PROXY);
-    if !is_new_target_callable {
-        throw_exception(vm, "TypeError: Reflect.construct requires newTarget to be a function");
-        return .{};
-    }
-
-    if new_target.type == .FUNCTION && (new_target.function.function.flags & .ARROW) {
-        throw_exception(vm, "TypeError: newTarget is not a constructor");
-        return .{};
-    }
-
-    if target.type == .FUNCTION && (target.function.function.flags & .ARROW) {
-        throw_exception(vm, "TypeError: target is not a constructor");
+    if !is_constructor(vm, new_target) {
+        throw_exception(vm, "TypeError: Reflect.construct newTarget is not a constructor");
         return .{};
     }
 

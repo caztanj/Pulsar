@@ -123,6 +123,7 @@ Permission :: enum_flags {
 #load "extensions/disposable_stack.jai";
 #load "extensions/atomics.jai";
 #load "extensions/bigint.jai";
+#load "extensions/uri.jai";
 
 #scope_module
 

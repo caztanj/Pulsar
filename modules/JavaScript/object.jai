@@ -381,3 +381,21 @@ get_symbol_string_key :: (symbol_val: *Value) -> string {
     return tprint("@@%", desc);
 }
 
+is_constructor :: (vm: *Vm, val: Value) -> bool {
+    if val.type == .FUNCTION {
+        if !val.function.function return false;
+        flags := val.function.function.flags;
+        if (flags & .ASYNC) || (flags & .ARROW) || (flags & .GENERATOR) return false;
+        return true;
+    }
+    if val.type == .NATIVE_FUNCTION {
+        if val.object && val.object.is_not_constructor return false;
+        return true;
+    }
+    if val.type == .OBJECT && val.object {
+        if val.object.kind == .PROXY return true;
+    }
+    return false;
+}
+
+
