@@ -381,11 +381,35 @@ object_define_property :: (vm: *Vm, this: Value, arguments: [] Value, is_new: bo
 
     if (descriptor_value.type == .OBJECT || descriptor_value.type == .ARRAY) && descriptor_value.object {
         found, value := lookup_property(vm, descriptor_value.object, "value");
-
-        if found set_object_property(vm, target_value.object, name, value);
-
         found_get, get_value := lookup_property(vm, descriptor_value.object, "get");
+        found_set, set_value := lookup_property(vm, descriptor_value.object, "set");
+
         if found_get set_object_property(vm, target_value.object, tprint("%__getter__", name), get_value);
+        if found_set set_object_property(vm, target_value.object, tprint("%__setter__", name), set_value);
+
+        if found {
+            set_object_property(vm, target_value.object, name, value);
+        } else if !found_get && !found_set {
+            set_object_property(vm, target_value.object, name, Value.{ type = .UNDEFINED });
+        }
+
+        found_enum, enum_value := lookup_property(vm, descriptor_value.object, "enumerable");
+        if found_enum {
+            is_enum := is_truthy(enum_value);
+            set_object_property(vm, target_value.object, tprint("attr_enumerable_%", name), Value.{ type = .BOOLEAN, boolean = is_enum });
+        }
+
+        found_writ, writ_value := lookup_property(vm, descriptor_value.object, "writable");
+        if found_writ {
+            is_writ := is_truthy(writ_value);
+            set_object_property(vm, target_value.object, tprint("attr_writable_%", name), Value.{ type = .BOOLEAN, boolean = is_writ });
+        }
+
+        found_config, config_value := lookup_property(vm, descriptor_value.object, "configurable");
+        if found_config {
+            is_config := is_truthy(config_value);
+            set_object_property(vm, target_value.object, tprint("attr_configurable_%", name), Value.{ type = .BOOLEAN, boolean = is_config });
+        }
     }
 
     return target_value;
@@ -475,6 +499,8 @@ object_get_own_property_descriptor :: (vm: *Vm, this: Value, arguments: [] Value
 
         enumerable := true;
         configurable := true;
+        writable := true;
+
         if name == "cause" || name == "message" || name == "name" || name == "length" || name == "prototype" || name == "constructor" || starts_with(name, "@@") {
             enumerable = false;
         }
@@ -486,12 +512,26 @@ object_get_own_property_descriptor :: (vm: *Vm, this: Value, arguments: [] Value
             configurable = false;
         }
 
-        writable := true;
         if (target_value.type == .FUNCTION || target_value.type == .NATIVE_FUNCTION) && (name == "length" || name == "name") {
             writable = false;
         }
         if (target_value.type == .NATIVE_FUNCTION && name == "prototype") || name == "@@Symbol.toStringTag" || ((object == vm.async_generator_prototype || object == vm.generator_prototype) && name == "constructor") {
             writable = false;
+        }
+
+        found_enum_attr, enum_attr_val := lookup_property(vm, object, tprint("attr_enumerable_%", name));
+        if found_enum_attr && enum_attr_val.type == .BOOLEAN {
+            enumerable = enum_attr_val.boolean;
+        }
+
+        found_writ_attr, writ_attr_val := lookup_property(vm, object, tprint("attr_writable_%", name));
+        if found_writ_attr && writ_attr_val.type == .BOOLEAN {
+            writable = writ_attr_val.boolean;
+        }
+
+        found_config_attr, config_attr_val := lookup_property(vm, object, tprint("attr_configurable_%", name));
+        if found_config_attr && config_attr_val.type == .BOOLEAN {
+            configurable = config_attr_val.boolean;
         }
 
         set_object_property(vm, descriptor, "value",        property_value);
@@ -647,6 +687,11 @@ object_property_is_enumerable :: (vm: *Vm, this: Value, arguments: [] Value, is_
     enumerable := true;
     if name == "cause" || name == "message" || name == "name" || name == "length" || name == "prototype" || name == "constructor" || starts_with(name, "@@") || obj.kind == .GLOBAL_PROXY {
         enumerable = false;
+    }
+
+    found_enum_attr, enum_attr_val := lookup_property(vm, obj, tprint("attr_enumerable_%", name));
+    if found_enum_attr && enum_attr_val.type == .BOOLEAN {
+        enumerable = enum_attr_val.boolean;
     }
 
     return .{ type = .BOOLEAN, boolean = enumerable };
