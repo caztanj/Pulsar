@@ -35,6 +35,7 @@ init_vm_object :: (vm: *Vm) {
         add_static_method(vm, object_obj, "assign",                   object_assign);
         add_static_method(vm, object_obj, "getOwnPropertyNames",      object_get_own_property_names);
         add_static_method(vm, object_obj, "isExtensible",             object_is_extensible);
+        add_static_method(vm, object_obj, "is",                       object_is);
 
         add_static_property(vm, object_obj, "prototype", Value.{ type = .OBJECT, object = vm.object_prototype });
         add_static_property(vm, vm.object_prototype, "constructor", vm.current_realm.globals[index]);
@@ -580,6 +581,24 @@ object_is_extensible :: (vm: *Vm, this: Value, arguments: [] Value, is_new: bool
         return .{ type = .BOOLEAN, boolean = true };
     }
     return .{ type = .BOOLEAN, boolean = false };
+}
+
+object_is :: (vm: *Vm, this: Value, arguments: [] Value, is_new: bool) -> Value {
+    if arguments.count < 2 return .{ type = .BOOLEAN, boolean = arguments.count == 0 };
+    a := arguments[0];
+    b := arguments[1];
+
+    if a.type == .NUMBER && b.type == .NUMBER {
+        if isnan(a.number) && isnan(b.number) return .{ type = .BOOLEAN, boolean = true };
+        if a.number == 0.0 && b.number == 0.0 {
+            a_bits := cast(*u64)(*a.number);
+            b_bits := cast(*u64)(*b.number);
+            return .{ type = .BOOLEAN, boolean = a_bits.* == b_bits.* };
+        }
+        return .{ type = .BOOLEAN, boolean = a.number == b.number };
+    }
+
+    return .{ type = .BOOLEAN, boolean = values_strict_equal(a, b) };
 }
 
 object_has_own_property :: (vm: *Vm, this: Value, arguments: [] Value, is_new: bool) -> Value {

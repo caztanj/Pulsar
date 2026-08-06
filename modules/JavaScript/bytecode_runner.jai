@@ -905,7 +905,7 @@ execute_function_internal :: (vm: *Vm, initial_function: *Bytecode_Function, ini
 
                     registers_data[instruction.dest].type = .BOOLEAN;
 
-                    if v1.type == .NUMBER && v2.type == .NUMBER registers_data[instruction.dest].boolean = v1.number != v2.number;
+                    if v1.type == .NUMBER && v2.type == .NUMBER registers_data[instruction.dest].boolean = (isnan(v1.number) || isnan(v2.number) || v1.number != v2.number);
                     else                                        registers_data[instruction.dest].boolean = !values_equal(vm, v1.*, v2.*);
 
                     last_value = registers_data[instruction.dest];
@@ -971,7 +971,7 @@ execute_function_internal :: (vm: *Vm, initial_function: *Bytecode_Function, ini
 
                     registers_data[instruction.dest].type = .BOOLEAN;
 
-                    if v1.type == .NUMBER && v2.type == .NUMBER registers_data[instruction.dest].boolean = v1.number != v2.number;
+                    if v1.type == .NUMBER && v2.type == .NUMBER registers_data[instruction.dest].boolean = (isnan(v1.number) || isnan(v2.number) || v1.number != v2.number);
                     else                                        registers_data[instruction.dest].boolean = !values_strict_equal(v1.*, v2.*);
 
                     last_value = registers_data[instruction.dest];
