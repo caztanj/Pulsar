@@ -37,6 +37,7 @@ init_vm_object :: (vm: *Vm) {
         add_static_method(vm, object_obj, "isExtensible",             object_is_extensible);
 
         add_static_property(vm, object_obj, "prototype", Value.{ type = .OBJECT, object = vm.object_prototype });
+        add_static_property(vm, vm.object_prototype, "constructor", vm.current_realm.globals[index]);
     }
 }
 
