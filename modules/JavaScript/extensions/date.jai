@@ -6,9 +6,10 @@ init_vm_date :: (vm: *Vm) {
         vm.date_prototype.prototype = vm.object_prototype;
         vm.date_prototype.kind      = .DATE;
 
-        add_instance_method(vm, vm.date_prototype, "getTime",         date_get_time);
-        add_instance_method(vm, vm.date_prototype, "valueOf",         date_get_time);
-        add_instance_method(vm, vm.date_prototype, "getFullYear",     date_get_full_year);
+        add_instance_method(vm, vm.date_prototype, "getTime",              date_get_time);
+        add_instance_method(vm, vm.date_prototype, "valueOf",              date_get_time);
+        add_instance_method(vm, vm.date_prototype, "getTimezoneOffset",   date_get_timezone_offset);
+        add_instance_method(vm, vm.date_prototype, "getFullYear",          date_get_full_year);
         add_instance_method(vm, vm.date_prototype, "getMonth",        date_get_month);
         add_instance_method(vm, vm.date_prototype, "getDate",         date_get_date);
         add_instance_method(vm, vm.date_prototype, "getHours",        date_get_hours);
@@ -493,6 +494,17 @@ format_year_string :: (year: int) -> string {
 
 date_get_time :: (vm: *Vm, this: Value, arguments: [] Value, is_new: bool) -> Value {
     return .{ type = .NUMBER, number = get_date_milliseconds(this) };
+}
+
+date_get_timezone_offset :: (vm: *Vm, this: Value, arguments: [] Value, is_new: bool) -> Value {
+    millis := get_date_milliseconds(this);
+    if isnan(millis) || isinf(millis) return .{ type = .NUMBER, number = FLOAT64_NAN };
+
+    now := current_time_consensus();
+    cal_utc := to_calendar(now, .UTC);
+    cal_loc := to_calendar(now, .LOCAL);
+    tz_offset_minutes := cast(float64) ((cal_utc.hour - cal_loc.hour) * 60 + (cal_utc.minute - cal_loc.minute));
+    return .{ type = .NUMBER, number = tz_offset_minutes };
 }
 
 date_get_full_year :: (vm: *Vm, this: Value, arguments: [] Value, is_new: bool) -> Value {
