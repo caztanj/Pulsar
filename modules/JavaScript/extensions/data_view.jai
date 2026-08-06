@@ -43,11 +43,6 @@ data_view_constructor :: (vm: *Vm, this: Value, arguments: [] Value, is_new: boo
     }
 
     buffer_obj := arguments[0].object;
-    if buffer_obj.is_detached {
-        throw_exception(vm, "TypeError: Cannot construct DataView with detached ArrayBuffer");
-        return .{};
-    }
-    buffer_length := buffer_obj.primitive_value.s.count;
 
     byte_offset := 0;
     has_byte_length := false;
@@ -62,6 +57,12 @@ data_view_constructor :: (vm: *Vm, this: Value, arguments: [] Value, is_new: boo
         }
         byte_offset = cast(int) byte_offset_f;
     }
+
+    if buffer_obj.is_detached {
+        throw_exception(vm, "TypeError: Cannot construct DataView with detached ArrayBuffer");
+        return .{};
+    }
+    buffer_length := buffer_obj.primitive_value.s.count;
 
     if byte_offset > buffer_length {
         throw_exception(vm, "RangeError: DataView byteOffset out of bounds");
