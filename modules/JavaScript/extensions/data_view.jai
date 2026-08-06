@@ -31,6 +31,29 @@ init_vm_data_view :: (vm: *Vm) {
     }
 }
 
+abstract_to_index :: (vm: *Vm, value: Value, error_message: string) -> int, bool {
+    if value.type == .UNDEFINED return 0, true;
+
+    num := abstract_to_number(vm, value);
+    if vm.has_exception return 0, false;
+
+    if isnan(num) return 0, true;
+
+    if isinf(num) || num > 9007199254740991.0 {
+        throw_exception(vm, error_message);
+        return 0, false;
+    }
+
+    integer_index := cast(float64) cast(s64) num;
+
+    if integer_index < 0.0 {
+        throw_exception(vm, error_message);
+        return 0, false;
+    }
+
+    return cast(int) integer_index, true;
+}
+
 data_view_constructor :: (vm: *Vm, this: Value, arguments: [] Value, is_new: bool) -> Value {
     if !is_new {
         throw_exception(vm, "TypeError: Constructor DataView requires 'new'");
@@ -49,13 +72,9 @@ data_view_constructor :: (vm: *Vm, this: Value, arguments: [] Value, is_new: boo
     byte_length := 0;
 
     if arguments.count > 1 && arguments[1].type != .UNDEFINED {
-        byte_offset_f := abstract_to_number(vm, arguments[1]);
-        if vm.has_exception return .{};
-        if isnan(byte_offset_f) || isinf(byte_offset_f) || byte_offset_f < 0 {
-            throw_exception(vm, "RangeError: Invalid DataView byteOffset");
-            return .{};
-        }
-        byte_offset = cast(int) byte_offset_f;
+        offset_val, ok := abstract_to_index(vm, arguments[1], "RangeError: Invalid DataView byteOffset");
+        if !ok return .{};
+        byte_offset = offset_val;
     }
 
     if buffer_obj.is_detached {
@@ -71,13 +90,10 @@ data_view_constructor :: (vm: *Vm, this: Value, arguments: [] Value, is_new: boo
 
     if arguments.count > 2 && arguments[2].type != .UNDEFINED {
         has_byte_length = true;
-        byte_length_f := abstract_to_number(vm, arguments[2]);
-        if vm.has_exception return .{};
-        if isnan(byte_length_f) || isinf(byte_length_f) || byte_length_f < 0 {
-            throw_exception(vm, "RangeError: Invalid DataView byteLength");
-            return .{};
-        }
-        byte_length = cast(int) byte_length_f;
+        length_val, ok := abstract_to_index(vm, arguments[2], "RangeError: Invalid DataView byteLength");
+        if !ok return .{};
+        byte_length = length_val;
+
         if byte_offset + byte_length > buffer_length {
             throw_exception(vm, "RangeError: DataView length exceeds ArrayBuffer length");
             return .{};
