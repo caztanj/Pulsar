@@ -342,10 +342,13 @@ date_constructor :: (vm: *Vm, this: Value, arguments: [] Value, is_new: bool) ->
         milliseconds = cast(float64) cast(s64) milliseconds;
     }
 
+    ok, proto := get_prototype_from_constructor(vm, this, vm.date_prototype);
+    if !ok return .{};
+
     date_object                 := allocate_object(vm);
     date_object.kind             = .DATE;
     date_object.primitive_value  = .{ type = .NUMBER, number = milliseconds };
-    date_object.prototype        = vm.date_prototype;
+    date_object.prototype        = proto;
 
     return .{ type = .OBJECT, object = date_object };
 }
