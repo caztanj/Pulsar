@@ -3048,7 +3048,7 @@ values_strict_equal :: (a: Value, b: Value) -> bool {
         case .NULL;            return true;
         case .NUMBER;          return a.number               == b.number;
         case .BOOLEAN;         return a.boolean              == b.boolean;
-        case .STRING;          return a.s                    == b.s;
+        case .STRING;          return compare_strings(a.s, b.s) == 0;
         case .EMPTY;           return true;
 
         case .OBJECT;          return false;

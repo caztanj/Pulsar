@@ -178,11 +178,11 @@ decode_uri_common :: (vm: *Vm, arguments: [] Value, reserved_set: string, is_com
 
             cp: u32 = 0;
             if needed == 2 {
-                cp = cast(u32) (((bytes[0] & 0x1F) << 6) | (bytes[1] & 0x3F));
+                cp = ((cast(u32) bytes[0] & 0x1F) << 6) | (cast(u32) bytes[1] & 0x3F);
             } else if needed == 3 {
-                cp = cast(u32) (((bytes[0] & 0x0F) << 12) | ((bytes[1] & 0x3F) << 6) | (bytes[2] & 0x3F));
+                cp = ((cast(u32) bytes[0] & 0x0F) << 12) | ((cast(u32) bytes[1] & 0x3F) << 6) | (cast(u32) bytes[2] & 0x3F);
             } else if needed == 4 {
-                cp = cast(u32) (((bytes[0] & 0x07) << 18) | ((bytes[1] & 0x3F) << 12) | ((bytes[2] & 0x3F) << 6) | (bytes[3] & 0x3F));
+                cp = ((cast(u32) bytes[0] & 0x07) << 18) | ((cast(u32) bytes[1] & 0x3F) << 12) | ((cast(u32) bytes[2] & 0x3F) << 6) | (cast(u32) bytes[3] & 0x3F);
             }
 
             if cp < min_val || cp > 0x10FFFF || (cp >= 0xD800 && cp <= 0xDFFF) {
