@@ -2400,27 +2400,72 @@ unescape_string :: (s: string) -> string {
     i := 0;
 
     while i < s.count {
-        if s[i] == {
-            case "\\";
-                if i + 1 < s.count {
-                    i += 1;
-                    c := s[i];
-                    if c == {
-                        case "n";  append(*builder, "\n");
-                        case "r";  append(*builder, "\r");
-                        case "t";  append(*builder, "\t");
-                        case "b";  append(*builder, "\x08");
-                        case "f";  append(*builder, "\x0c");
-                        case "\\"; append(*builder, "\\");
-                        case "\""; append(*builder, "\"");
-                        case "'";  append(*builder, "'");
-                        case "`";  append(*builder, "`");
-                        case "/";  append(*builder, "/");
-                        case;      append(*builder, c);
+        if s[i] == #char "\\" && i + 1 < s.count {
+            i += 1;
+            c := s[i];
+            if c == {
+                case #char "n";  append(*builder, "\n");
+                case #char "r";  append(*builder, "\r");
+                case #char "t";  append(*builder, "\t");
+                case #char "b";  append(*builder, "\x08");
+                case #char "f";  append(*builder, "\x0c");
+                case #char "v";  append(*builder, "\x0b");
+                case #char "0";  append(*builder, "\x00");
+                case #char "\\"; append(*builder, "\\");
+                case #char "\""; append(*builder, "\"");
+                case #char "'";  append(*builder, "'");
+                case #char "`";  append(*builder, "`");
+                case #char "/";  append(*builder, "/");
+                case #char "x";
+                    if i + 2 < s.count {
+                        h1 := hex_val(s[i+1]);
+                        h2 := hex_val(s[i+2]);
+                        if h1 >= 0 && h2 >= 0 {
+                            byte_val := cast(u8) ((h1 << 4) | h2);
+                            append(*builder, byte_val);
+                            i += 2;
+                        } else {
+                            append(*builder, c);
+                        }
+                    } else {
+                        append(*builder, c);
                     }
-                }
-            case;
-                append(*builder, s[i]);
+                case #char "u";
+                    if i + 5 < s.count && s[i+1] == #char "{" {
+                        end_idx := i + 2;
+                        cp_val: u32 = 0;
+                        valid := true;
+                        while end_idx < s.count && s[end_idx] != #char "}" {
+                            hv := hex_val(s[end_idx]);
+                            if hv < 0 { valid = false; break; }
+                            cp_val = (cp_val << 4) | cast(u32) hv;
+                            end_idx += 1;
+                        }
+                        if valid && end_idx < s.count && s[end_idx] == #char "}" {
+                            append_utf8_cp_builder(*builder, cp_val);
+                            i = end_idx;
+                        } else {
+                            append(*builder, c);
+                        }
+                    } else if i + 4 < s.count {
+                        h1 := hex_val(s[i+1]);
+                        h2 := hex_val(s[i+2]);
+                        h3 := hex_val(s[i+3]);
+                        h4 := hex_val(s[i+4]);
+                        if h1 >= 0 && h2 >= 0 && h3 >= 0 && h4 >= 0 {
+                            cp_val := cast(u32) ((h1 << 12) | (h2 << 8) | (h3 << 4) | h4);
+                            append_utf8_cp_builder(*builder, cp_val);
+                            i += 4;
+                        } else {
+                            append(*builder, c);
+                        }
+                    } else {
+                        append(*builder, c);
+                    }
+                case; append(*builder, c);
+            }
+        } else {
+            append(*builder, s[i]);
         }
 
         i += 1;
@@ -2428,6 +2473,34 @@ unescape_string :: (s: string) -> string {
 
     return builder_to_string(*builder);
 }
+
+#scope_file
+
+hex_val :: (c: u8) -> int {
+    if c >= #char "0" && c <= #char "9" return c - #char "0";
+    if c >= #char "a" && c <= #char "f" return c - #char "a" + 10;
+    if c >= #char "A" && c <= #char "F" return c - #char "A" + 10;
+    return -1;
+}
+
+append_utf8_cp_builder :: (builder: *String_Builder, cp: u32) {
+    if cp < 0x80 {
+        append(builder, cast(u8) cp);
+    } else if cp < 0x800 {
+        append(builder, cast(u8) (0xC0 | (cp >> 6)));
+        append(builder, cast(u8) (0x80 | (cp & 0x3F)));
+    } else if cp < 0x10000 {
+        append(builder, cast(u8) (0xE0 | (cp >> 12)));
+        append(builder, cast(u8) (0x80 | ((cp >> 6) & 0x3F)));
+        append(builder, cast(u8) (0x80 | (cp & 0x3F)));
+        append(builder, cast(u8) (0xF0 | (cp >> 18)));
+        append(builder, cast(u8) (0x80 | ((cp >> 12) & 0x3F)));
+        append(builder, cast(u8) (0x80 | ((cp >> 6) & 0x3F)));
+        append(builder, cast(u8) (0x80 | (cp & 0x3F)));
+    }
+}
+
+#scope_export
 
 Ast_Kind :: enum {
     PROGRAM;
