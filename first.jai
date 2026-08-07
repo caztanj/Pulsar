@@ -1,8 +1,11 @@
 build :: () {
-    set_build_options_dc(.{do_output=false});
+    set_build_options_dc(.{ do_output = false });
 
-    options := get_build_options();
-    args := options.compile_time_command_line;
+    args := get_build_options().compile_time_command_line;
+
+    w := compiler_create_workspace("Pulsar");
+    options := get_build_options(w);
+    copy_commonly_propagated_fields(get_build_options(), *options);
 
     success:, plugins_to_create:, args = parse_plugin_arguments(args);
     if !success exit(1);
@@ -12,12 +15,6 @@ build :: () {
     is_test262_full := array_find(args, "test262-full");
     is_release := array_find(args, "release");
 
-    w := compiler_create_workspace("Pulsar");
-    if !w {
-        print("Workspace creation failed.\n");
-        return;
-    }
-
     if is_test {
         options.output_executable_name = "pulsar_tests";
     } else if is_test262 || is_test262_full {
@@ -25,6 +22,8 @@ build :: () {
     } else {
         options.output_executable_name = "pulsar";
     }
+
+    options.entry_point_name = "main";
 
     if is_release {
         options.output_path = "build_release";
@@ -70,6 +69,8 @@ build :: () {
         for plugins if it.message it.message(it, message);
 
         if !message break;
+
+        if message.kind == .ERROR exit(1);
         if message.kind == .COMPLETE break;
     }
 
@@ -99,7 +100,7 @@ build :: () {
     }
 }
 
-#run build();
+#run,stallable build();
 
 #import "Basic";
 #import "Compiler";
