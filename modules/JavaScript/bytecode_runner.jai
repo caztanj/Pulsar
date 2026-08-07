@@ -3281,6 +3281,15 @@ throw_exception :: (vm: *Vm, message: string) {
     } else if starts_with(message, "SyntaxError: ") {
         name = "SyntaxError";
         actual_message = slice(message, 13, message.count - 13);
+    } else if starts_with(message, "URIError: ") {
+        name = "URIError";
+        actual_message = slice(message, 10, message.count - 10);
+    } else if starts_with(message, "EvalError: ") {
+        name = "EvalError";
+        actual_message = slice(message, 11, message.count - 11);
+    } else if starts_with(message, "AggregateError: ") {
+        name = "AggregateError";
+        actual_message = slice(message, 16, message.count - 16);
     }
 
     found_property, index := get_global_index(vm, name);

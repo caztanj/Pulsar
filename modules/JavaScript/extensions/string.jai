@@ -22,6 +22,7 @@ init_vm_string :: (vm: *Vm) {
         add_instance_method(vm, vm.string_prototype, "padEnd",      string_pad_end);
         add_instance_method(vm, vm.string_prototype, "trimStart",   string_trim_start);
         add_instance_method(vm, vm.string_prototype, "trimEnd",     string_trim_end);
+        add_instance_method(vm, vm.string_prototype, "charCodeAt",   string_char_code_at);
         add_instance_method(vm, vm.string_prototype, "at",          string_at);
         add_instance_method(vm, vm.string_prototype, "concat",      string_concat);
         add_instance_method(vm, vm.string_prototype, "toString",    string_to_string);
@@ -37,6 +38,9 @@ init_vm_string :: (vm: *Vm) {
         vm.current_realm.globals[index].object = string_object;
 
         string_object.prototype = vm.string_prototype;
+
+        add_static_method(vm, string_object, "fromCharCode",  string_from_char_code);
+        add_static_method(vm, string_object, "fromCodePoint", string_from_code_point);
 
         prototype_value := Value.{
             type   = .OBJECT,
@@ -482,6 +486,67 @@ string_concat :: (vm: *Vm, this: Value, arguments: [] Value, is_new: bool) -> Va
         append(*builder, arg_str);
     }
 
+    res := allocate_string_from_builder(vm, *builder);
+    free_buffers(*builder);
+    return .{ type = .STRING, s = res };
+}
+
+string_char_code_at :: (vm: *Vm, this: Value, arguments: [] Value, is_new: bool) -> Value {
+    if this.type != .STRING return .{ type = .NUMBER, number = not_a_number_value };
+    index := 0;
+    if arguments.count > 0 index = cast(int) value_to_number(arguments[0]);
+    if index < 0 || index >= this.s.count return .{ type = .NUMBER, number = not_a_number_value };
+    return .{ type = .NUMBER, number = cast(float64) cast(u8) this.s[index] };
+}
+
+string_from_char_code :: (vm: *Vm, this: Value, arguments: [] Value, is_new: bool) -> Value {
+    builder: String_Builder;
+    for arg: arguments {
+        num := value_to_number(arg);
+        if isnan(num) || isinf(num) then num = 0;
+        code_unit := cast(u16) ((cast(int) num) & 0xFFFF);
+        if code_unit < 0x80 {
+            append(*builder, cast(u8) code_unit);
+        } else if code_unit < 0x800 {
+            append(*builder, cast(u8) (0xC0 | (code_unit >> 6)));
+            append(*builder, cast(u8) (0x80 | (code_unit & 0x3F)));
+        } else {
+            append(*builder, cast(u8) (0xE0 | (code_unit >> 12)));
+            append(*builder, cast(u8) (0x80 | ((code_unit >> 6) & 0x3F)));
+            append(*builder, cast(u8) (0x80 | (code_unit & 0x3F)));
+        }
+    }
+    res := allocate_string_from_builder(vm, *builder);
+    free_buffers(*builder);
+    return .{ type = .STRING, s = res };
+}
+
+string_from_code_point :: (vm: *Vm, this: Value, arguments: [] Value, is_new: bool) -> Value {
+    builder: String_Builder;
+    for arg: arguments {
+        num := value_to_number(arg);
+        if isnan(num) || isinf(num) || num < 0 || num > 0x10FFFF || (num != floor(num)) {
+            throw_exception(vm, "RangeError: Invalid code point");
+            free_buffers(*builder);
+            return .{};
+        }
+        cp := cast(u32) num;
+        if cp < 0x80 {
+            append(*builder, cast(u8) cp);
+        } else if cp < 0x800 {
+            append(*builder, cast(u8) (0xC0 | (cp >> 6)));
+            append(*builder, cast(u8) (0x80 | (cp & 0x3F)));
+        } else if cp < 0x10000 {
+            append(*builder, cast(u8) (0xE0 | (cp >> 12)));
+            append(*builder, cast(u8) (0x80 | ((cp >> 6) & 0x3F)));
+            append(*builder, cast(u8) (0x80 | (cp & 0x3F)));
+        } else if cp <= 0x10FFFF {
+            append(*builder, cast(u8) (0xF0 | (cp >> 18)));
+            append(*builder, cast(u8) (0x80 | ((cp >> 12) & 0x3F)));
+            append(*builder, cast(u8) (0x80 | ((cp >> 6) & 0x3F)));
+            append(*builder, cast(u8) (0x80 | (cp & 0x3F)));
+        }
+    }
     res := allocate_string_from_builder(vm, *builder);
     free_buffers(*builder);
     return .{ type = .STRING, s = res };
