@@ -319,6 +319,10 @@ collect_globals :: (generator: *Bytecode_Generator, node: *Ast_Node) {
         case .BREAK_STATEMENT;
         case .CONTINUE_STATEMENT;
 
+        case .LABELED_STATEMENT;
+            labeled_statement := cast(*Ast_Labeled_Statement) node;
+            collect_globals(generator, labeled_statement.body);
+
         case .LOGICAL_EXPRESSION;
             logical_expression := cast(*Ast_Logical_Expression) node;
 
@@ -1122,7 +1126,9 @@ emit_statement :: (generator: *Bytecode_Generator, node: *Ast_Node) {
                 break_jumps.allocator    = temp,
                 continue_target          = generator.current_function.instructions.count,
                 try_depth                = generator.try_depth,
+                label                    = generator.pending_label,
             };
+            generator.pending_label = "";
 
             array_add(*generator.loop_stack, loop_context);
 
@@ -1294,7 +1300,9 @@ emit_statement :: (generator: *Bytecode_Generator, node: *Ast_Node) {
                 continue_jumps.allocator = temp,
                 break_jumps.allocator    = temp,
                 try_depth                = generator.try_depth,
+                label                    = generator.pending_label,
             };
+            generator.pending_label = "";
 
             array_add(*generator.loop_stack, loop_context);
 
@@ -1354,7 +1362,9 @@ emit_statement :: (generator: *Bytecode_Generator, node: *Ast_Node) {
                 break_jumps.allocator    = temp,
                 continue_target          = loop_start_pc,
                 try_depth                = generator.try_depth,
+                label                    = generator.pending_label,
             };
+            generator.pending_label = "";
 
             array_add(*generator.loop_stack, loop_context);
 
@@ -1445,7 +1455,9 @@ emit_statement :: (generator: *Bytecode_Generator, node: *Ast_Node) {
                 break_jumps.allocator    = temp,
                 continue_target          = loop_start_pc,
                 try_depth                = generator.try_depth,
+                label                    = generator.pending_label,
             };
+            generator.pending_label = "";
 
             array_add(*generator.loop_stack, loop_context);
 
@@ -1826,7 +1838,9 @@ emit_statement :: (generator: *Bytecode_Generator, node: *Ast_Node) {
                 continue_jumps.allocator = temp,
                 break_jumps.allocator    = temp,
                 try_depth                = generator.try_depth,
+                label                    = generator.pending_label,
             };
+            generator.pending_label = "";
 
             array_add(*generator.loop_stack, loop_context);
 
@@ -1905,7 +1919,15 @@ emit_statement :: (generator: *Bytecode_Generator, node: *Ast_Node) {
 
             generator.loop_stack.count -= 1;
 
+        case .LABELED_STATEMENT;
+            labeled_statement := cast(*Ast_Labeled_Statement) node;
+            old_label := generator.pending_label;
+            generator.pending_label = labeled_statement.label;
+            emit_statement(generator, labeled_statement.body);
+            generator.pending_label = old_label;
+
         case .BREAK_STATEMENT;
+            break_statement := cast(*Ast_Break_Statement) node;
             if generator.loop_stack.count == 0 {
                 generator.has_error = true;
                 generator.error_message = "Error: break statement outside of loop or switch\n";
@@ -1913,7 +1935,26 @@ emit_statement :: (generator: *Bytecode_Generator, node: *Ast_Node) {
                 return;
             }
 
-            loop_context_target := generator.loop_stack[generator.loop_stack.count - 1];
+            target_index := generator.loop_stack.count - 1;
+            if break_statement.label != "" {
+                found := false;
+                i := generator.loop_stack.count - 1;
+                while i >= 0 {
+                    if generator.loop_stack[i].label == break_statement.label {
+                        target_index = i;
+                        found = true;
+                        break;
+                    }
+                    i -= 1;
+                }
+                if !found {
+                    generator.has_error = true;
+                    generator.error_message = sprint("Error: Uncaught SyntaxError: Undefined label '%'\n", break_statement.label);
+                    return;
+                }
+            }
+
+            loop_context_target := generator.loop_stack[target_index];
             if generator.try_depth > loop_context_target.try_depth {
                 for 1..(generator.try_depth - loop_context_target.try_depth) {
                     emit_instruction(generator, Instruction.{ op_code = .POP_TRY_CONTEXT });
@@ -1927,16 +1968,23 @@ emit_statement :: (generator: *Bytecode_Generator, node: *Ast_Node) {
             pc := generator.current_function.instructions.count;
 
             array_add(*generator.current_function.instructions, instruction);
-            array_add(*generator.loop_stack[generator.loop_stack.count - 1].break_jumps, pc);
+            array_add(*generator.loop_stack[target_index].break_jumps, pc);
 
         case .CONTINUE_STATEMENT;
+            continue_statement := cast(*Ast_Continue_Statement) node;
             found_loop := false;
 
             i := generator.loop_stack.count - 1;
             while i >= 0 {
-                if !generator.loop_stack[i].is_switch {
-                    loop_context := *generator.loop_stack[i];
+                loop_context := *generator.loop_stack[i];
+                match := false;
+                if continue_statement.label != "" {
+                    if loop_context.label == continue_statement.label match = true;
+                } else {
+                    if !loop_context.is_switch match = true;
+                }
 
+                if match {
                     if generator.try_depth > loop_context.try_depth {
                         for 1..(generator.try_depth - loop_context.try_depth) {
                             emit_instruction(generator, Instruction.{ op_code = .POP_TRY_CONTEXT });
@@ -2263,6 +2311,7 @@ emit_expression :: (generator: *Bytecode_Generator, node: *Ast_Node, force_new_r
         case .CONTINUE_STATEMENT;
         case .SWITCH_STATEMENT;
         case .CASE_CLAUSE;
+        case .LABELED_STATEMENT;
             return 0;
 
         case .LOGICAL_EXPRESSION;
@@ -2978,6 +3027,7 @@ Bytecode_Generator :: struct {
     error_message: string;
 
     try_depth:     int;
+    pending_label: string;
 }
 
 Value_Type :: enum u8 {
@@ -3026,6 +3076,7 @@ Loop_Context :: struct {
 
     is_switch:       bool;
     try_depth:       int;
+    label:           string;
 }
 
 Variable_Location_Type :: enum { LOCAL; UPVALUE; GLOBAL; NOT_FOUND; }

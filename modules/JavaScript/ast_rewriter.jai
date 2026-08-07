@@ -54,6 +54,10 @@ optimize_node :: (node: *Ast_Node) -> *Ast_Node {
             optimize_field(*for_statement.update);
             optimize_field(*for_statement.body);
 
+        case .LABELED_STATEMENT;
+            labeled_statement := cast(*Ast_Labeled_Statement) node;
+            optimize_field(*labeled_statement.body);
+
         case .BLOCK_STATEMENT;
             block_statement := cast(*Ast_Block_Statement) node;
             optimize_array(block_statement.body);

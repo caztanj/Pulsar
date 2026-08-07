@@ -60,6 +60,21 @@ parse_statement :: (parser: *Parser) -> *Ast_Node {
     }
 
     if token.type == .IDENTIFIER {
+        old_idx := parser.current;
+        advance(parser);
+        skip_whitespace_and_comments(parser);
+        if peek(parser).text == ":" {
+            advance(parser);
+            skip_whitespace_and_comments(parser);
+
+            node := new_node(parser, Ast_Labeled_Statement);
+            node.kind = .LABELED_STATEMENT;
+            node.label = token.text;
+            node.body = parse_statement(parser);
+            return xx node;
+        }
+        parser.current = old_idx;
+
         if token.text == "let" || token.text == "const" || token.text == "var" {
             return parse_variable_declaration(parser);
         } else if token.text == "function" {
@@ -114,6 +129,14 @@ parse_statement :: (parser: *Parser) -> *Ast_Node {
 
             advance(parser);
             skip_whitespace_and_comments(parser);
+
+            next := peek(parser);
+            if next.type == .IDENTIFIER && next.line == token.line {
+                node.label = next.text;
+                advance(parser);
+                skip_whitespace_and_comments(parser);
+            }
+
             consume_semicolon(parser);
 
             return xx node;
@@ -123,6 +146,14 @@ parse_statement :: (parser: *Parser) -> *Ast_Node {
 
             advance(parser);
             skip_whitespace_and_comments(parser);
+
+            next := peek(parser);
+            if next.type == .IDENTIFIER && next.line == token.line {
+                node.label = next.text;
+                advance(parser);
+                skip_whitespace_and_comments(parser);
+            }
+
             consume_semicolon(parser);
 
             return xx node;
@@ -2448,6 +2479,7 @@ Ast_Kind :: enum {
     CLASS_BODY;
     METHOD_DEFINITION;
     SUPER_EXPRESSION;
+    LABELED_STATEMENT;
 }
 
 Ast_Spread_Element :: struct {
@@ -2475,12 +2507,20 @@ Ast_Conditional_Expression :: struct {
     alternate:  *Ast_Node;
 }
 
+Ast_Labeled_Statement :: struct {
+    using base: Ast_Node;
+    label: string;
+    body:  *Ast_Node;
+}
+
 Ast_Break_Statement :: struct {
     using base: Ast_Node;
+    label: string;
 }
 
 Ast_Continue_Statement :: struct {
     using base: Ast_Node;
+    label: string;
 }
 
 Ast_Program :: struct {
