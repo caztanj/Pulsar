@@ -98,6 +98,9 @@ print :: (program: *Bytecode_Program) {
                 case .BITWISE_AND;        print(" BITWISE_AND        dest: R%, arg1: R%, arg2: R%", instruction.dest, instruction.arg1, instruction.arg2);
                 case .BITWISE_OR;         print(" BITWISE_OR         dest: R%, arg1: R%, arg2: R%", instruction.dest, instruction.arg1, instruction.arg2);
                 case .BITWISE_XOR;        print(" BITWISE_XOR        dest: R%, arg1: R%, arg2: R%", instruction.dest, instruction.arg1, instruction.arg2);
+                case .LEFT_SHIFT;           print(" LEFT_SHIFT           dest: R%, arg1: R%, arg2: R%", instruction.dest, instruction.arg1, instruction.arg2);
+                case .RIGHT_SHIFT;          print(" RIGHT_SHIFT          dest: R%, arg1: R%, arg2: R%", instruction.dest, instruction.arg1, instruction.arg2);
+                case .UNSIGNED_RIGHT_SHIFT; print(" UNSIGNED_RIGHT_SHIFT dest: R%, arg1: R%, arg2: R%", instruction.dest, instruction.arg1, instruction.arg2);
                 case .JUMP;               print(" JUMP               imm: %", instruction.imm);
                 case .JUMP_IF_FALSE;      print(" JUMP_IF_FALSE      arg1: R%, imm: %", instruction.arg1, instruction.imm);
                 case .JUMP_IF_TRUE;       print(" JUMP_IF_TRUE       arg1: R%, imm: %", instruction.arg1, instruction.imm);
@@ -1046,6 +1049,12 @@ emit_statement :: (generator: *Bytecode_Generator, node: *Ast_Node) {
                 load_const(generator, register, .{ type = .UNDEFINED });
             }
 
+            if generator.try_depth > 0 {
+                for 1..generator.try_depth {
+                    emit_instruction(generator, Instruction.{ op_code = .POP_TRY_CONTEXT });
+                }
+            }
+
             instruction := Instruction.{
                 op_code = .RETURN,
                 arg1    = register,
@@ -1112,6 +1121,7 @@ emit_statement :: (generator: *Bytecode_Generator, node: *Ast_Node) {
                 continue_jumps.allocator = temp,
                 break_jumps.allocator    = temp,
                 continue_target          = generator.current_function.instructions.count,
+                try_depth                = generator.try_depth,
             };
 
             array_add(*generator.loop_stack, loop_context);
@@ -1283,6 +1293,7 @@ emit_statement :: (generator: *Bytecode_Generator, node: *Ast_Node) {
             loop_context := Loop_Context.{
                 continue_jumps.allocator = temp,
                 break_jumps.allocator    = temp,
+                try_depth                = generator.try_depth,
             };
 
             array_add(*generator.loop_stack, loop_context);
@@ -1342,6 +1353,7 @@ emit_statement :: (generator: *Bytecode_Generator, node: *Ast_Node) {
                 continue_jumps.allocator = temp,
                 break_jumps.allocator    = temp,
                 continue_target          = loop_start_pc,
+                try_depth                = generator.try_depth,
             };
 
             array_add(*generator.loop_stack, loop_context);
@@ -1432,6 +1444,7 @@ emit_statement :: (generator: *Bytecode_Generator, node: *Ast_Node) {
                 continue_jumps.allocator = temp,
                 break_jumps.allocator    = temp,
                 continue_target          = loop_start_pc,
+                try_depth                = generator.try_depth,
             };
 
             array_add(*generator.loop_stack, loop_context);
@@ -1728,7 +1741,9 @@ emit_statement :: (generator: *Bytecode_Generator, node: *Ast_Node) {
                     generator.next_register += 1;
                 }
 
+                generator.try_depth += 1;
                 emit_statement(generator, cast(*Ast_Node) try_statement.try_block);
+                generator.try_depth -= 1;
 
                 pop_instruction := Instruction.{
                     op_code = .POP_TRY_CONTEXT,
@@ -1771,7 +1786,9 @@ emit_statement :: (generator: *Bytecode_Generator, node: *Ast_Node) {
 
                 generator.current_function.instructions[jump_over_catch_index].imm = cast(s32) generator.current_function.instructions.count;
             } else {
+                generator.try_depth += 1;
                 emit_statement(generator, cast(*Ast_Node) try_statement.try_block);
+                generator.try_depth -= 1;
             }
 
             if try_statement.finally_block {
@@ -1808,6 +1825,7 @@ emit_statement :: (generator: *Bytecode_Generator, node: *Ast_Node) {
                 is_switch                = true,
                 continue_jumps.allocator = temp,
                 break_jumps.allocator    = temp,
+                try_depth                = generator.try_depth,
             };
 
             array_add(*generator.loop_stack, loop_context);
@@ -1895,6 +1913,13 @@ emit_statement :: (generator: *Bytecode_Generator, node: *Ast_Node) {
                 return;
             }
 
+            loop_context_target := generator.loop_stack[generator.loop_stack.count - 1];
+            if generator.try_depth > loop_context_target.try_depth {
+                for 1..(generator.try_depth - loop_context_target.try_depth) {
+                    emit_instruction(generator, Instruction.{ op_code = .POP_TRY_CONTEXT });
+                }
+            }
+
             instruction := Instruction.{
                 op_code = .JUMP,
             };
@@ -1911,6 +1936,12 @@ emit_statement :: (generator: *Bytecode_Generator, node: *Ast_Node) {
             while i >= 0 {
                 if !generator.loop_stack[i].is_switch {
                     loop_context := *generator.loop_stack[i];
+
+                    if generator.try_depth > loop_context.try_depth {
+                        for 1..(generator.try_depth - loop_context.try_depth) {
+                            emit_instruction(generator, Instruction.{ op_code = .POP_TRY_CONTEXT });
+                        }
+                    }
 
                     instruction := Instruction.{
                         op_code = .JUMP,
@@ -2799,6 +2830,9 @@ Op_Code :: enum u8 {
     BITWISE_AND;
     BITWISE_OR;
     BITWISE_XOR;
+    LEFT_SHIFT;
+    RIGHT_SHIFT;
+    UNSIGNED_RIGHT_SHIFT;
     JUMP;
     JUMP_IF_FALSE;
     JUMP_IF_TRUE;
@@ -2942,6 +2976,8 @@ Bytecode_Generator :: struct {
 
     has_error:     bool;
     error_message: string;
+
+    try_depth:     int;
 }
 
 Value_Type :: enum u8 {
@@ -2989,6 +3025,7 @@ Loop_Context :: struct {
     break_jumps:     [..] int;
 
     is_switch:       bool;
+    try_depth:       int;
 }
 
 Variable_Location_Type :: enum { LOCAL; UPVALUE; GLOBAL; NOT_FOUND; }
@@ -3357,6 +3394,9 @@ emit_binary_expression_helper :: (generator: *Bytecode_Generator, binary_express
             else if bin_node.op == "&"          instruction.op_code = .BITWISE_AND;
             else if bin_node.op == "|"          instruction.op_code = .BITWISE_OR;
             else if bin_node.op == "^"          instruction.op_code = .BITWISE_XOR;
+            else if bin_node.op == "<<"         instruction.op_code = .LEFT_SHIFT;
+            else if bin_node.op == ">>"         instruction.op_code = .RIGHT_SHIFT;
+            else if bin_node.op == ">>>"        instruction.op_code = .UNSIGNED_RIGHT_SHIFT;
             else if bin_node.op == "**"         instruction.op_code = .EXPONENTIATION;
         }
 
@@ -3502,7 +3542,14 @@ emit_assignment_expression_helper :: (generator: *Bytecode_Generator, assignment
         else if assignment_expression.op == "-=" instruction.op_code = .SUB;
         else if assignment_expression.op == "*=" instruction.op_code = .MUL;
         else if assignment_expression.op == "/=" instruction.op_code = .DIV;
+        else if assignment_expression.op == "%=" instruction.op_code = .MOD;
         else if assignment_expression.op == "**=" instruction.op_code = .EXPONENTIATION;
+        else if assignment_expression.op == "<<=" instruction.op_code = .LEFT_SHIFT;
+        else if assignment_expression.op == ">>=" instruction.op_code = .RIGHT_SHIFT;
+        else if assignment_expression.op == ">>>=" instruction.op_code = .UNSIGNED_RIGHT_SHIFT;
+        else if assignment_expression.op == "&=" instruction.op_code = .BITWISE_AND;
+        else if assignment_expression.op == "|=" instruction.op_code = .BITWISE_OR;
+        else if assignment_expression.op == "^=" instruction.op_code = .BITWISE_XOR;
 
         emit_instruction(generator, instruction);
 

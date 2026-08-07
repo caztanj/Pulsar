@@ -308,7 +308,7 @@ tokenize :: (code: string) -> error: bool, error_message: string, [] Token {
                     count = t - start_t + 1,
                 };
 
-                if next_text == "==" || next_text == "===" || next_text == "!=" || next_text == "!==" || next_text == "<=" || next_text == ">=" || next_text == "++" || next_text == "--" || next_text == "&&" || next_text == "||" || next_text == "=>" || next_text == "<<" || next_text == ">>" || next_text == ">>>" || next_text == "+=" || next_text == "-=" || next_text == "*=" || next_text == "/=" || next_text == "**" || next_text == "**=" || next_text == "??" || next_text == "??=" {
+                if next_text == "==" || next_text == "===" || next_text == "!=" || next_text == "!==" || next_text == "<=" || next_text == ">=" || next_text == "++" || next_text == "--" || next_text == "&&" || next_text == "||" || next_text == "=>" || next_text == "<<" || next_text == ">>" || next_text == ">>>" || next_text == "+=" || next_text == "-=" || next_text == "*=" || next_text == "/=" || next_text == "%=" || next_text == "**" || next_text == "**=" || next_text == "??" || next_text == "??=" || next_text == "<<=" || next_text == ">>=" || next_text == ">>>=" || next_text == "&=" || next_text == "|=" || next_text == "^=" || next_text == "&&=" || next_text == "||=" {
                     t      += 1;
                     column += 1;
                 } else {

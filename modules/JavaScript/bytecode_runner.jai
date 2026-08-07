@@ -504,6 +504,8 @@ execute_function_internal :: (vm: *Vm, initial_function: *Bytecode_Function, ini
                         vm.current_function = function;
                         vm.current_pc       = pc_pointer;
                         registers_data[instruction.dest] = call_value(vm, this_val, callee.*, final_arguments, false);
+                        constants_data                   = vm.program.constants.data;
+                        globals_data                     = vm.current_realm.globals.data;
                     }
 
                     if vm.has_exception break;
@@ -524,6 +526,8 @@ execute_function_internal :: (vm: *Vm, initial_function: *Bytecode_Function, ini
                     vm.current_function = function;
                     vm.current_pc       = pc_pointer;
                     registers_data[instruction.dest] = call_value(vm, this_val, callee, final_arguments, true);
+                    constants_data                   = vm.program.constants.data;
+                    globals_data                     = vm.current_realm.globals.data;
 
                     run_microtasks(vm);
 
@@ -1048,6 +1052,18 @@ execute_function_internal :: (vm: *Vm, initial_function: *Bytecode_Function, ini
 
                 case .BITWISE_XOR;
                     registers_data[instruction.dest] = values_bitwise_xor(vm, registers_data[instruction.arg1], registers_data[instruction.arg2]);
+                    last_value                       = registers_data[instruction.dest];
+
+                case .LEFT_SHIFT;
+                    registers_data[instruction.dest] = values_left_shift(vm, registers_data[instruction.arg1], registers_data[instruction.arg2]);
+                    last_value                       = registers_data[instruction.dest];
+
+                case .RIGHT_SHIFT;
+                    registers_data[instruction.dest] = values_right_shift(vm, registers_data[instruction.arg1], registers_data[instruction.arg2]);
+                    last_value                       = registers_data[instruction.dest];
+
+                case .UNSIGNED_RIGHT_SHIFT;
+                    registers_data[instruction.dest] = values_unsigned_right_shift(vm, registers_data[instruction.arg1], registers_data[instruction.arg2]);
                     last_value                       = registers_data[instruction.dest];
 
                 case .JUMP;
@@ -1765,6 +1781,8 @@ execute_function_internal :: (vm: *Vm, initial_function: *Bytecode_Function, ini
                         vm.current_function = function;
                         vm.current_pc       = pc_pointer;
                         result := call_value(vm, .{}, callee, arguments_array.object.elements, true);
+                        constants_data = vm.program.constants.data;
+                        globals_data   = vm.current_realm.globals.data;
 
                         registers_data[instruction.dest] = result;
 
@@ -1780,6 +1798,8 @@ execute_function_internal :: (vm: *Vm, initial_function: *Bytecode_Function, ini
                         vm.current_function = function;
                         vm.current_pc       = pc_pointer;
                         result := call_value(vm, this_value, callee, arguments_array.object.elements, false);
+                        constants_data = vm.program.constants.data;
+                        globals_data   = vm.current_realm.globals.data;
 
                         registers_data[instruction.dest] = result;
 
@@ -2482,7 +2502,7 @@ value_to_number :: inline (value: Value) -> float64 {
     if value.type == {
         case .NUMBER;    return value.number;
         case .BOOLEAN;   return ifx value.boolean 1.0 else 0.0;
-        case .STRING;    return string_to_float64(value.s);
+        case .STRING;    return parse_js_number_literal(value.s);
         case .NULL;      return 0;
         case .UNDEFINED; return not_a_number_value;
         case .OBJECT;
@@ -2856,6 +2876,56 @@ values_bitwise_xor :: (vm: *Vm, a: Value, b: Value) -> Value {
     value_b := cast(s32) abstract_to_number(vm, pb);
 
     return .{ type = .NUMBER, number = cast(float64) (value_a ^ value_b) };
+}
+
+values_left_shift :: (vm: *Vm, a: Value, b: Value) -> Value {
+    pa := to_primitive(vm, a, .NUMBER);
+    if vm.has_exception return .{};
+    pb := to_primitive(vm, b, .NUMBER);
+    if vm.has_exception return .{};
+
+    if pa.type == .BIGINT || pb.type == .BIGINT {
+        if pa.type == .BIGINT && pb.type == .BIGINT return .{ type = .BIGINT, bigint_val = pa.bigint_val << pb.bigint_val };
+        throw_exception(vm, "TypeError: Cannot mix BigInt and other types, use explicit conversions");
+        return .{};
+    }
+    value_a := cast(s32) abstract_to_number(vm, pa);
+    value_b := (cast(u32) abstract_to_number(vm, pb)) & 0x1F;
+
+    return .{ type = .NUMBER, number = cast(float64) (value_a << value_b) };
+}
+
+values_right_shift :: (vm: *Vm, a: Value, b: Value) -> Value {
+    pa := to_primitive(vm, a, .NUMBER);
+    if vm.has_exception return .{};
+    pb := to_primitive(vm, b, .NUMBER);
+    if vm.has_exception return .{};
+
+    if pa.type == .BIGINT || pb.type == .BIGINT {
+        if pa.type == .BIGINT && pb.type == .BIGINT return .{ type = .BIGINT, bigint_val = pa.bigint_val >> pb.bigint_val };
+        throw_exception(vm, "TypeError: Cannot mix BigInt and other types, use explicit conversions");
+        return .{};
+    }
+    value_a := cast(s32) abstract_to_number(vm, pa);
+    value_b := (cast(u32) abstract_to_number(vm, pb)) & 0x1F;
+
+    return .{ type = .NUMBER, number = cast(float64) (value_a >> value_b) };
+}
+
+values_unsigned_right_shift :: (vm: *Vm, a: Value, b: Value) -> Value {
+    pa := to_primitive(vm, a, .NUMBER);
+    if vm.has_exception return .{};
+    pb := to_primitive(vm, b, .NUMBER);
+    if vm.has_exception return .{};
+
+    if pa.type == .BIGINT || pb.type == .BIGINT {
+        throw_exception(vm, "TypeError: BigInt has no unsigned right shift, use >> instead");
+        return .{};
+    }
+    value_a := cast(u32) (cast(s32) abstract_to_number(vm, pa));
+    value_b := (cast(u32) abstract_to_number(vm, pb)) & 0x1F;
+
+    return .{ type = .NUMBER, number = cast(float64) (value_a >> value_b) };
 }
 
 compare_strings :: (s1: string, s2: string) -> int {

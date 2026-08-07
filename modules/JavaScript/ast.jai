@@ -673,7 +673,7 @@ parse_assignment :: (parser: *Parser) -> *Ast_Node {
 
     token := peek(parser);
 
-    if token.type == .OPERATOR && (token.text == "=" || token.text == "+=" || token.text == "-=" || token.text == "*=" || token.text == "/=" || token.text == "**=" || token.text == "??=") {
+    if token.type == .OPERATOR && (token.text == "=" || token.text == "+=" || token.text == "-=" || token.text == "*=" || token.text == "/=" || token.text == "%=" || token.text == "**=" || token.text == "<<=" || token.text == ">>=" || token.text == ">>>=" || token.text == "&=" || token.text == "|=" || token.text == "^=" || token.text == "&&=" || token.text == "||=" || token.text == "??=") {
         advance(parser);
 
         node := New(Ast_Assignment_Expression);
@@ -851,12 +851,15 @@ get_precedence :: (op: string) -> int {
     if op == ">="         return 8;
     if op == "in"         return 8;
     if op == "instanceof" return 8;
-    if op == "+"          return 9;
-    if op == "-"          return 9;
-    if op == "*"          return 10;
-    if op == "/"          return 10;
-    if op == "%"          return 10;
-    if op == "**"         return 11;
+    if op == "<<"         return 9;
+    if op == ">>"         return 9;
+    if op == ">>>"        return 9;
+    if op == "+"          return 10;
+    if op == "-"          return 10;
+    if op == "*"          return 11;
+    if op == "/"          return 11;
+    if op == "%"          return 11;
+    if op == "**"         return 12;
 
     return 0;
 }
@@ -998,7 +1001,7 @@ parse_primary :: (parser: *Parser) -> *Ast_Node {
         node.kind   = .LITERAL_NUMBER;
         node.line   = token.line;
         node.column = token.column;
-        node.value  = string_to_float64(token.text);
+        node.value  = parse_js_number_literal(token.text);
         node.text   = token.text;
 
         return xx node;
@@ -2821,4 +2824,49 @@ Ast_Method_Definition :: struct {
 
 Ast_Super_Expression :: struct {
     using base: Ast_Node;
+}
+
+parse_js_number_literal :: (text: string) -> float64 {
+    s := trim(text);
+    if !s return 0.0;
+
+    if starts_with(s, "0x") || starts_with(s, "0X") {
+        val: u64 = 0;
+        if s.count <= 2 return not_a_number_value;
+        for i: 2..s.count-1 {
+            c := s[i];
+            digit: u64 = 0;
+            if c >= #char "0" && c <= #char "9" digit = cast(u64) (c - #char "0");
+            else if c >= #char "a" && c <= #char "f" digit = cast(u64) (c - #char "a" + 10);
+            else if c >= #char "A" && c <= #char "F" digit = cast(u64) (c - #char "A" + 10);
+            else if c == #char "_" continue;
+            else break;
+            val = (val << 4) | digit;
+        }
+        return cast(float64) val;
+    } else if starts_with(s, "0b") || starts_with(s, "0B") {
+        val: u64 = 0;
+        if s.count <= 2 return not_a_number_value;
+        for i: 2..s.count-1 {
+            c := s[i];
+            if c == #char "0" || c == #char "1" {
+                val = (val << 1) | cast(u64) (c - #char "0");
+            } else if c == #char "_" continue;
+            else break;
+        }
+        return cast(float64) val;
+    } else if starts_with(s, "0o") || starts_with(s, "0O") {
+        val: u64 = 0;
+        if s.count <= 2 return not_a_number_value;
+        for i: 2..s.count-1 {
+            c := s[i];
+            if c >= #char "0" && c <= #char "7" {
+                val = (val << 3) | cast(u64) (c - #char "0");
+            } else if c == #char "_" continue;
+            else break;
+        }
+        return cast(float64) val;
+    }
+
+    return string_to_float64(s);
 }
