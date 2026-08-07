@@ -55,21 +55,6 @@ uri_encode_uri_component :: (vm: *Vm, this: Value, arguments: [] Value, is_new: 
     return encode_uri_common(vm, arguments, true);
 }
 
-#scope_file
-
-hex_digit_val :: (c: u8) -> int {
-    if c >= #char "0" && c <= #char "9" return c - #char "0";
-    if c >= #char "A" && c <= #char "F" return c - #char "A" + 10;
-    if c >= #char "a" && c <= #char "f" return c - #char "a" + 10;
-    return -1;
-}
-
-to_hex_digit :: (v: int) -> u8 {
-    if v >= 0 && v <= 9 return cast(u8) (#char "0" + v);
-    if v >= 10 && v <= 15 return cast(u8) (#char "A" + (v - 10));
-    return #char "0";
-}
-
 append_utf8_cp :: (builder: *String_Builder, cp: u32) {
     if cp < 0x80 {
         append(builder, cast(u8) cp);
@@ -86,6 +71,21 @@ append_utf8_cp :: (builder: *String_Builder, cp: u32) {
         append(builder, cast(u8) (0x80 | ((cp >> 6) & 0x3F)));
         append(builder, cast(u8) (0x80 | (cp & 0x3F)));
     }
+}
+
+#scope_file
+
+hex_digit_val :: (c: u8) -> int {
+    if c >= #char "0" && c <= #char "9" return c - #char "0";
+    if c >= #char "A" && c <= #char "F" return c - #char "A" + 10;
+    if c >= #char "a" && c <= #char "f" return c - #char "a" + 10;
+    return -1;
+}
+
+to_hex_digit :: (v: int) -> u8 {
+    if v >= 0 && v <= 9 return cast(u8) (#char "0" + v);
+    if v >= 10 && v <= 15 return cast(u8) (#char "A" + (v - 10));
+    return #char "0";
 }
 
 decode_uri_common :: (vm: *Vm, arguments: [] Value, reserved_set: string, is_component: bool) -> Value {
@@ -126,9 +126,9 @@ decode_uri_common :: (vm: *Vm, arguments: [] Value, reserved_set: string, is_com
         if (b1 & 0x80) == 0 {
             ch := cast(u8) b1;
             if !is_component && find_index_from_left(reserved_set, ch) >= 0 {
-                append(*builder, #char "%");
-                append(*builder, to_hex_digit(h1));
-                append(*builder, to_hex_digit(h2));
+                append(*builder, uri_str[i-3]);
+                append(*builder, uri_str[i-2]);
+                append(*builder, uri_str[i-1]);
             } else {
                 append(*builder, ch);
             }
@@ -172,6 +172,18 @@ decode_uri_common :: (vm: *Vm, arguments: [] Value, reserved_set: string, is_com
                     free_buffers(*builder);
                     return .{};
                 }
+                if k == 1 {
+                    if b1 == 0xF0 && bk < 0x90 {
+                        throw_exception(vm, "URIError: URI malformed");
+                        free_buffers(*builder);
+                        return .{};
+                    }
+                    if b1 == 0xF4 && bk > 0x8F {
+                        throw_exception(vm, "URIError: URI malformed");
+                        free_buffers(*builder);
+                        return .{};
+                    }
+                }
                 bytes[k] = cast(u8) bk;
                 i += 3;
             }
@@ -191,7 +203,15 @@ decode_uri_common :: (vm: *Vm, arguments: [] Value, reserved_set: string, is_com
                 return .{};
             }
 
-            append_utf8_cp(*builder, cp);
+            if cp < 0x10000 {
+                append_utf8_cp(*builder, cp);
+            } else {
+                v := cp - 0x10000;
+                h := 0xD800 + (v >> 10);
+                l := 0xDC00 + (v & 0x03FF);
+                append_utf8_cp(*builder, h);
+                append_utf8_cp(*builder, l);
+            }
         }
     }
 
