@@ -3,6 +3,9 @@ init_vm_function :: (vm: *Vm) {
         vm.function_prototype = allocate_object(vm);
         vm.function_prototype.prototype = vm.object_prototype;
 
+        set_object_property(vm, vm.function_prototype, "length", Value.{ type = .NUMBER, number = 0.0 });
+        set_object_property(vm, vm.function_prototype, "name", Value.{ type = .STRING, s = "" });
+
         add_instance_method(vm, vm.function_prototype, "call", function_call);
         add_instance_method(vm, vm.function_prototype, "bind", function_bind);
 

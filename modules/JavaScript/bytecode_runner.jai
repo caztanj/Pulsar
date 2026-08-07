@@ -616,9 +616,10 @@ execute_function_internal :: (vm: *Vm, initial_function: *Bytecode_Function, ini
                         for i: 0..pic_count - 1 {
                             if instruction.inline_cache.shapes[i] == object.shape {
                                 offset := instruction.inline_cache.offsets[i];
-                                if offset < object.fields.count registers_data[instruction.dest] = object.fields.data[offset];
-                                else                            registers_data[instruction.dest] = .{ type = .UNDEFINED };
-                                pic_hit = true;
+                                if offset < object.fields.count && object.fields.data[offset].type != .EMPTY {
+                                    registers_data[instruction.dest] = object.fields.data[offset];
+                                    pic_hit = true;
+                                }
                                 break;
                             }
                         }
