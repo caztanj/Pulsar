@@ -87,6 +87,23 @@ error_constructor_RangeError     :: (vm: *Vm, this: Value, arguments: [] Value, 
 error_constructor_URIError     :: (vm: *Vm, this: Value, arguments: [] Value, is_new: bool) -> Value { return error_constructor(vm, this, arguments, is_new, "URIError"); }
 error_constructor_EvalError    :: (vm: *Vm, this: Value, arguments: [] Value, is_new: bool) -> Value { return error_constructor(vm, this, arguments, is_new, "EvalError"); }
 
+install_error_cause :: (vm: *Vm, object: *Gc_Object, options: Value) {
+    if options.type != .OBJECT && options.type != .ARRAY && options.type != .FUNCTION && options.type != .NATIVE_FUNCTION return;
+    if !options.object return;
+
+    options_obj := options.object;
+    if !has_property(vm, options_obj, "cause") return;
+    if vm.has_exception return;
+
+    found_cause, cause_val := lookup_property(vm, options_obj, "cause");
+    if vm.has_exception return;
+
+    if found_cause {
+        set_object_property(vm, object, "cause", cause_val);
+        set_object_property(vm, object, "attr_enumerable_cause", Value.{ type = .BOOLEAN, boolean = false });
+    }
+}
+
 error_constructor :: (vm: *Vm, this: Value, arguments: [] Value, is_new: bool, name: string) -> Value {
     object := allocate_object(vm);
 
@@ -101,12 +118,19 @@ error_constructor :: (vm: *Vm, this: Value, arguments: [] Value, is_new: bool, n
 
     if arguments.count > 0 && arguments[0].type != .UNDEFINED {
         val := error_to_string_js_local(vm, arguments[0]);
+        if vm.has_exception return .{};
         if val.type == .SYMBOL {
             throw_exception(vm, "TypeError: Cannot convert a Symbol value to a string");
             return .{};
         }
         message := value_to_string(vm, val);
+        if vm.has_exception return .{};
         set_object_property(vm, object, "message", Value.{ type = .STRING, s = message });
+    }
+
+    if arguments.count > 1 {
+        install_error_cause(vm, object, arguments[1]);
+        if vm.has_exception return .{};
     }
 
     stack_trace := get_stack_trace_string(vm);
@@ -168,27 +192,19 @@ aggregate_error_constructor :: (vm: *Vm, this: Value, arguments: [] Value, is_ne
 
     if arguments.count > 1 && arguments[1].type != .UNDEFINED {
         val := error_to_string_js_local(vm, arguments[1]);
+        if vm.has_exception return .{};
         if val.type == .SYMBOL {
             throw_exception(vm, "TypeError: Cannot convert a Symbol value to a string");
             return .{};
         }
         message := value_to_string(vm, val);
+        if vm.has_exception return .{};
         set_object_property(vm, object, "message", Value.{ type = .STRING, s = message });
     }
 
     if arguments.count > 2 {
-        options := arguments[2];
-        if options.type == .OBJECT || options.type == .ARRAY || options.type == .FUNCTION || options.type == .NATIVE_FUNCTION {
-            options_obj := options.object;
-            if options_obj {
-                found_cause, cause_val := lookup_property(vm, options_obj, "cause");
-                if vm.has_exception return .{};
-
-                if found_cause {
-                    set_object_property(vm, object, "cause", cause_val);
-                }
-            }
-        }
+        install_error_cause(vm, object, arguments[2]);
+        if vm.has_exception return .{};
     }
 
     errors_arg := Value.{ type = .UNDEFINED };

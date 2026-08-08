@@ -123,6 +123,100 @@ lookup_property :: (vm: *Vm, object: *Gc_Object, name: string, imm: int = -1) ->
     return false, .{};
 }
 
+has_property :: (vm: *Vm, object: *Gc_Object, name: string) -> bool {
+    if !object return false;
+
+    if object.kind == .PROXY {
+        offset_h, found_h := shape_lookup_property(object.shape, "handler", -1);
+        offset_t, found_t := shape_lookup_property(object.shape, "target", -1);
+        if found_h && found_t && offset_h < object.fields.count && offset_t < object.fields.count {
+            handler := object.fields[offset_h];
+            target  := object.fields[offset_t];
+
+            if handler.type == .OBJECT || handler.type == .ARRAY || handler.type == .FUNCTION || handler.type == .NATIVE_FUNCTION {
+                found_trap, trap_val := lookup_property(vm, handler.object, "has");
+                if vm.has_exception return false;
+
+                if found_trap && (trap_val.type == .FUNCTION || trap_val.type == .NATIVE_FUNCTION) {
+                    target_arg   := target;
+                    prop_arg     := Value.{ type = .STRING, s = name };
+                    res := call_value(vm, handler, trap_val, .[target_arg, prop_arg]);
+                    if vm.has_exception return false;
+                    return is_truthy(res);
+                } else if found_trap && trap_val.type != .UNDEFINED && trap_val.type != .NULL {
+                    throw_exception(vm, "TypeError: Proxy has trap is not callable");
+                    return false;
+                }
+            }
+
+            if target.type == .OBJECT || target.type == .ARRAY || target.type == .FUNCTION || target.type == .NATIVE_FUNCTION {
+                return has_property(vm, target.object, name);
+            }
+        }
+    }
+
+    if object.kind == .GLOBAL_PROXY {
+        found_global, global_idx := get_global_index(vm, name);
+        target_realm := ifx object.realm then object.realm else vm.current_realm;
+        if found_global && target_realm.globals[global_idx].type != .EMPTY return true;
+    }
+
+    is_all_digits := name.count > 0 && name[0] >= "0" && name[0] <= "9";
+    if is_all_digits {
+        for cast([] u8) name {
+            if it < "0" || it > "9" {
+                is_all_digits = false;
+                break;
+            }
+        }
+    }
+
+    parsed_index := -1;
+    if is_all_digits {
+        name_copy       := name;
+        parsed, success := parse_int(*name_copy);
+        if success && parsed >= 0 && parsed < 1048576 parsed_index = parsed;
+        else                                          is_all_digits = false;
+    }
+
+    current := object;
+    while current {
+        if is_all_digits {
+            if is_typed_array(current.kind) {
+                len := get_typed_array_length(current);
+                if parsed_index < len return true;
+            } else if parsed_index < current.elements.count {
+                if current.elements[parsed_index].type != .EMPTY return true;
+            }
+        } else {
+            if name == "length" {
+                if current.kind == .ARRAY return true;
+                if is_typed_array(current.kind) return true;
+            }
+            if name == "size" {
+                if current.kind == .SET || current.kind == .MAP return true;
+            }
+
+            if current.shape {
+                getter_name := tprint("%__getter__", name);
+                offset_g, found_g := shape_lookup_property(current.shape, getter_name, -1);
+                if found_g && offset_g < current.fields.count && current.fields[offset_g].type != .UNDEFINED return true;
+
+                setter_name := tprint("%__setter__", name);
+                offset_s, found_s := shape_lookup_property(current.shape, setter_name, -1);
+                if found_s && offset_s < current.fields.count && current.fields[offset_s].type != .UNDEFINED return true;
+
+                offset, found := shape_lookup_property(current.shape, name, -1);
+                if found && offset < current.fields.count && current.fields[offset].type != .EMPTY return true;
+            }
+        }
+
+        current = current.prototype;
+    }
+
+    return false;
+}
+
 set_object_property :: (vm: *Vm, object: *Gc_Object, name: string, value: Value, imm: int = -1) {
     is_all_digits := name.count > 0 && name[0] >= "0" && name[0] <= "9";
 

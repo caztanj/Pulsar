@@ -1023,22 +1023,13 @@ execute_function_internal :: (vm: *Vm, initial_function: *Bytecode_Function, ini
                     registers_data[instruction.dest].type    = .BOOLEAN;
                     registers_data[instruction.dest].boolean = false;
 
-                    if (right.type == .OBJECT || right.type == .ARRAY) && right.object {
-                        if right.type == .ARRAY && left.type == .NUMBER {
-                            index := cast(int) left.number;
-
-                            if index >= 0 && index < right.object.fields.count registers_data[instruction.dest].boolean = right.object.fields[index].type != .UNDEFINED;
-                        } else {
-                            name := value_to_string(vm, left.*);
-
-                            if right.type == .ARRAY {
-                                found, _                                 := lookup_property(vm, right.object, name);
-                                registers_data[instruction.dest].boolean  = found;
-                            } else {
-                                found, _                                 := lookup_property(vm, right.object, name);
-                                registers_data[instruction.dest].boolean  = found;
-                            }
+                    if (right.type == .OBJECT || right.type == .ARRAY || right.type == .FUNCTION || right.type == .NATIVE_FUNCTION) && right.object {
+                        name := value_to_string(vm, left.*);
+                        if !vm.has_exception {
+                            registers_data[instruction.dest].boolean = has_property(vm, right.object, name);
                         }
+                    } else if right.type != .UNDEFINED && right.type != .NULL {
+                        throw_exception(vm, "TypeError: Cannot use 'in' operator to search in a non-object");
                     }
 
                     last_value = registers_data[instruction.dest];
