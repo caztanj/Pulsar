@@ -48,6 +48,7 @@ init_vm_function :: (vm: *Vm) {
 
     set_object_property(vm, function_constructor_object, "prototype", Value.{ type = .OBJECT, object = vm.function_prototype });
     set_object_property(vm, function_constructor_object, "name", Value.{ type = .STRING, s = "Function" });
+    set_object_property(vm, function_constructor_object, "length", Value.{ type = .NUMBER, number = 1.0 });
 
     found, index := get_global_index(vm, "Function");
     if found {
