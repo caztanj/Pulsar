@@ -262,6 +262,93 @@ encode_uri_common :: (vm: *Vm, arguments: [] Value, is_component: bool) -> Value
                 return .{};
             }
 
+            for k: 1..needed-1 {
+                if (uri_str[i + k] & 0xC0) != 0x80 {
+                    throw_exception(vm, "URIError: URI malformed");
+                    free_buffers(*builder);
+                    return .{};
+                }
+            }
+
+            if needed == 2 {
+                cp := ((cast(u32)(uri_str[i] & 0x1F)) << 6) | (cast(u32)(uri_str[i + 1] & 0x3F));
+                if cp < 0x80 {
+                    throw_exception(vm, "URIError: URI malformed");
+                    free_buffers(*builder);
+                    return .{};
+                }
+            } else if needed == 3 {
+                b1 := cast(u32) uri_str[i];
+                b2 := cast(u32) uri_str[i + 1];
+                b3 := cast(u32) uri_str[i + 2];
+                cp := ((b1 & 0x0F) << 12) | ((b2 & 0x3F) << 6) | (b3 & 0x3F);
+
+                if cp < 0x800 {
+                    throw_exception(vm, "URIError: URI malformed");
+                    free_buffers(*builder);
+                    return .{};
+                }
+
+                if cp >= 0xD800 && cp <= 0xDBFF {
+                    if i + 6 > n {
+                        throw_exception(vm, "URIError: URI malformed");
+                        free_buffers(*builder);
+                        return .{};
+                    }
+                    nb1 := cast(u32) uri_str[i + 3];
+                    nb2 := cast(u32) uri_str[i + 4];
+                    nb3 := cast(u32) uri_str[i + 5];
+                    if (nb1 & 0xF0) != 0xE0 || (nb2 & 0xC0) != 0x80 || (nb3 & 0xC0) != 0x80 {
+                        throw_exception(vm, "URIError: URI malformed");
+                        free_buffers(*builder);
+                        return .{};
+                    }
+                    cp2 := ((nb1 & 0x0F) << 12) | ((nb2 & 0x3F) << 6) | (nb3 & 0x3F);
+                    if cp2 < 0xDC00 || cp2 > 0xDFFF {
+                        throw_exception(vm, "URIError: URI malformed");
+                        free_buffers(*builder);
+                        return .{};
+                    }
+
+                    v := (cp - 0xD800) * 0x400 + (cp2 - 0xDC00) + 0x10000;
+                    ub1 := cast(u8) (0xF0 | (v >> 18));
+                    ub2 := cast(u8) (0x80 | ((v >> 12) & 0x3F));
+                    ub3 := cast(u8) (0x80 | ((v >> 6) & 0x3F));
+                    ub4 := cast(u8) (0x80 | (v & 0x3F));
+
+                    append(*builder, #char "%");
+                    append(*builder, to_hex_digit((ub1 >> 4) & 0xF));
+                    append(*builder, to_hex_digit(ub1 & 0xF));
+                    append(*builder, #char "%");
+                    append(*builder, to_hex_digit((ub2 >> 4) & 0xF));
+                    append(*builder, to_hex_digit(ub2 & 0xF));
+                    append(*builder, #char "%");
+                    append(*builder, to_hex_digit((ub3 >> 4) & 0xF));
+                    append(*builder, to_hex_digit(ub3 & 0xF));
+                    append(*builder, #char "%");
+                    append(*builder, to_hex_digit((ub4 >> 4) & 0xF));
+                    append(*builder, to_hex_digit(ub4 & 0xF));
+
+                    i += 6;
+                    continue;
+                } else if cp >= 0xDC00 && cp <= 0xDFFF {
+                    throw_exception(vm, "URIError: URI malformed");
+                    free_buffers(*builder);
+                    return .{};
+                }
+            } else if needed == 4 {
+                b1 := cast(u32) uri_str[i];
+                b2 := cast(u32) uri_str[i + 1];
+                b3 := cast(u32) uri_str[i + 2];
+                b4 := cast(u32) uri_str[i + 3];
+                cp := ((b1 & 0x07) << 18) | ((b2 & 0x3F) << 12) | ((b3 & 0x3F) << 6) | (b4 & 0x3F);
+                if cp < 0x10000 || cp > 0x10FFFF {
+                    throw_exception(vm, "URIError: URI malformed");
+                    free_buffers(*builder);
+                    return .{};
+                }
+            }
+
             for k: 0..needed-1 {
                 b := uri_str[i + k];
                 append(*builder, #char "%");
